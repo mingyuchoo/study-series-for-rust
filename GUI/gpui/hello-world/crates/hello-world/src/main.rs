@@ -1,5 +1,6 @@
 use gpui::*;
-use gpui_component::{button::*, *};
+use gpui_component::button::*;
+use gpui_component::*;
 
 pub struct HelloWorld;
 impl Render for HelloWorld {
@@ -11,12 +12,7 @@ impl Render for HelloWorld {
             .items_center()
             .justify_center()
             .child("Hello, World!")
-            .child(
-                Button::new("ok")
-                    .primary()
-                    .label("Let's Go!")
-                    .on_click(|_, _, _| println!("Clicked!")),
-            )
+            .child(Button::new("ok").primary().label("Let's Go!").on_click(|_, _, _| println!("Clicked!")))
     }
 }
 
