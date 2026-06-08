@@ -156,12 +156,15 @@ pub fn DocsTab() -> Element {
     let db_exists = Path::new(&db_path()).exists();
 
     rsx! {
-        div {
-            h1 { "Document Management" }
+        div { class: "resource-page",
+            div { class: "resource-header",
+                h1 { class: "page-title", "Documents" }
+                p { class: "page-kicker", "Store local notes beside the remote sample data." }
+            }
 
             // Error message
             {error().map(|err| rsx! {
-                div {
+                div { class: "notice",
                     p { "{err}" }
                 }
             })}
@@ -169,20 +172,21 @@ pub fn DocsTab() -> Element {
             // DB status message
             {if !db_exists {
                 rsx! {
-                    div {
+                    div { class: "notice",
                         p { "Database file will be created automatically when you add your first document." }
                     }
                 }
             } else { rsx!{} }}
 
             // Document form
-            div {
+            div { class: "panel form-panel",
                 form { onsubmit: handle_submit,
-                    h2 {
-                        if editing_id().is_some() { "Edit Document" } else { "Add New Document" }
+                    h2 { class: "panel-title",
+                        if editing_id().is_some() { "Edit document" } else { "Add new document" }
                     }
 
-                    div {
+                    div { class: "form-grid",
+                    div { class: "field",
                         label { "Title" }
                         input {
                             "type": "text",
@@ -193,7 +197,7 @@ pub fn DocsTab() -> Element {
                         }
                     }
 
-                    div {
+                    div { class: "field",
                         label { "Contents" }
                         textarea {
                             placeholder: "Document contents",
@@ -203,8 +207,9 @@ pub fn DocsTab() -> Element {
                             required: true
                         }
                     }
+                    }
 
-                    div {
+                    div { class: "form-actions",
                         button {
                             "type": "submit",
                             if editing_id().is_some() { "Update Document" } else { "Add Document" }
@@ -222,11 +227,14 @@ pub fn DocsTab() -> Element {
             }
 
             // Document list
-            div {
-                h2 { "Documents List" }
+            div { class: "table-panel",
+                div { class: "table-caption",
+                    h3 { "Documents" }
+                    span { class: "command-tag", "{documents().len()} rows" }
+                }
 
                 if documents().is_empty() {
-                    p { "No documents found." }
+                    p { class: "empty-state", "No documents found." }
                 } else {
                     table {
                         thead {
@@ -244,13 +252,13 @@ pub fn DocsTab() -> Element {
                                     td { "{doc.title}" }
                                     td {
                                         if doc.archived {
-                                            span { "Archived" }
+                                            span { class: "status-pill", "Archived" }
                                         } else {
-                                            span { "Active" }
+                                            span { class: "status-pill", "Active" }
                                         }
                                     }
                                     td {
-                                        div {
+                                        div { class: "row-actions",
                                             button {
                                                 onclick: move |_| handle_edit(doc.id.to_string()),
                                                 "Edit"

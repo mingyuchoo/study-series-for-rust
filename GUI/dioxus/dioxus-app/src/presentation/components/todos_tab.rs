@@ -186,23 +186,26 @@ pub fn TodosTab() -> Element {
     };
 
     rsx! {
-        div {
-            h2 {"Todos Management" }
+        div { class: "resource-page",
+            div { class: "resource-header",
+                h1 { class: "page-title", "Todos" }
+                p { class: "page-kicker", "Edit task records and toggle completion state." }
+            }
 
             // Error message
             {error().map(|err| rsx!(
-                div {
+                div { class: "notice",
                     p { {err} }
                 }
             ))}
 
             // Todo form
-            div {
-                h3 {
-                    {if is_editing() { "Edit Todo" } else { "Add New Todo" }}
+            div { class: "panel form-panel",
+                h2 { class: "panel-title",
+                    {if is_editing() { "Edit todo" } else { "Add new todo" }}
                 }
-                div {
-                    div {
+                div { class: "form-grid",
+                    div { class: "field",
                         label { "User ID" }
                         input {
                             type: "number",
@@ -215,7 +218,7 @@ pub fn TodosTab() -> Element {
                             }
                         }
                     }
-                    div {
+                    div { class: "field",
                         label { "Title" }
                         input {
                             type: "text",
@@ -226,7 +229,7 @@ pub fn TodosTab() -> Element {
                             }
                         }
                     }
-                    div {
+                    div { class: "checkbox-field",
                         input {
                             id: "completed",
                             type: "checkbox",
@@ -239,7 +242,7 @@ pub fn TodosTab() -> Element {
                         label { r#for: "completed", "Completed" }
                     }
                 }
-                div {
+                div { class: "form-actions",
                     {if is_editing() {
                         rsx! {
                             button {
@@ -266,7 +269,11 @@ pub fn TodosTab() -> Element {
             }
 
             // Todos list
-            div {
+            div { class: "table-panel",
+                div { class: "table-caption",
+                    h3 { "Todos" }
+                    span { class: "command-tag", "{todos().len()} rows" }
+                }
                 table {
                     thead {
                         tr {
@@ -283,24 +290,24 @@ pub fn TodosTab() -> Element {
                             let todo_for_toggle = todo.clone();
                             let todo_for_edit = todo.clone();
                             rsx!(
-                                tr { key: todo.id.to_string(),
+                                tr { key: "{todo.id}",
                                     td {  {todo.id.to_string()} }
                                     td {  {todo.userId.to_string()} }
                                     td {  {todo.title.clone()} }
                                     td {
-                                        div {
+                                        div { class: "status-control",
                                             input {
                                                 type: "checkbox",
                                                 checked: todo.completed,
                                                 onclick: move |_| toggle_completed(todo_for_toggle.clone())
                                             }
-                                            span {
+                                            span { class: "status-pill",
                                                 {if todo.completed { "Completed" } else { "Pending" }}
                                             }
                                         }
                                     }
                                     td {
-                                        div {
+                                        div { class: "row-actions",
                                             button {
                                                 type: "button",
                                                 onclick: move |_| handle_edit(todo_for_edit.clone()),

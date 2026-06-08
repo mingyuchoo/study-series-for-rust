@@ -5,21 +5,19 @@ use dioxus::prelude::*;
 #[component]
 pub fn Navbar() -> Element {
     rsx! {
-        div {
-            div {
-                h1 { "JSONPlaceholder API Manager" }
+        header { class: "site-header",
+            Link { class: "brand", to: Route::Home {},
+                span { class: "brand-mark", "API" }
+                span { "JSONPlaceholder Manager" }
             }
-            div {
-                div {
-                    Link { to: Route::Home {}, "Home" }
-                    Link { to: Route::Users {}, "Users" }
-                    Link { to: Route::Todos {}, "Todos" }
-                    Link { to: Route::Posts {}, "Posts" }
-                    Link { to: Route::Docs {}, "Documents" }
-                }
+            nav { class: "nav-links",
+                Link { class: "nav-link", to: Route::Users {}, "Users" }
+                Link { class: "nav-link", to: Route::Todos {}, "Todos" }
+                Link { class: "nav-link", to: Route::Posts {}, "Posts" }
+                Link { class: "nav-link", to: Route::Docs {}, "Documents" }
             }
         }
-        div {
+        main { class: "app-content",
             Outlet::<Route> {}
         }
     }

@@ -6,11 +6,11 @@
 
 [dependencies]
   async-trait = "0.1.89"
-  dioxus      = {features = ["router", "fullstack"], version = "0.6.3"}
+  dioxus      = {features = ["router", "fullstack"], version = "0.8.0-alpha.0"}
   dirs        = "6.0"
   futures     = "0.3"
-  reqwest     = {features = ["json"], version = "0.12"}
-  rusqlite    = {optional = true, version = "0.37"}
+  reqwest     = {features = ["json"], version = "0.13.4"}
+  rusqlite    = {optional = true, version = "0.40.1"}
   serde       = {features = ["derive"], version = "1.0"}
   serde_json  = "1.0"
 

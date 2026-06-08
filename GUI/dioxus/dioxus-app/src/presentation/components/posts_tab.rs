@@ -152,22 +152,26 @@ pub fn PostsTab() -> Element {
     };
 
     rsx! {
-        div {
-            h2 { "Posts Management" }
+        div { class: "resource-page",
+            div { class: "resource-header",
+                h1 { class: "page-title", "Posts" }
+                p { class: "page-kicker", "Create, update, and inspect JSONPlaceholder post records." }
+            }
 
             // Error message
             {error().map(|err| rsx!(
-                div {
+                div { class: "notice",
                     p { {err} }
                 }
             ))}
 
             // Post form
-            div {
-                h3 { {if is_editing() { "Edit Post" } else { "Add New Post" }}
+            div { class: "panel form-panel",
+                h2 { class: "panel-title",
+                    {if is_editing() { "Edit post" } else { "Add new post" }}
                 }
-                div {
-                    div {
+                div { class: "form-grid",
+                    div { class: "field",
                         label { "User ID" }
                         input {
                             type: "number",
@@ -180,7 +184,7 @@ pub fn PostsTab() -> Element {
                             }
                         }
                     }
-                    div {
+                    div { class: "field",
                         label { "Title" }
                         input {
                             type: "text",
@@ -191,7 +195,7 @@ pub fn PostsTab() -> Element {
                             }
                         }
                     }
-                    div {
+                    div { class: "field",
                         label { "Body" }
                         textarea {
                             rows: "4",
@@ -203,7 +207,7 @@ pub fn PostsTab() -> Element {
                         }
                     }
                 }
-                div {
+                div { class: "form-actions",
                     {if is_editing() {
                         rsx! {
                             button {
@@ -230,7 +234,11 @@ pub fn PostsTab() -> Element {
             }
 
             // Posts list
-            div {
+            div { class: "table-panel",
+                div { class: "table-caption",
+                    h3 { "Posts" }
+                    span { class: "command-tag", "{posts().len()} rows" }
+                }
                 table {
                     thead {
                         tr {
@@ -245,12 +253,12 @@ pub fn PostsTab() -> Element {
                             let post_id = post.id;
                             let post_for_edit = post.clone();
                             rsx!(
-                                tr { key: post.id.to_string(),
+                                tr { key: "{post.id}",
                                     td {  {post.id.to_string()} }
                                     td {  {post.userId.to_string()} }
                                     td {  {post.title.clone()} }
                                     td {
-                                        div {
+                                        div { class: "row-actions",
                                             button {
                                                 type: "button",
                                                 onclick: move |_| handle_edit(post_for_edit.clone()),
@@ -272,7 +280,7 @@ pub fn PostsTab() -> Element {
 
             // Post detail view
             {selected_post().map(|post| rsx!(
-                div {
+                div { class: "detail-panel",
                     h3 {  "Post Details" }
                     p { "Title: ", span { {post.title.clone()} } }
                     p { "Body: ", span { {post.body.clone()} } }

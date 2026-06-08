@@ -5,29 +5,55 @@ use dioxus::prelude::*;
 #[component]
 pub fn Home() -> Element {
     rsx! {
-        div {
-            p { "Welcome to the JSONPlaceholder API Manager. This application allows you to manage users, todos, and posts using the JSONPlaceholder API." }
-            p { "Use the navigation tabs above to access different sections of the application." }
-            div {
+        div { class: "home-page",
+            section { class: "home-hero",
+                div { class: "mascot", "API" }
+                h1 { "A quiet workspace for sample API data" }
+                p { "Users, todos, posts, and local documents on one paper-white canvas." }
+                code { class: "install-snippet", "GET https://jsonplaceholder.typicode.com" }
+                Link { class: "pill-link", to: Route::Users {}, "Open users" }
+            }
+
+            section { class: "home-section split",
                 div {
-                    h2 { "Users" }
-                    p { "Manage user accounts with CRUD operations." }
-                    Link { to: Route::Users {}, "Go to Users" }
+                    h2 { "API data, shaped like documentation" }
+                    p { class: "section-copy", "Flat tables, small controls, and local document notes keep the app close to the command-line tools it represents." }
                 }
-                div {
-                    h2 { "Todos" }
-                    p { "Create, read, update, and delete todo items." }
-                    Link { to: Route::Todos {}, "Go to Todos" }
+                div { class: "terminal-card",
+                    div { class: "terminal-lights",
+                        span { class: "terminal-red" }
+                        span { class: "terminal-yellow" }
+                        span { class: "terminal-green" }
+                    }
+                    p { class: "terminal-line", "$ cargo run" }
+                    p { class: "terminal-line terminal-muted", "# fetch users, todos, posts" }
+                    p { class: "terminal-line", "$ ./scripts/run.sh build test" }
                 }
-                div {
-                    h2 { "Posts" }
-                    p { "Manage blog posts with full CRUD functionality." }
-                    Link { to: Route::Posts {}, "Go to Posts" }
-                }
-                div {
-                    h2 { "Documents" }
-                    p { "View API documentation." }
-                    Link { to: Route::Docs {}, "Go to Documents" }
+            }
+
+            section { class: "home-section",
+                h2 { "Sections" }
+                div { class: "home-grid",
+                    div { class: "home-card",
+                        h3 { "Users" }
+                        p { "Review account records and contact fields." }
+                        Link { class: "pill-link", to: Route::Users {}, "Go to users" }
+                    }
+                    div { class: "home-card",
+                        h3 { "Todos" }
+                        p { "Track status and edit sample task data." }
+                        Link { class: "pill-link", to: Route::Todos {}, "Go to todos" }
+                    }
+                    div { class: "home-card",
+                        h3 { "Posts" }
+                        p { "Create and update post records." }
+                        Link { class: "pill-link", to: Route::Posts {}, "Go to posts" }
+                    }
+                    div { class: "home-card",
+                        h3 { "Documents" }
+                        p { "Keep local notes in the app database." }
+                        Link { class: "pill-link", to: Route::Docs {}, "Go to documents" }
+                    }
                 }
             }
         }

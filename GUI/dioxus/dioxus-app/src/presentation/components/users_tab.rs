@@ -152,24 +152,27 @@ pub fn UsersTab() -> Element {
     };
 
     rsx! {
-        div {
-            h2 {"Users Management" }
+        div { class: "resource-page",
+            div { class: "resource-header",
+                h1 { class: "page-title", "Users" }
+                p { class: "page-kicker", "Manage identity and contact data from JSONPlaceholder." }
+            }
 
             // Error message
             {error().map(|err| rsx!(
-                div {
+                div { class: "notice",
                     p { {err} }
                 }
             ))}
 
             // User form
-            div {
-                h3 {
-                    {if is_editing() { "Edit User" } else { "Add New User" }}
+            div { class: "panel form-panel",
+                h2 { class: "panel-title",
+                    {if is_editing() { "Edit user" } else { "Add new user" }}
                 }
 
-                div {
-                    div {
+                div { class: "form-grid",
+                    div { class: "field",
                         label { "Name" }
                         input {
                             type: "text",
@@ -181,7 +184,7 @@ pub fn UsersTab() -> Element {
                         }
                     }
 
-                    div {
+                    div { class: "field",
                         label { "Username" }
                         input {
                             type: "text",
@@ -193,7 +196,7 @@ pub fn UsersTab() -> Element {
                         }
                     }
 
-                    div {
+                    div { class: "field",
                         label { "Email" }
                         input {
                             type: "email",
@@ -205,7 +208,7 @@ pub fn UsersTab() -> Element {
                         }
                     }
 
-                    div {
+                    div { class: "field",
                         label { "Phone" }
                         input {
                             type: "text",
@@ -218,7 +221,7 @@ pub fn UsersTab() -> Element {
                     }
                 }
 
-                div {
+                div { class: "form-actions",
                     {if is_editing() {
                         rsx! {
                             button {
@@ -245,7 +248,11 @@ pub fn UsersTab() -> Element {
             }
 
             // Users list
-            div {
+            div { class: "table-panel",
+                div { class: "table-caption",
+                    h3 { "Users" }
+                    span { class: "command-tag", "{users().len()} rows" }
+                }
                 table {
                     thead {
                         tr {
@@ -261,13 +268,13 @@ pub fn UsersTab() -> Element {
                             let user_clone = user.clone();
                             let user_id = user.id;
                             rsx!(
-                                tr { key: user.id.to_string(),
+                                tr { key: "{user.id}",
                                     td {  {user.id.to_string()} }
                                     td {  {user.name.clone()} }
                                     td {  {user.username.clone()} }
                                     td {  {user.email.clone()} }
                                     td {
-                                        div {
+                                        div { class: "row-actions",
                                             button {
 
                                                 onclick: move |_| handle_edit(user_clone.clone()),
