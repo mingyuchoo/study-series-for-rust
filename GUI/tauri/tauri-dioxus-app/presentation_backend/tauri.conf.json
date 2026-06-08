@@ -4,9 +4,15 @@
   "version": "0.1.0",
   "identifier": "com.mingyuchoo.tauri-dioxus-app",
   "build": {
-    "beforeDevCommand": "cd presentation_frontend && dx serve --port 1420",
-    "devUrl": "http://localhost:1420",
-    "beforeBuildCommand": "cd presentation_frontend && dx build --release --platform web",
+    "beforeDevCommand": {
+      "script": "dx build --release --platform web --debug-symbols false",
+      "cwd": "../presentation_frontend",
+      "wait": true
+    },
+    "beforeBuildCommand": {
+      "script": "dx build --release --platform web --debug-symbols false",
+      "cwd": "../presentation_frontend"
+    },
     "frontendDist": "../target/dx/presentation_frontend/release/web/public"
   },
   "app": {

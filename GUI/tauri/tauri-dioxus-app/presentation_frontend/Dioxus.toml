@@ -7,11 +7,6 @@
 
 [web.watcher]
 
-[web.resource]
-  style = ["/assets/styles.css"]
-
-  [web.resource.dev]
-
 [bundle]
   icon       = ["assets/dioxus.png"]
   identifier = "com.addressbook.app"
