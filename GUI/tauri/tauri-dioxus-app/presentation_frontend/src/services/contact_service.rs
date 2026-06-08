@@ -1,5 +1,6 @@
-use crate::models::{Contact, CreateContactRequest, UpdateContactRequest};
-use serde_wasm_bindgen;
+use crate::models::{Contact,
+                    CreateContactRequest,
+                    UpdateContactRequest};
 use wasm_bindgen::prelude::*;
 
 #[wasm_bindgen]

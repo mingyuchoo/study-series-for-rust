@@ -3,8 +3,8 @@
   font-size: 16px;
   line-height: 24px;
   font-weight: 400;
-  color: #0f0f0f;
-  background-color: #f6f6f6;
+  color: #1f2937;
+  background-color: #f4f6f8;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
@@ -24,7 +24,7 @@ body {
 .app {
   max-width: 1200px;
   margin: 0 auto;
-  padding: 20px;
+  padding: 24px;
 }
 
 .app-header {
@@ -33,12 +33,12 @@ body {
   align-items: center;
   margin-bottom: 30px;
   padding-bottom: 20px;
-  border-bottom: 2px solid #e8e8e8;
+  border-bottom: 1px solid #d8dee6;
 }
 
 .app-header h1 {
   margin: 0;
-  color: #2c3e50;
+  color: #17202a;
 }
 
 .header-actions {
@@ -50,10 +50,11 @@ body {
 .search-form {
   display: flex;
   gap: 10px;
+  align-items: center;
 }
 
 .btn {
-  border-radius: 8px;
+  border-radius: 6px;
   border: 1px solid transparent;
   padding: 0.6em 1.2em;
   font-size: 1em;
@@ -67,14 +68,14 @@ body {
 }
 
 .btn-primary {
-  background-color: #3498db;
+  background-color: #256f5c;
   color: white;
-  border-color: #3498db;
+  border-color: #256f5c;
 }
 
 .btn-primary:hover {
-  background-color: #2980b9;
-  border-color: #2980b9;
+  background-color: #1f5f4f;
+  border-color: #1f5f4f;
 }
 
 .btn-secondary {
@@ -89,24 +90,24 @@ body {
 }
 
 .btn-danger {
-  background-color: #e74c3c;
+  background-color: #c2410c;
   color: white;
-  border-color: #e74c3c;
+  border-color: #c2410c;
 }
 
 .btn-danger:hover {
-  background-color: #c0392b;
-  border-color: #c0392b;
+  background-color: #9a3412;
+  border-color: #9a3412;
 }
 
 .btn-outline {
   background-color: transparent;
-  color: #3498db;
-  border-color: #3498db;
+  color: #256f5c;
+  border-color: #256f5c;
 }
 
 .btn-outline:hover {
-  background-color: #3498db;
+  background-color: #256f5c;
   color: white;
 }
 
@@ -116,8 +117,8 @@ body {
 }
 
 input, textarea {
-  border-radius: 8px;
-  border: 1px solid #ddd;
+  border-radius: 6px;
+  border: 1px solid #cfd8e3;
   padding: 0.6em 1.2em;
   font-size: 1em;
   font-family: inherit;
@@ -129,8 +130,8 @@ input, textarea {
 
 input:focus, textarea:focus {
   outline: none;
-  border-color: #3498db;
-  box-shadow: 0 0 0 2px rgba(52, 152, 219, 0.2);
+  border-color: #256f5c;
+  box-shadow: 0 0 0 2px rgba(37, 111, 92, 0.18);
 }
 
 .contact-form {
@@ -138,15 +139,24 @@ input:focus, textarea:focus {
   margin: 0 auto;
   background: white;
   padding: 30px;
-  border-radius: 12px;
+  border-radius: 8px;
   box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
 }
 
 .contact-form h2 {
   margin-top: 0;
   margin-bottom: 25px;
-  color: #2c3e50;
+  color: #17202a;
   text-align: center;
+}
+
+.form-error {
+  background-color: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: 6px;
+  color: #991b1b;
+  margin-bottom: 20px;
+  padding: 12px 14px;
 }
 
 .form-group {
@@ -157,7 +167,7 @@ input:focus, textarea:focus {
   display: block;
   margin-bottom: 8px;
   font-weight: 500;
-  color: #34495e;
+  color: #374151;
 }
 
 .form-actions {
@@ -174,7 +184,7 @@ input:focus, textarea:focus {
 .empty-state {
   text-align: center;
   padding: 60px 20px;
-  color: #7f8c8d;
+  color: #6b7280;
 }
 
 .empty-state p {
@@ -190,15 +200,16 @@ input:focus, textarea:focus {
 
 .contact-card {
   background: white;
-  border-radius: 12px;
+  border: 1px solid #e3e8ef;
+  border-radius: 8px;
   padding: 20px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.06);
   transition: transform 0.2s, box-shadow 0.2s;
 }
 
 .contact-card:hover {
   transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  box-shadow: 0 6px 16px rgba(15, 23, 42, 0.1);
 }
 
 .contact-header {
@@ -207,13 +218,14 @@ input:focus, textarea:focus {
   align-items: center;
   margin-bottom: 15px;
   padding-bottom: 10px;
-  border-bottom: 1px solid #ecf0f1;
+  border-bottom: 1px solid #edf1f5;
 }
 
 .contact-header h3 {
   margin: 0;
-  color: #2c3e50;
+  color: #17202a;
   font-size: 1.3em;
+  overflow-wrap: anywhere;
 }
 
 .contact-actions {
@@ -236,11 +248,11 @@ input:focus, textarea:focus {
 .field-label {
   font-size: 0.9em;
   font-weight: 500;
-  color: #7f8c8d;
+  color: #6b7280;
 }
 
 .field-value {
-  color: #2c3e50;
+  color: #1f2937;
   word-break: break-word;
 }
 
@@ -248,16 +260,93 @@ input:focus, textarea:focus {
   text-align: center;
   padding: 40px;
   font-size: 1.1em;
-  color: #7f8c8d;
+  color: #6b7280;
 }
 
 .error-message {
-  background-color: #e74c3c;
-  color: white;
+  background-color: #fef2f2;
+  border: 1px solid #fecaca;
+  color: #991b1b;
   padding: 15px;
-  border-radius: 8px;
+  border-radius: 6px;
   margin-bottom: 20px;
   text-align: center;
+}
+
+.confirm-backdrop {
+  align-items: center;
+  background: rgba(15, 23, 42, 0.45);
+  bottom: 0;
+  display: flex;
+  justify-content: center;
+  left: 0;
+  padding: 20px;
+  position: fixed;
+  right: 0;
+  top: 0;
+  z-index: 10;
+}
+
+.confirm-dialog {
+  background: #ffffff;
+  border-radius: 8px;
+  box-shadow: 0 20px 40px rgba(15, 23, 42, 0.24);
+  max-width: 420px;
+  padding: 24px;
+  width: 100%;
+}
+
+.confirm-dialog h2 {
+  color: #17202a;
+  font-size: 1.25rem;
+  margin: 0 0 12px;
+}
+
+.confirm-dialog p {
+  color: #374151;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.confirm-actions {
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
+  margin-top: 24px;
+}
+
+@media (max-width: 760px) {
+  .app {
+    padding: 16px;
+  }
+
+  .app-header,
+  .header-actions,
+  .search-form,
+  .form-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .contacts-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .contact-header {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .contact-actions,
+  .confirm-actions {
+    width: 100%;
+  }
+
+  .contact-actions .btn,
+  .confirm-actions .btn {
+    flex: 1;
+  }
 }
 
 @media (prefers-color-scheme: dark) {

@@ -1,8 +1,12 @@
 #![allow(non_snake_case)]
 
-use crate::components::{ContactForm, ContactFormData, ContactList};
-use crate::models::{Contact, CreateContactRequest, UpdateContactRequest};
-use crate::services::ContactService;
+use crate::{components::{ContactForm,
+                         ContactFormData,
+                         ContactList},
+            models::{Contact,
+                     CreateContactRequest,
+                     UpdateContactRequest},
+            services::ContactService};
 use dioxus::prelude::*;
 
 static CSS: Asset = asset!("/assets/styles.css");
@@ -14,18 +18,34 @@ enum AppView {
     Edit(Contact),
 }
 
+async fn fetch_contacts(query: String) -> Result<Vec<Contact>, String> {
+    let query = query.trim().to_string();
+
+    if query.is_empty() {
+        ContactService::list_contacts().await
+    } else {
+        ContactService::search_contacts(query).await
+    }
+}
+
+fn blank_to_none(value: String) -> Option<String> {
+    let value = value.trim().to_string();
+    (!value.is_empty()).then_some(value)
+}
+
 pub fn App() -> Element {
     let mut contacts = use_signal(Vec::<Contact>::new);
     let mut current_view = use_signal(|| AppView::List);
     let mut search_query = use_signal(String::new);
     let mut loading = use_signal(|| false);
     let mut error_message = use_signal(|| None::<String>);
+    let mut pending_delete = use_signal(|| None::<Contact>);
 
     // Load contacts on app start
     use_effect(move || {
         spawn(async move {
             loading.set(true);
-            match ContactService::list_contacts().await {
+            match fetch_contacts(String::new()).await {
                 | Ok(contact_list) => {
                     contacts.set(contact_list);
                     error_message.set(None);
@@ -42,13 +62,7 @@ pub fn App() -> Element {
         let query = search_query.read().clone();
         spawn(async move {
             loading.set(true);
-            let result = if query.trim().is_empty() {
-                ContactService::list_contacts().await
-            } else {
-                ContactService::search_contacts(query).await
-            };
-
-            match result {
+            match fetch_contacts(query).await {
                 | Ok(contact_list) => {
                     contacts.set(contact_list);
                     error_message.set(None);
@@ -61,20 +75,38 @@ pub fn App() -> Element {
         });
     };
 
+    let handle_clear_search = move |_| {
+        search_query.set(String::new());
+        spawn(async move {
+            loading.set(true);
+            match fetch_contacts(String::new()).await {
+                | Ok(contact_list) => {
+                    contacts.set(contact_list);
+                    error_message.set(None);
+                },
+                | Err(e) => {
+                    error_message.set(Some(format!("연락처를 불러오는데 실패했습니다: {}", e)));
+                },
+            }
+            loading.set(false);
+        });
+    };
+
     let handle_add_contact = move |form_data: ContactFormData| {
         spawn(async move {
             loading.set(true);
             let request = CreateContactRequest {
-                name: form_data.name,
-                email: if form_data.email.is_empty() { None } else { Some(form_data.email) },
-                phone: if form_data.phone.is_empty() { None } else { Some(form_data.phone) },
-                address: if form_data.address.is_empty() { None } else { Some(form_data.address) },
+                name: form_data.name.trim().to_string(),
+                email: blank_to_none(form_data.email),
+                phone: blank_to_none(form_data.phone),
+                address: blank_to_none(form_data.address),
             };
 
             match ContactService::create_contact(request).await {
                 | Ok(_) => {
                     current_view.set(AppView::List);
-                    if let Ok(contact_list) = ContactService::list_contacts().await {
+                    search_query.set(String::new());
+                    if let Ok(contact_list) = fetch_contacts(String::new()).await {
                         contacts.set(contact_list);
                     }
                     error_message.set(None);
@@ -93,16 +125,17 @@ pub fn App() -> Element {
                 loading.set(true);
                 let request = UpdateContactRequest {
                     id: contact.id,
-                    name: Some(form_data.name),
-                    email: Some(form_data.email),
-                    phone: Some(form_data.phone),
-                    address: Some(form_data.address),
+                    name: Some(form_data.name.trim().to_string()),
+                    email: Some(form_data.email.trim().to_string()),
+                    phone: Some(form_data.phone.trim().to_string()),
+                    address: Some(form_data.address.trim().to_string()),
                 };
 
                 match ContactService::update_contact(request).await {
                     | Ok(_) => {
                         current_view.set(AppView::List);
-                        if let Ok(contact_list) = ContactService::list_contacts().await {
+                        let query = search_query.read().clone();
+                        if let Ok(contact_list) = fetch_contacts(query).await {
                             contacts.set(contact_list);
                         }
                         error_message.set(None);
@@ -117,11 +150,12 @@ pub fn App() -> Element {
     };
 
     let handle_delete_contact = move |id: String| {
+        let query = search_query.read().clone();
         spawn(async move {
             loading.set(true);
             match ContactService::delete_contact(id).await {
                 | Ok(_) => {
-                    if let Ok(contact_list) = ContactService::list_contacts().await {
+                    if let Ok(contact_list) = fetch_contacts(query).await {
                         contacts.set(contact_list);
                     }
                     error_message.set(None);
@@ -150,6 +184,14 @@ pub fn App() -> Element {
                                 oninput: move |evt| search_query.set(evt.value())
                             }
                             button { r#type: "submit", "검색" }
+                            if !search_query.read().trim().is_empty() {
+                                button {
+                                    r#type: "button",
+                                    class: "btn btn-secondary",
+                                    onclick: handle_clear_search,
+                                    "초기화"
+                                }
+                            }
                         }
                         button {
                             class: "btn btn-primary",
@@ -172,8 +214,9 @@ pub fn App() -> Element {
                 AppView::List => rsx! {
                     ContactList {
                         contacts: contacts.read().clone(),
+                        is_filtering: !search_query.read().trim().is_empty(),
                         on_edit: move |contact| current_view.set(AppView::Edit(contact)),
-                        on_delete: handle_delete_contact
+                        on_delete: move |contact| pending_delete.set(Some(contact))
                     }
                 },
                 AppView::Add => rsx! {
@@ -188,6 +231,35 @@ pub fn App() -> Element {
                         contact: Some(contact),
                         on_submit: handle_edit_contact,
                         on_cancel: move |_| current_view.set(AppView::List)
+                    }
+                }
+            }
+
+            if let Some(contact) = pending_delete.read().clone() {
+                div { class: "confirm-backdrop",
+                    div { class: "confirm-dialog", role: "dialog", aria_label: "연락처 삭제 확인",
+                        h2 { "연락처 삭제" }
+                        p { "\"{contact.name}\" 연락처를 삭제할까요?" }
+                        div { class: "confirm-actions",
+                            button {
+                                r#type: "button",
+                                class: "btn btn-secondary",
+                                onclick: move |_| pending_delete.set(None),
+                                "취소"
+                            }
+                            button {
+                                r#type: "button",
+                                class: "btn btn-danger",
+                                onclick: {
+                                    let contact_id = contact.id.clone();
+                                    move |_| {
+                                        pending_delete.set(None);
+                                        handle_delete_contact(contact_id.clone());
+                                    }
+                                },
+                                "삭제"
+                            }
+                        }
                     }
                 }
             }

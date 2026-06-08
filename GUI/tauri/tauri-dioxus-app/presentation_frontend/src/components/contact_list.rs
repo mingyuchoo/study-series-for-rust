@@ -6,8 +6,9 @@ use dioxus::prelude::*;
 #[derive(Props, Clone, PartialEq)]
 pub struct ContactListProps {
     pub contacts: Vec<Contact>,
+    pub is_filtering: bool,
     pub on_edit: EventHandler<Contact>,
-    pub on_delete: EventHandler<String>,
+    pub on_delete: EventHandler<Contact>,
 }
 
 pub fn ContactList(props: ContactListProps) -> Element {
@@ -15,7 +16,11 @@ pub fn ContactList(props: ContactListProps) -> Element {
         div { class: "contact-list",
             if props.contacts.is_empty() {
                 div { class: "empty-state",
-                    p { "연락처가 없습니다." }
+                    if props.is_filtering {
+                        p { "검색 결과가 없습니다." }
+                    } else {
+                        p { "연락처가 없습니다." }
+                    }
                 }
             } else {
                 div { class: "contacts-grid",
@@ -36,7 +41,7 @@ pub fn ContactList(props: ContactListProps) -> Element {
 pub struct ContactCardProps {
     pub contact: Contact,
     pub on_edit: EventHandler<Contact>,
-    pub on_delete: EventHandler<String>,
+    pub on_delete: EventHandler<Contact>,
 }
 
 pub fn ContactCard(props: ContactCardProps) -> Element {
@@ -58,8 +63,8 @@ pub fn ContactCard(props: ContactCardProps) -> Element {
                     button {
                         class: "btn btn-sm btn-danger",
                         onclick: {
-                            let contact_id = contact.id.clone();
-                            move |_| props.on_delete.call(contact_id.clone())
+                            let contact = contact.clone();
+                            move |_| props.on_delete.call(contact.clone())
                         },
                         "삭제"
                     }

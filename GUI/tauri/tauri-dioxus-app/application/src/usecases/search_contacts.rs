@@ -1,4 +1,6 @@
-use domain::{Contact, ContactRepository, DomainError};
+use domain::{Contact,
+             ContactRepository,
+             DomainError};
 use std::sync::Arc;
 
 pub struct SearchContactsUseCase {

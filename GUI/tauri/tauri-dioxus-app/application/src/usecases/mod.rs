@@ -4,6 +4,7 @@ mod get_contact;
 mod list_contacts;
 mod search_contacts;
 mod update_contact;
+mod validation;
 
 pub use create_contact::*;
 pub use delete_contact::*;

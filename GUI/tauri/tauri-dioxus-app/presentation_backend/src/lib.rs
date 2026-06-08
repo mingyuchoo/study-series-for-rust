@@ -4,13 +4,19 @@ mod routes;
 use application::*;
 use infrastructure::SqliteContactRepository;
 use routes::*;
-use sqlx::SqlitePool;
-use std::sync::Arc;
+use sqlx::{SqlitePool,
+           sqlite::SqliteConnectOptions};
+use std::{fs,
+          path::Path,
+          sync::Arc};
 use tauri::Manager;
 
-async fn setup_database() -> Result<SqlitePool, Box<dyn std::error::Error>> {
-    let database_url = "sqlite::memory:";
-    let pool = SqlitePool::connect(database_url).await?;
+async fn setup_database(app_data_dir: &Path) -> Result<SqlitePool, Box<dyn std::error::Error>> {
+    fs::create_dir_all(app_data_dir)?;
+
+    let database_path = app_data_dir.join("contacts.sqlite");
+    let options = SqliteConnectOptions::new().filename(database_path).create_if_missing(true);
+    let pool = SqlitePool::connect_with(options).await?;
 
     let repository = SqliteContactRepository::new(pool.clone());
     repository.init().await?;
@@ -18,35 +24,27 @@ async fn setup_database() -> Result<SqlitePool, Box<dyn std::error::Error>> {
     Ok(pool)
 }
 
+fn build_app_state(pool: SqlitePool) -> AppState {
+    let repository = Arc::new(SqliteContactRepository::new(pool));
+
+    AppState {
+        create_contact_use_case: Arc::new(CreateContactUseCase::new(repository.clone())),
+        get_contact_use_case: Arc::new(GetContactUseCase::new(repository.clone())),
+        list_contacts_use_case: Arc::new(ListContactsUseCase::new(repository.clone())),
+        update_contact_use_case: Arc::new(UpdateContactUseCase::new(repository.clone())),
+        delete_contact_use_case: Arc::new(DeleteContactUseCase::new(repository.clone())),
+        search_contacts_use_case: Arc::new(SearchContactsUseCase::new(repository)),
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .setup(|app| {
-            let handle = app.handle().clone();
-
-            tauri::async_runtime::spawn(async move {
-                match setup_database().await {
-                    | Ok(pool) => {
-                        let repository = Arc::new(SqliteContactRepository::new(pool));
-
-                        let app_state = AppState {
-                            create_contact_use_case: Arc::new(CreateContactUseCase::new(repository.clone())),
-                            get_contact_use_case: Arc::new(GetContactUseCase::new(repository.clone())),
-                            list_contacts_use_case: Arc::new(ListContactsUseCase::new(repository.clone())),
-                            update_contact_use_case: Arc::new(UpdateContactUseCase::new(repository.clone())),
-                            delete_contact_use_case: Arc::new(DeleteContactUseCase::new(repository.clone())),
-                            search_contacts_use_case: Arc::new(SearchContactsUseCase::new(repository)),
-                        };
-
-                        handle.manage(app_state);
-                    },
-                    | Err(e) => {
-                        eprintln!("Failed to setup database: {}", e);
-                        std::process::exit(1);
-                    },
-                }
-            });
+            let app_data_dir = app.path().app_data_dir()?;
+            let pool = tauri::async_runtime::block_on(setup_database(&app_data_dir))?;
+            app.manage(build_app_state(pool));
 
             Ok(())
         })
@@ -60,4 +58,37 @@ pub fn run() {
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use domain::{Contact,
+                 ContactRepository};
+    use uuid::Uuid;
+
+    #[tokio::test]
+    async fn setup_database_creates_a_persistent_sqlite_file() {
+        let app_data_dir = std::env::temp_dir().join(format!("tauri-dioxus-contacts-{}", Uuid::new_v4()));
+
+        let pool = setup_database(&app_data_dir).await.expect("database should be initialized");
+        assert!(app_data_dir.join("contacts.sqlite").exists());
+
+        let repository = SqliteContactRepository::new(pool.clone());
+        repository
+            .create(Contact::new("Ada Lovelace".to_string(), Some("ada@example.com".to_string()), None, None))
+            .await
+            .expect("contact should be created");
+        pool.close().await;
+
+        let pool = setup_database(&app_data_dir).await.expect("database should reopen");
+        let repository = SqliteContactRepository::new(pool.clone());
+        let contacts = repository.get_all().await.expect("contacts should be loaded");
+
+        assert_eq!(contacts.len(), 1);
+        assert_eq!(contacts[0].name, "Ada Lovelace");
+
+        pool.close().await;
+        let _ = fs::remove_dir_all(app_data_dir);
+    }
 }

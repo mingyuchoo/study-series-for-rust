@@ -1,5 +1,5 @@
-use crate::entities::Contact;
-use crate::errors::DomainError;
+use crate::{entities::Contact,
+            errors::DomainError};
 use async_trait::async_trait;
 use uuid::Uuid;
 

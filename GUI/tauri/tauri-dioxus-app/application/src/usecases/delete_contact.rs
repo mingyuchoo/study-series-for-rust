@@ -1,4 +1,5 @@
-use domain::{ContactRepository, DomainError};
+use domain::{ContactRepository,
+             DomainError};
 use std::sync::Arc;
 use uuid::Uuid;
 
