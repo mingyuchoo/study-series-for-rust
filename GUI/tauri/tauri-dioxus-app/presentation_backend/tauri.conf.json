@@ -5,15 +5,15 @@
   "identifier": "com.mingyuchoo.tauri-dioxus-app",
   "build": {
     "beforeDevCommand": {
-      "script": "dx build --release --platform web --debug-symbols false",
+      "script": "dx build --release --platform web --debug-symbols false && mkdir -p dist && rm -rf dist/* && cp -R ../target/dx/presentation_frontend/release/web/public/. dist/",
       "cwd": "../presentation_frontend",
       "wait": true
     },
     "beforeBuildCommand": {
-      "script": "dx build --release --platform web --debug-symbols false",
+      "script": "dx build --release --platform web --debug-symbols false && mkdir -p dist && rm -rf dist/* && cp -R ../target/dx/presentation_frontend/release/web/public/. dist/",
       "cwd": "../presentation_frontend"
     },
-    "frontendDist": "../target/dx/presentation_frontend/release/web/public"
+    "frontendDist": "../presentation_frontend/dist"
   },
   "app": {
     "withGlobalTauri": true,

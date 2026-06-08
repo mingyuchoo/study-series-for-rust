@@ -96,6 +96,9 @@ out
 # Nuxt.js build / generate output
 .nuxt
 dist
+!GUI/tauri/tauri-dioxus-app/presentation_frontend/dist/
+!GUI/tauri/tauri-dioxus-app/presentation_frontend/dist/.gitignore
+!GUI/tauri/tauri-dioxus-app/presentation_frontend/dist/.gitkeep
 
 # Gatsby files
 .cache/
