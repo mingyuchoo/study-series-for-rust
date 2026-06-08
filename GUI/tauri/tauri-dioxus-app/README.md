@@ -35,8 +35,8 @@ tauri-dioxus-app/
 `Cargo.toml` (Workspace) 기준:
 
 - **Tauri 2**: 데스크톱 애플리케이션 프레임워크
-- **Dioxus 0.6**: 프론트엔드 UI 프레임워크 (웹 피처)
-- **SQLx 0.8**: SQLite 데이터베이스 (runtime-tokio-rustls, chrono, uuid 피처)
+- **Dioxus 0.7**: 프론트엔드 UI 프레임워크 (웹 피처)
+- **SQLx 0.9**: SQLite 데이터베이스 (runtime-tokio, sqlite, chrono, uuid 피처)
 - **Tokio 1**: 비동기 런타임
 - **Serde 1 / Serde JSON 1**: 직렬화/역직렬화
 - **Chrono 0.4**: 날짜/시간 처리
