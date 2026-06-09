@@ -1,0 +1,19 @@
+[package]
+name = "presentation_frontend"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+
+[dependencies]
+# Frontend presentation layer
+dioxus.workspace = true
+dioxus-logger.workspace = true
+js-sys.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+serde-wasm-bindgen.workspace = true
+wasm-bindgen.workspace = true
+wasm-bindgen-futures.workspace = true
+web-sys.workspace = true
+uuid.workspace = true
+chrono.workspace = true

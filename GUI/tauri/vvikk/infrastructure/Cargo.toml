@@ -1,0 +1,16 @@
+[package]
+  authors.workspace = true
+  edition.workspace = true
+  name              = "infrastructure"
+  version.workspace = true
+
+[dependencies]
+  # Infrastructure depends on domain and application layers
+  domain = {path = "../domain"}
+
+  # External dependencies for database implementation
+  async-trait.workspace = true
+  chrono.workspace      = true
+  sqlx.workspace        = true
+  tokio.workspace       = true
+  uuid.workspace        = true

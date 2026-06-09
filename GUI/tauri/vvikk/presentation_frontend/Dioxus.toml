@@ -1,0 +1,14 @@
+[application]
+  default_platform = "web"
+  name             = "presentation_frontend"
+
+[web.app]
+  title = "주소록 앱"
+
+[web.watcher]
+
+[bundle]
+  icon       = ["assets/dioxus.png"]
+  identifier = "com.addressbook.app"
+  publisher  = "Address Book"
+  resources  = ["assets/*"]

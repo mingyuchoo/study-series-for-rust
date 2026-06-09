@@ -1,0 +1,205 @@
+# Clean Architecture Workspace Tasks
+
+[tasks.clean]
+  args        = ["clean"]
+  command     = "cargo"
+  description = "Clean all build artifacts"
+  workspace   = false
+
+[tasks.clippy]
+  args        = ["clippy", "--workspace", "--all-targets", "--", "-D", "warnings"]
+  command     = "cargo"
+  description = "Run clippy on all workspace crates"
+  workspace   = false
+
+[tasks.check]
+  args        = ["check", "--workspace"]
+  command     = "cargo"
+  description = "Check all workspace crates"
+  workspace   = false
+
+[tasks.format]
+  args        = ["fmt", "--all"]
+  command     = "cargo"
+  description = "Format all workspace code"
+  workspace   = false
+
+[tasks.format-check]
+  args        = ["fmt", "--all", "--check"]
+  command     = "cargo"
+  description = "Check code formatting without modifying files"
+  workspace   = false
+
+[tasks.build]
+  args        = ["build", "--workspace"]
+  command     = "cargo"
+  description = "Build all workspace crates"
+  workspace   = false
+
+[tasks.release]
+  args        = ["build", "--workspace", "--release"]
+  command     = "cargo"
+  description = "Build all workspace crates in release mode"
+  workspace   = false
+
+# Testing tasks per layer
+[tasks.test]
+  args        = ["test", "--workspace"]
+  command     = "cargo"
+  description = "Run all tests in workspace"
+  workspace   = false
+
+[tasks.test-domain]
+  args        = ["test", "-p", "domain"]
+  command     = "cargo"
+  description = "Test domain layer (business entities)"
+  workspace   = false
+
+[tasks.test-application]
+  args        = ["test", "-p", "application"]
+  command     = "cargo"
+  description = "Test application layer (use cases)"
+  workspace   = false
+
+[tasks.test-infrastructure]
+  args        = ["test", "-p", "infrastructure"]
+  command     = "cargo"
+  description = "Test infrastructure layer (repositories)"
+  workspace   = false
+
+[tasks.test-backend]
+  args        = ["test", "-p", "presentation_backend"]
+  command     = "cargo"
+  description = "Test presentation backend layer"
+  workspace   = false
+
+[tasks.test-frontend]
+  args        = ["test", "-p", "presentation_frontend"]
+  command     = "cargo"
+  description = "Test presentation frontend layer"
+  workspace   = false
+
+# Build tasks per layer
+[tasks.build-domain]
+  args        = ["build", "-p", "domain"]
+  command     = "cargo"
+  description = "Build domain layer only"
+  workspace   = false
+
+[tasks.build-application]
+  args        = ["build", "-p", "application"]
+  command     = "cargo"
+  description = "Build application layer only"
+  workspace   = false
+
+[tasks.build-infrastructure]
+  args        = ["build", "-p", "infrastructure"]
+  command     = "cargo"
+  description = "Build infrastructure layer only"
+  workspace   = false
+
+[tasks.build-backend]
+  args        = ["build", "-p", "presentation_backend"]
+  command     = "cargo"
+  description = "Build presentation backend only"
+  workspace   = false
+
+[tasks.build-frontend]
+  args        = ["build", "--platform", "web"]
+  command     = "dx"
+  cwd         = "presentation_frontend"
+  description = "Build presentation frontend (web) only"
+  workspace   = false
+
+# Development tasks
+[tasks.run]
+  args        = ["tauri", "dev"]
+  command     = "cargo"
+  description = "Run the Tauri application in development mode"
+  workspace   = false
+
+[tasks.dev]
+  alias       = "run"
+  description = "Alias for run task"
+
+[tasks.dev-frontend]
+  args        = ["serve", "--platform", "web", "--hot-reload"]
+  command     = "dx"
+  cwd         = "presentation_frontend"
+  description = "Run frontend only in development mode (web server)"
+  workspace   = false
+
+# Production build tasks
+[tasks.build-app]
+  args = [
+    "tauri",
+    "build",
+    "--manifest-path",
+    "presentation_backend/Cargo.toml",
+  ]
+  command = "cargo"
+  description = "Build the Tauri application for production"
+  workspace = false
+
+[tasks.build-release]
+  alias       = "build-app"
+  description = "Alias for build-app"
+
+# Platform-specific packaging tasks
+[tasks.package-fedora]
+  args        = ["tauri", "build", "-b", "rpm"]
+  command     = "cargo"
+  cwd         = "presentation_backend"
+  description = "Package application for Fedora Linux (RPM)"
+  workspace   = false
+
+[tasks.package-ubuntu]
+  args        = ["tauri", "build", "-b", "deb"]
+  command     = "cargo"
+  cwd         = "presentation_backend"
+  description = "Package application for Ubuntu Linux (DEB)"
+  workspace   = false
+
+[tasks.package-linux]
+  args        = ["tauri", "build", "-b", "appimage"]
+  command     = "cargo"
+  cwd         = "presentation_backend"
+  description = "Package application for Linux (AppImage - universal)"
+  workspace   = false
+
+[tasks.package-macos]
+  args        = ["tauri", "build", "-b", "dmg"]
+  command     = "cargo"
+  cwd         = "presentation_backend"
+  description = "Package application for macOS (DMG)"
+  workspace   = false
+
+[tasks.package-windows]
+  args        = ["tauri", "build", "-b", "msi"]
+  command     = "cargo"
+  cwd         = "presentation_backend"
+  description = "Package application for Windows (MSI installer)"
+  workspace   = false
+
+[tasks.package-windows-nsis]
+  args        = ["tauri", "build", "-b", "nsis"]
+  command     = "cargo"
+  cwd         = "presentation_backend"
+  description = "Package application for Windows (NSIS installer)"
+  workspace   = false
+
+[tasks.package-all-linux]
+  args        = ["tauri", "build", "-b", "deb", "-b", "rpm", "-b", "appimage"]
+  command     = "cargo"
+  cwd         = "presentation_backend"
+  description = "Package application for all Linux distributions (DEB, RPM, AppImage)"
+  workspace   = false
+
+# Verification tasks
+[tasks.verify]
+  dependencies = ["format-check", "clippy", "test"]
+  description  = "Run all verification checks (format, clippy, test)"
+
+[tasks.ci]
+  dependencies = ["check", "clippy", "test"]
+  description  = "Run CI pipeline (check, clippy, test)"
