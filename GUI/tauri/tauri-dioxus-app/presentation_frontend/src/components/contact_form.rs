@@ -78,6 +78,7 @@ pub fn ContactForm(props: ContactFormProps) -> Element {
                     input {
                         id: "phone",
                         r#type: "tel",
+                        placeholder: "010-1234-5678",
                         value: "{phone}",
                         oninput: move |evt| phone.set(evt.value())
                     }

@@ -94,6 +94,19 @@ async fn create_rejects_invalid_email() {
 }
 
 #[tokio::test]
+async fn create_rejects_non_korean_mobile_phone() {
+    let repository = MockContactRepository::arc();
+    let use_case = CreateContactUseCase::new(repository.clone());
+
+    let result = use_case
+        .execute("Ada".to_string(), None, Some("choo".to_string()), None)
+        .await;
+
+    assert!(matches!(result, Err(DomainError::InvalidContactData(_))));
+    assert_eq!(repository.count(), 0);
+}
+
+#[tokio::test]
 async fn create_persists_valid_contact() {
     let repository = MockContactRepository::arc();
     let use_case = CreateContactUseCase::new(repository.clone());
@@ -184,7 +197,10 @@ async fn list_and_search_return_expected_contacts() {
         .execute("Ada".to_string(), Some("ada@example.com".to_string()), None, None)
         .await
         .unwrap();
-    create.execute("Grace".to_string(), None, Some("010-1234".to_string()), None).await.unwrap();
+    create
+        .execute("Grace".to_string(), None, Some("010-1234-5678".to_string()), None)
+        .await
+        .unwrap();
 
     let all = ListContactsUseCase::new(repository.clone()).execute().await.expect("list should succeed");
     assert_eq!(all.len(), 2);

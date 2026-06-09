@@ -44,9 +44,10 @@ pub fn validate_optional_phone(phone: Option<&String>) -> Result<(), DomainError
     ))
 }
 
-/// Strictly accepts Korean mobile numbers only: `01X-XXXX-XXXX` (11 digits) or
-/// the legacy `01X-XXX-XXXX` (10 digits). Hyphens are optional, but any other
-/// separator, and all landline/international numbers, are rejected.
+/// Strictly accepts Korean mobile numbers only. `010` numbers must be 11 digits
+/// (`010-XXXX-XXXX`); legacy carriers `011/016/017/018/019` may be 10 or 11
+/// digits. Hyphens are optional, but any other separator, and all
+/// landline/international numbers, are rejected.
 fn is_valid_korean_mobile(phone: &str) -> bool {
     // Only digits and hyphens may appear in the input.
     if !phone.chars().all(|c| c.is_ascii_digit() || c == '-') {
@@ -54,9 +55,18 @@ fn is_valid_korean_mobile(phone: &str) -> bool {
     }
 
     let digits: Vec<u8> = phone.bytes().filter(u8::is_ascii_digit).collect();
+    let len = digits.len();
 
-    // `01` prefix + valid carrier digit + 7~8 subscriber digits (10 or 11 total).
-    matches!(digits.len(), 10 | 11) && digits[0] == b'0' && digits[1] == b'1' && matches!(digits[2], b'0' | b'1' | b'6' | b'7' | b'8' | b'9')
+    // Must be a 10~11 digit number starting with the `01` mobile prefix.
+    if !(matches!(len, 10 | 11) && digits[0] == b'0' && digits[1] == b'1') {
+        return false;
+    }
+
+    match digits[2] {
+        b'0' => len == 11,                        // 010: always 11 digits
+        b'1' | b'6' | b'7' | b'8' | b'9' => true, // legacy carriers: 10 or 11 digits
+        _ => false,
+    }
 }
 
 #[cfg(test)]
