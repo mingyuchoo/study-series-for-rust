@@ -1,72 +1,43 @@
-use domain::DomainError;
+use domain::{DomainError,
+             ItemKind,
+             VvkikItem};
 
-pub fn validate_name(name: &str) -> Result<(), DomainError> {
-    if name.trim().is_empty() {
-        return Err(DomainError::InvalidContactData("Name cannot be empty".to_string()));
+pub fn validate_title(title: &str) -> Result<(), DomainError> {
+    if title.trim().is_empty() {
+        return Err(DomainError::InvalidVvkikData("제목을 입력하세요.".to_string()));
     }
 
     Ok(())
 }
 
-pub fn validate_optional_email(email: Option<&String>) -> Result<(), DomainError> {
-    let Some(email) = email else {
-        return Ok(());
-    };
-
-    let email = email.trim();
-    if email.is_empty() || is_valid_email(email) {
-        return Ok(());
+pub fn validate_parent(kind: ItemKind, parent: Option<&VvkikItem>) -> Result<(), DomainError> {
+    match (kind, parent) {
+        | (ItemKind::Value, Some(_)) => Err(DomainError::InvalidVvkikData("Value는 최상위 항목이어야 합니다.".to_string())),
+        | (ItemKind::Value, None) => Ok(()),
+        | (_, None) => Err(DomainError::InvalidVvkikData(format!("{} 항목의 상위 항목을 선택하세요.", kind.label()))),
+        | (_, Some(parent)) if kind.allows_parent(parent.kind) => Ok(()),
+        | (_, Some(parent)) => Err(DomainError::InvalidVvkikData(format!(
+            "{} 항목은 {} 아래에 둘 수 없습니다.",
+            kind.label(),
+            parent.kind.label()
+        ))),
     }
-
-    Err(DomainError::InvalidContactData("Email format is invalid".to_string()))
 }
 
-fn is_valid_email(email: &str) -> bool {
-    let Some((local, domain)) = email.split_once('@') else {
-        return false;
-    };
+pub fn validate_kpi_values(kind: ItemKind, target_value: Option<f64>, current_value: Option<f64>, unit: Option<&str>) -> Result<(), DomainError> {
+    if kind != ItemKind::Kpi && (target_value.is_some() || current_value.is_some() || unit.is_some_and(|unit| !unit.trim().is_empty())) {
+        return Err(DomainError::InvalidVvkikData("목표값, 현재값, 단위는 KPI 항목에서만 사용합니다.".to_string()));
+    }
 
-    !local.is_empty() && domain.contains('.') && !domain.starts_with('.') && !domain.ends_with('.')
+    Ok(())
 }
 
-pub fn validate_optional_phone(phone: Option<&String>) -> Result<(), DomainError> {
-    let Some(phone) = phone else {
-        return Ok(());
-    };
-
-    let phone = phone.trim();
-    if phone.is_empty() || is_valid_korean_mobile(phone) {
-        return Ok(());
+pub fn validate_measurement_value(value: f64) -> Result<(), DomainError> {
+    if !value.is_finite() {
+        return Err(DomainError::InvalidVvkikData("KPI 측정값은 유효한 숫자여야 합니다.".to_string()));
     }
 
-    Err(DomainError::InvalidContactData(
-        "전화번호는 010-1234-5678 형식의 한국 휴대폰 번호여야 합니다.".to_string(),
-    ))
-}
-
-/// Strictly accepts Korean mobile numbers only. `010` numbers must be 11 digits
-/// (`010-XXXX-XXXX`); legacy carriers `011/016/017/018/019` may be 10 or 11
-/// digits. Hyphens are optional, but any other separator, and all
-/// landline/international numbers, are rejected.
-fn is_valid_korean_mobile(phone: &str) -> bool {
-    // Only digits and hyphens may appear in the input.
-    if !phone.chars().all(|c| c.is_ascii_digit() || c == '-') {
-        return false;
-    }
-
-    let digits: Vec<u8> = phone.bytes().filter(u8::is_ascii_digit).collect();
-    let len = digits.len();
-
-    // Must be a 10~11 digit number starting with the `01` mobile prefix.
-    if !(matches!(len, 10 | 11) && digits[0] == b'0' && digits[1] == b'1') {
-        return false;
-    }
-
-    match digits[2] {
-        b'0' => len == 11,                        // 010: always 11 digits
-        b'1' | b'6' | b'7' | b'8' | b'9' => true, // legacy carriers: 10 or 11 digits
-        _ => false,
-    }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -74,33 +45,16 @@ mod tests {
     use super::*;
 
     #[test]
-    fn validates_basic_email_shape() {
-        assert!(validate_optional_email(Some(&"ada@example.com".to_string())).is_ok());
-        assert!(validate_optional_email(Some(&"  ".to_string())).is_ok());
-        assert!(validate_optional_email(None).is_ok());
-        assert!(validate_optional_email(Some(&"ada.example.com".to_string())).is_err());
-        assert!(validate_optional_email(Some(&"ada@example".to_string())).is_err());
+    fn validates_required_title() {
+        assert!(validate_title("Build income engine").is_ok());
+        assert!(validate_title("   ").is_err());
     }
 
     #[test]
-    fn accepts_only_korean_mobile_numbers() {
-        let ok = |s: &str| validate_optional_phone(Some(&s.to_string())).is_ok();
-
-        // Empty / absent are allowed (optional field).
-        assert!(validate_optional_phone(None).is_ok());
-        assert!(ok("  "));
-
-        // Valid Korean mobile numbers, with or without hyphens.
-        assert!(ok("010-1234-5678"));
-        assert!(ok("01012345678"));
-        assert!(ok("011-123-4567")); // legacy 10-digit form
-
-        // Rejected: alphabetic, landline, international, wrong length/prefix.
-        assert!(!ok("choo"));
-        assert!(!ok("02-123-4567")); // Seoul landline
-        assert!(!ok("+82 10-1234-5678")); // international / spaces
-        assert!(!ok("010-1234-567")); // too short
-        assert!(!ok("010-1234-56789")); // too long
-        assert!(!ok("021-1234-5678")); // invalid carrier digit
+    fn validates_parent_hierarchy() {
+        let value = VvkikItem::new(ItemKind::Value, None, "Freedom".to_string(), None, None, None, None, 0);
+        assert!(validate_parent(ItemKind::Vision, Some(&value)).is_ok());
+        assert!(validate_parent(ItemKind::Kra, Some(&value)).is_err());
+        assert!(validate_parent(ItemKind::Value, Some(&value)).is_err());
     }
 }

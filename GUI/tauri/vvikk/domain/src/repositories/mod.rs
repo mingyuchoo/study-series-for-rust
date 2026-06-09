@@ -1,3 +1,3 @@
-mod contact_repository;
+mod vvkik_repository;
 
-pub use contact_repository::*;
+pub use vvkik_repository::*;

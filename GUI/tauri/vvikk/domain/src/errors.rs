@@ -2,11 +2,11 @@ use thiserror::Error;
 
 #[derive(Error, Debug)]
 pub enum DomainError {
-    #[error("Contact not found")]
-    ContactNotFound,
+    #[error("VVKIK item not found")]
+    ItemNotFound,
 
-    #[error("Invalid contact data: {0}")]
-    InvalidContactData(String),
+    #[error("Invalid VVKIK data: {0}")]
+    InvalidVvkikData(String),
 
     #[error("Database error: {0}")]
     DatabaseError(String),

@@ -3,12 +3,12 @@
   name             = "presentation_frontend"
 
 [web.app]
-  title = "주소록 앱"
+  title = "VVKIK"
 
 [web.watcher]
 
 [bundle]
   icon       = ["assets/dioxus.png"]
-  identifier = "com.addressbook.app"
-  publisher  = "Address Book"
+  identifier = "com.mingyuchoo.vvkik"
+  publisher  = "VVKIK"
   resources  = ["assets/*"]

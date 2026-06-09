@@ -1,3 +1,3 @@
-mod contact_commands;
+mod vvkik_commands;
 
-pub use contact_commands::*;
+pub use vvkik_commands::*;

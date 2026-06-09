@@ -1,3 +1,3 @@
-mod contact;
+mod vvkik;
 
-pub use contact::*;
+pub use vvkik::*;

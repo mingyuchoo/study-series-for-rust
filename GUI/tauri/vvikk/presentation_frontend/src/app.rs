@@ -1,30 +1,30 @@
 #![allow(non_snake_case)]
 
-use crate::{components::{ContactForm,
-                         ContactFormData,
-                         ContactList},
-            models::{Contact,
-                     CreateContactRequest,
-                     UpdateContactRequest},
-            services::ContactService};
+use crate::{components::{ItemForm,
+                         ItemFormData,
+                         VvkikBoard},
+            models::{CreateItemRequest,
+                     UpdateItemRequest,
+                     VvkikItem},
+            services::VvkikService};
 use dioxus::prelude::*;
 
 static CSS: Asset = asset!("/assets/styles.css");
 
 #[derive(Debug, Clone, PartialEq)]
 enum AppView {
-    List,
+    Board,
     Add,
-    Edit(Contact),
+    Edit(Box<VvkikItem>),
 }
 
-async fn fetch_contacts(query: String) -> Result<Vec<Contact>, String> {
+async fn fetch_items(query: String) -> Result<Vec<VvkikItem>, String> {
     let query = query.trim().to_string();
 
     if query.is_empty() {
-        ContactService::list_contacts().await
+        VvkikService::list_items().await
     } else {
-        ContactService::search_contacts(query).await
+        VvkikService::search_items(query).await
     }
 }
 
@@ -33,25 +33,34 @@ fn blank_to_none(value: String) -> Option<String> {
     (!value.is_empty()).then_some(value)
 }
 
+fn parse_optional_f64(value: String, label: &str) -> Result<Option<f64>, String> {
+    let Some(value) = blank_to_none(value) else {
+        return Ok(None);
+    };
+
+    value.parse::<f64>().map(Some).map_err(|_| format!("{label}은 숫자로 입력하세요."))
+}
+
+fn parse_i64_or_zero(value: String) -> i64 { value.trim().parse::<i64>().unwrap_or_default() }
+
 pub fn App() -> Element {
-    let mut contacts = use_signal(Vec::<Contact>::new);
-    let mut current_view = use_signal(|| AppView::List);
+    let mut items = use_signal(Vec::<VvkikItem>::new);
+    let mut current_view = use_signal(|| AppView::Board);
     let mut search_query = use_signal(String::new);
     let mut loading = use_signal(|| false);
     let mut error_message = use_signal(|| None::<String>);
-    let mut pending_delete = use_signal(|| None::<Contact>);
+    let mut pending_delete = use_signal(|| None::<VvkikItem>);
 
-    // Load contacts on app start
     use_effect(move || {
         spawn(async move {
             loading.set(true);
-            match fetch_contacts(String::new()).await {
-                | Ok(contact_list) => {
-                    contacts.set(contact_list);
+            match fetch_items(String::new()).await {
+                | Ok(item_list) => {
+                    items.set(item_list);
                     error_message.set(None);
                 },
                 | Err(e) => {
-                    error_message.set(Some(format!("연락처를 불러오는데 실패했습니다: {}", e)));
+                    error_message.set(Some(format!("VVKIK 항목을 불러오지 못했습니다: {}", e)));
                 },
             }
             loading.set(false);
@@ -63,9 +72,9 @@ pub fn App() -> Element {
         let query = search_query.read().clone();
         spawn(async move {
             loading.set(true);
-            match fetch_contacts(query).await {
-                | Ok(contact_list) => {
-                    contacts.set(contact_list);
+            match fetch_items(query).await {
+                | Ok(item_list) => {
+                    items.set(item_list);
                     error_message.set(None);
                 },
                 | Err(e) => {
@@ -80,42 +89,59 @@ pub fn App() -> Element {
         search_query.set(String::new());
         spawn(async move {
             loading.set(true);
-            match fetch_contacts(String::new()).await {
-                | Ok(contact_list) => {
-                    contacts.set(contact_list);
+            match fetch_items(String::new()).await {
+                | Ok(item_list) => {
+                    items.set(item_list);
                     error_message.set(None);
                 },
                 | Err(e) => {
-                    error_message.set(Some(format!("연락처를 불러오는데 실패했습니다: {}", e)));
+                    error_message.set(Some(format!("VVKIK 항목을 불러오지 못했습니다: {}", e)));
                 },
             }
             loading.set(false);
         });
     };
 
-    let handle_add_contact = move |form_data: ContactFormData| {
-        // Re-entry guard: ignore a second submit (e.g. a rapid double-click)
-        // while a request is already in flight. `loading` is set synchronously
-        // here, before the spawn, so the guard sees it on the next event.
+    let handle_add_item = move |form_data: ItemFormData| {
         if *loading.read() {
             return;
         }
+
+        let target_value = match parse_optional_f64(form_data.target_value.clone(), "목표값") {
+            | Ok(value) => value,
+            | Err(message) => {
+                error_message.set(Some(message));
+                return;
+            },
+        };
+        let current_value = match parse_optional_f64(form_data.current_value.clone(), "현재값") {
+            | Ok(value) => value,
+            | Err(message) => {
+                error_message.set(Some(message));
+                return;
+            },
+        };
+
         loading.set(true);
         spawn(async move {
-            let request = CreateContactRequest {
-                name: form_data.name.trim().to_string(),
-                email: blank_to_none(form_data.email),
-                phone: blank_to_none(form_data.phone),
-                memo: blank_to_none(form_data.memo),
+            let request = CreateItemRequest {
+                kind: form_data.kind,
+                parent_id: blank_to_none(form_data.parent_id),
+                title: form_data.title.trim().to_string(),
+                description: blank_to_none(form_data.description),
+                target_value,
+                current_value,
+                unit: blank_to_none(form_data.unit),
+                position: Some(parse_i64_or_zero(form_data.position)),
             };
 
-            match ContactService::create_contact(request).await {
+            match VvkikService::create_item(request).await {
                 | Ok(_) => {
-                    current_view.set(AppView::List);
+                    current_view.set(AppView::Board);
                     search_query.set(String::new());
-                    match fetch_contacts(String::new()).await {
-                        | Ok(contact_list) => {
-                            contacts.set(contact_list);
+                    match fetch_items(String::new()).await {
+                        | Ok(item_list) => {
+                            items.set(item_list);
                             error_message.set(None);
                         },
                         | Err(e) => {
@@ -124,36 +150,56 @@ pub fn App() -> Element {
                     }
                 },
                 | Err(e) => {
-                    error_message.set(Some(format!("연락처 추가에 실패했습니다: {}", e)));
+                    error_message.set(Some(format!("항목 추가에 실패했습니다: {}", e)));
                 },
             }
             loading.set(false);
         });
     };
 
-    let handle_edit_contact = move |form_data: ContactFormData| {
-        // Re-entry guard, matching `handle_add_contact` above.
+    let handle_edit_item = move |form_data: ItemFormData| {
         if *loading.read() {
             return;
         }
-        if let AppView::Edit(contact) = current_view.read().clone() {
+
+        let target_value = match parse_optional_f64(form_data.target_value.clone(), "목표값") {
+            | Ok(value) => value,
+            | Err(message) => {
+                error_message.set(Some(message));
+                return;
+            },
+        };
+        let current_value = match parse_optional_f64(form_data.current_value.clone(), "현재값") {
+            | Ok(value) => value,
+            | Err(message) => {
+                error_message.set(Some(message));
+                return;
+            },
+        };
+
+        if let AppView::Edit(item) = current_view.read().clone() {
             loading.set(true);
             spawn(async move {
-                let request = UpdateContactRequest {
-                    id: contact.id,
-                    name: Some(form_data.name.trim().to_string()),
-                    email: Some(form_data.email.trim().to_string()),
-                    phone: Some(form_data.phone.trim().to_string()),
-                    memo: Some(form_data.memo.trim().to_string()),
+                let request = UpdateItemRequest {
+                    id: item.id.clone(),
+                    kind: Some(form_data.kind),
+                    parent_id: Some(blank_to_none(form_data.parent_id)),
+                    title: Some(form_data.title.trim().to_string()),
+                    description: Some(form_data.description.trim().to_string()),
+                    target_value: Some(target_value),
+                    current_value: Some(current_value),
+                    unit: Some(form_data.unit.trim().to_string()),
+                    position: Some(parse_i64_or_zero(form_data.position)),
+                    status: Some(form_data.status),
                 };
 
-                match ContactService::update_contact(request).await {
+                match VvkikService::update_item(request).await {
                     | Ok(_) => {
-                        current_view.set(AppView::List);
+                        current_view.set(AppView::Board);
                         let query = search_query.read().clone();
-                        match fetch_contacts(query).await {
-                            | Ok(contact_list) => {
-                                contacts.set(contact_list);
+                        match fetch_items(query).await {
+                            | Ok(item_list) => {
+                                items.set(item_list);
                                 error_message.set(None);
                             },
                             | Err(e) => {
@@ -162,7 +208,7 @@ pub fn App() -> Element {
                         }
                     },
                     | Err(e) => {
-                        error_message.set(Some(format!("연락처 수정에 실패했습니다: {}", e)));
+                        error_message.set(Some(format!("항목 수정에 실패했습니다: {}", e)));
                     },
                 }
                 loading.set(false);
@@ -170,14 +216,14 @@ pub fn App() -> Element {
         }
     };
 
-    let handle_delete_contact = move |id: String| {
+    let handle_delete_item = move |id: String| {
         let query = search_query.read().clone();
         spawn(async move {
             loading.set(true);
-            match ContactService::delete_contact(id).await {
-                | Ok(_) => match fetch_contacts(query).await {
-                    | Ok(contact_list) => {
-                        contacts.set(contact_list);
+            match VvkikService::delete_item(id).await {
+                | Ok(_) => match fetch_items(query).await {
+                    | Ok(item_list) => {
+                        items.set(item_list);
                         error_message.set(None);
                     },
                     | Err(e) => {
@@ -185,7 +231,7 @@ pub fn App() -> Element {
                     },
                 },
                 | Err(e) => {
-                    error_message.set(Some(format!("연락처 삭제에 실패했습니다: {}", e)));
+                    error_message.set(Some(format!("항목 삭제에 실패했습니다: {}", e)));
                 },
             }
             loading.set(false);
@@ -196,14 +242,17 @@ pub fn App() -> Element {
         link { rel: "stylesheet", href: CSS }
         main { class: "app",
             header { class: "app-header",
-                h1 { "주소록" }
+                div { class: "brand-block",
+                    h1 { "VVKIK" }
+                    p { "Value에서 KPI까지, 큰 그림을 실행과 피드백으로 연결합니다." }
+                }
 
-                if let AppView::List = current_view.read().clone() {
+                if let AppView::Board = current_view.read().clone() {
                     div { class: "header-actions",
                         form { class: "search-form", onsubmit: handle_search,
                             input {
                                 r#type: "text",
-                                placeholder: "연락처 검색...",
+                                placeholder: "Value, Vision, KRA, IGT, KPI 검색...",
                                 value: "{search_query}",
                                 oninput: move |evt| search_query.set(evt.value())
                             }
@@ -223,7 +272,7 @@ pub fn App() -> Element {
                                 error_message.set(None);
                                 current_view.set(AppView::Add);
                             },
-                            "새 연락처"
+                            "새 항목"
                         }
                     }
                 }
@@ -238,44 +287,46 @@ pub fn App() -> Element {
             }
 
             match current_view.read().clone() {
-                AppView::List => rsx! {
-                    ContactList {
-                        contacts: contacts.read().clone(),
+                AppView::Board => rsx! {
+                    VvkikBoard {
+                        items: items.read().clone(),
                         is_filtering: !search_query.read().trim().is_empty(),
-                        on_edit: move |contact| {
+                        on_edit: move |item| {
                             error_message.set(None);
-                            current_view.set(AppView::Edit(contact));
+                            current_view.set(AppView::Edit(Box::new(item)));
                         },
-                        on_delete: move |contact| pending_delete.set(Some(contact))
+                        on_delete: move |item| pending_delete.set(Some(item))
                     }
                 },
                 AppView::Add => rsx! {
-                    ContactForm {
-                        contact: None,
-                        on_submit: handle_add_contact,
+                    ItemForm {
+                        item: None,
+                        items: items.read().clone(),
+                        on_submit: handle_add_item,
                         on_cancel: move |_| {
                             error_message.set(None);
-                            current_view.set(AppView::List);
+                            current_view.set(AppView::Board);
                         }
                     }
                 },
-                AppView::Edit(contact) => rsx! {
-                    ContactForm {
-                        contact: Some(contact),
-                        on_submit: handle_edit_contact,
+                AppView::Edit(item) => rsx! {
+                    ItemForm {
+                        item: Some((*item).clone()),
+                        items: items.read().clone(),
+                        on_submit: handle_edit_item,
                         on_cancel: move |_| {
                             error_message.set(None);
-                            current_view.set(AppView::List);
+                            current_view.set(AppView::Board);
                         }
                     }
                 }
             }
 
-            if let Some(contact) = pending_delete.read().clone() {
+            if let Some(item) = pending_delete.read().clone() {
                 div { class: "confirm-backdrop",
-                    div { class: "confirm-dialog", role: "dialog", aria_label: "연락처 삭제 확인",
-                        h2 { "연락처 삭제" }
-                        p { "\"{contact.name}\" 연락처를 삭제할까요?" }
+                    div { class: "confirm-dialog", role: "dialog", aria_label: "VVKIK 항목 삭제 확인",
+                        h2 { "항목 삭제" }
+                        p { "\"{item.title}\" 항목을 삭제할까요? 하위 항목도 함께 삭제됩니다." }
                         div { class: "confirm-actions",
                             button {
                                 r#type: "button",
@@ -287,10 +338,10 @@ pub fn App() -> Element {
                                 r#type: "button",
                                 class: "btn btn-danger",
                                 onclick: {
-                                    let contact_id = contact.id.clone();
+                                    let item_id = item.id.clone();
                                     move |_| {
                                         pending_delete.set(None);
-                                        handle_delete_contact(contact_id.clone());
+                                        handle_delete_item(item_id.clone());
                                     }
                                 },
                                 "삭제"

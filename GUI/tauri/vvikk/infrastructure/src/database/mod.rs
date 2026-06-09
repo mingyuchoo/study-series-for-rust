@@ -1,3 +1,3 @@
-mod sqlite_contact_repository;
+mod sqlite_vvkik_repository;
 
-pub use sqlite_contact_repository::*;
+pub use sqlite_vvkik_repository::*;

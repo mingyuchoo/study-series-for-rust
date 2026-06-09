@@ -19,7 +19,7 @@
     "withGlobalTauri": true,
     "windows": [
       {
-        "title": "주소록 앱",
+        "title": "VVKIK",
         "width": 1200,
         "height": 800
       }

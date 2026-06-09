@@ -38,8 +38,8 @@ impl ApiError {
 impl From<DomainError> for ApiError {
     fn from(error: DomainError) -> Self {
         match error {
-            | DomainError::ContactNotFound => Self::new(ApiErrorKind::NotFound, "연락처를 찾을 수 없습니다."),
-            | DomainError::InvalidContactData(message) => Self::new(ApiErrorKind::Validation, message),
+            | DomainError::ItemNotFound => Self::new(ApiErrorKind::NotFound, "VVKIK 항목을 찾을 수 없습니다."),
+            | DomainError::InvalidVvkikData(message) => Self::new(ApiErrorKind::Validation, message),
             // Raw DB error text is intentionally not forwarded to the frontend, but
             // it is logged server-side so failures remain diagnosable.
             | DomainError::DatabaseError(detail) => {

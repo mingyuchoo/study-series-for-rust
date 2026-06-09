@@ -1,3 +1,3 @@
-mod contact_service;
+mod vvkik_service;
 
-pub use contact_service::*;
+pub use vvkik_service::*;
