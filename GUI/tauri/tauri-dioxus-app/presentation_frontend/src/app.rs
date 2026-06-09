@@ -58,7 +58,8 @@ pub fn App() -> Element {
         });
     });
 
-    let handle_search = move |_: FormEvent| {
+    let handle_search = move |evt: FormEvent| {
+        evt.prevent_default();
         let query = search_query.read().clone();
         spawn(async move {
             loading.set(true);
@@ -93,8 +94,14 @@ pub fn App() -> Element {
     };
 
     let handle_add_contact = move |form_data: ContactFormData| {
+        // Re-entry guard: ignore a second submit (e.g. a rapid double-click)
+        // while a request is already in flight. `loading` is set synchronously
+        // here, before the spawn, so the guard sees it on the next event.
+        if *loading.read() {
+            return;
+        }
+        loading.set(true);
         spawn(async move {
-            loading.set(true);
             let request = CreateContactRequest {
                 name: form_data.name.trim().to_string(),
                 email: blank_to_none(form_data.email),
@@ -106,10 +113,15 @@ pub fn App() -> Element {
                 | Ok(_) => {
                     current_view.set(AppView::List);
                     search_query.set(String::new());
-                    if let Ok(contact_list) = fetch_contacts(String::new()).await {
-                        contacts.set(contact_list);
+                    match fetch_contacts(String::new()).await {
+                        | Ok(contact_list) => {
+                            contacts.set(contact_list);
+                            error_message.set(None);
+                        },
+                        | Err(e) => {
+                            error_message.set(Some(format!("목록을 새로고침하지 못했습니다: {}", e)));
+                        },
                     }
-                    error_message.set(None);
                 },
                 | Err(e) => {
                     error_message.set(Some(format!("연락처 추가에 실패했습니다: {}", e)));
@@ -120,9 +132,13 @@ pub fn App() -> Element {
     };
 
     let handle_edit_contact = move |form_data: ContactFormData| {
+        // Re-entry guard, matching `handle_add_contact` above.
+        if *loading.read() {
+            return;
+        }
         if let AppView::Edit(contact) = current_view.read().clone() {
+            loading.set(true);
             spawn(async move {
-                loading.set(true);
                 let request = UpdateContactRequest {
                     id: contact.id,
                     name: Some(form_data.name.trim().to_string()),
@@ -135,10 +151,15 @@ pub fn App() -> Element {
                     | Ok(_) => {
                         current_view.set(AppView::List);
                         let query = search_query.read().clone();
-                        if let Ok(contact_list) = fetch_contacts(query).await {
-                            contacts.set(contact_list);
+                        match fetch_contacts(query).await {
+                            | Ok(contact_list) => {
+                                contacts.set(contact_list);
+                                error_message.set(None);
+                            },
+                            | Err(e) => {
+                                error_message.set(Some(format!("목록을 새로고침하지 못했습니다: {}", e)));
+                            },
                         }
-                        error_message.set(None);
                     },
                     | Err(e) => {
                         error_message.set(Some(format!("연락처 수정에 실패했습니다: {}", e)));
@@ -154,11 +175,14 @@ pub fn App() -> Element {
         spawn(async move {
             loading.set(true);
             match ContactService::delete_contact(id).await {
-                | Ok(_) => {
-                    if let Ok(contact_list) = fetch_contacts(query).await {
+                | Ok(_) => match fetch_contacts(query).await {
+                    | Ok(contact_list) => {
                         contacts.set(contact_list);
-                    }
-                    error_message.set(None);
+                        error_message.set(None);
+                    },
+                    | Err(e) => {
+                        error_message.set(Some(format!("목록을 새로고침하지 못했습니다: {}", e)));
+                    },
                 },
                 | Err(e) => {
                     error_message.set(Some(format!("연락처 삭제에 실패했습니다: {}", e)));
@@ -183,7 +207,7 @@ pub fn App() -> Element {
                                 value: "{search_query}",
                                 oninput: move |evt| search_query.set(evt.value())
                             }
-                            button { r#type: "submit", "검색" }
+                            button { r#type: "submit", class: "btn btn-secondary", "검색" }
                             if !search_query.read().trim().is_empty() {
                                 button {
                                     r#type: "button",

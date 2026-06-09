@@ -1,5 +1,6 @@
 use super::validation::{validate_name,
-                        validate_optional_email};
+                        validate_optional_email,
+                        validate_optional_phone};
 use domain::{Contact,
              ContactRepository,
              DomainError};
@@ -29,6 +30,7 @@ impl UpdateContactUseCase {
             validate_name(name)?;
         }
         validate_optional_email(email.as_ref())?;
+        validate_optional_phone(phone.as_ref())?;
 
         let mut contact = self.repository.get_by_id(id).await?.ok_or(DomainError::ContactNotFound)?;
 

@@ -1,5 +1,4 @@
 [workspace]
-  exclude = ["src-tauri"]
   members = [
     "domain",
     "application",
@@ -34,6 +33,8 @@
     tauri               = {features = [], version = "2.11.2"}
     tauri-build         = {features = [], version = "2.6.2"}
     tauri-plugin-opener = "2.5.4"
+    tracing             = "0.1.41"
+    tracing-subscriber  = {features = ["env-filter"], version = "0.3.20"}
 
     # Presentation frontend dependencies
     dioxus               = {features = ["web"], version = "0.7.9"}

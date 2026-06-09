@@ -245,6 +245,11 @@ components:
     padding: 24px 32px
 ---
 
+> [!NOTE]
+> **이 문서는 목표(target) 디자인 레퍼런스입니다 — 현재 구현 상태가 아닙니다.**
+>
+> 아래 내용은 Ollama 웹사이트의 디자인 시스템을 분석한 것으로, 이 주소록 앱(`presentation_frontend`)을 향후 리스타일링할 때 따를 **목표 비주얼 가이드**로 보관합니다. 현재 앱의 실제 스타일은 [`presentation_frontend/assets/styles.css`](presentation_frontend/assets/styles.css)와 [`assets/styles.css`](assets/styles.css)에 정의되어 있으며, 아직 이 가이드를 반영하지 않았습니다. 이 문서의 토큰·컴포넌트 명세는 구현 시 참고용이며, 앱의 현재 동작을 설명하지 않습니다.
+
 ## Overview
 
 Ollama's site is the most aggressively under-designed marketing surface in the AI tooling space, and that is the entire point. The home page reads like a Markdown README rendered with care: a 36px center-aligned heading sits above an inline `curl` install snippet inside a soft-gray pill, a single black "Download" CTA, and a hand-drawn llama mascot as the only ornament. Everything else — automate-your-work block, "Start local. Scale cloud." pricing pair, "Your data stays yours" guarantee strip, FAQ wall on `/pricing` — sits on the same paper-white canvas (`{colors.canvas}`) with quiet `{colors.body}` neutrals carrying the prose. The system is the documentation, and the documentation is the system.

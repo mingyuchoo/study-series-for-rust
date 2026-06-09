@@ -5,17 +5,23 @@ use application::*;
 use infrastructure::SqliteContactRepository;
 use routes::*;
 use sqlx::{SqlitePool,
-           sqlite::SqliteConnectOptions};
+           sqlite::{SqliteConnectOptions,
+                    SqliteJournalMode}};
 use std::{fs,
           path::Path,
-          sync::Arc};
+          sync::Arc,
+          time::Duration};
 use tauri::Manager;
 
 async fn setup_database(app_data_dir: &Path) -> Result<SqlitePool, Box<dyn std::error::Error>> {
     fs::create_dir_all(app_data_dir)?;
 
     let database_path = app_data_dir.join("contacts.sqlite");
-    let options = SqliteConnectOptions::new().filename(database_path).create_if_missing(true);
+    let options = SqliteConnectOptions::new()
+        .filename(database_path)
+        .create_if_missing(true)
+        .journal_mode(SqliteJournalMode::Wal)
+        .busy_timeout(Duration::from_secs(5));
     let pool = SqlitePool::connect_with(options).await?;
 
     let repository = SqliteContactRepository::new(pool.clone());
@@ -37,8 +43,19 @@ fn build_app_state(pool: SqlitePool) -> AppState {
     }
 }
 
+fn init_tracing() {
+    use tracing_subscriber::{EnvFilter,
+                             fmt};
+
+    // Honors RUST_LOG; defaults to `info` so command failures are visible.
+    let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"));
+    let _ = fmt().with_env_filter(filter).try_init();
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    init_tracing();
+
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .setup(|app| {

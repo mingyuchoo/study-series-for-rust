@@ -1,5 +1,6 @@
 use super::validation::{validate_name,
-                        validate_optional_email};
+                        validate_optional_email,
+                        validate_optional_phone};
 use domain::{Contact,
              ContactRepository,
              DomainError};
@@ -19,6 +20,7 @@ impl CreateContactUseCase {
     pub async fn execute(&self, name: String, email: Option<String>, phone: Option<String>, address: Option<String>) -> Result<Contact, DomainError> {
         validate_name(&name)?;
         validate_optional_email(email.as_ref())?;
+        validate_optional_phone(phone.as_ref())?;
 
         let contact = Contact::new(name, email, phone, address);
         self.repository.create(contact).await

@@ -5,11 +5,48 @@ use domain::{Contact,
              ContactRepository,
              DomainError};
 use sqlx::{Row,
-           SqlitePool};
+           SqlitePool,
+           sqlite::SqliteRow};
 use uuid::Uuid;
 
 pub struct SqliteContactRepository {
     pool: SqlitePool,
+}
+
+/// Converts a `contacts` table row into a domain `Contact`.
+///
+/// Centralizes the row decoding shared by `get_by_id`, `get_all`, and `search`
+/// so the column list and timestamp parsing live in a single place.
+fn row_to_contact(row: &SqliteRow) -> Result<Contact, DomainError> {
+    Ok(Contact {
+        id: Uuid::parse_str(row.get("id")).map_err(|e| DomainError::DatabaseError(e.to_string()))?,
+        name: row.get("name"),
+        email: row.get("email"),
+        phone: row.get("phone"),
+        address: row.get("address"),
+        created_at: DateTime::parse_from_rfc3339(row.get("created_at"))
+            .map_err(|e| DomainError::DatabaseError(e.to_string()))?
+            .with_timezone(&Utc),
+        updated_at: DateTime::parse_from_rfc3339(row.get("updated_at"))
+            .map_err(|e| DomainError::DatabaseError(e.to_string()))?
+            .with_timezone(&Utc),
+    })
+}
+
+/// Escapes LIKE wildcards (`%`, `_`) and the escape char itself so that a search
+/// query is matched literally. Paired with an `ESCAPE '\'` clause in the query.
+fn escape_like_pattern(query: &str) -> String {
+    let mut escaped = String::with_capacity(query.len());
+    for ch in query.chars() {
+        match ch {
+            | '\\' | '%' | '_' => {
+                escaped.push('\\');
+                escaped.push(ch);
+            },
+            | _ => escaped.push(ch),
+        }
+    }
+    escaped
 }
 
 impl SqliteContactRepository {
@@ -71,22 +108,7 @@ impl ContactRepository for SqliteContactRepository {
             .map_err(|e| DomainError::DatabaseError(e.to_string()))?;
 
         match row {
-            | Some(row) => {
-                let contact = Contact {
-                    id: Uuid::parse_str(row.get("id")).map_err(|e| DomainError::DatabaseError(e.to_string()))?,
-                    name: row.get("name"),
-                    email: row.get("email"),
-                    phone: row.get("phone"),
-                    address: row.get("address"),
-                    created_at: DateTime::parse_from_rfc3339(row.get("created_at"))
-                        .map_err(|e| DomainError::DatabaseError(e.to_string()))?
-                        .with_timezone(&Utc),
-                    updated_at: DateTime::parse_from_rfc3339(row.get("updated_at"))
-                        .map_err(|e| DomainError::DatabaseError(e.to_string()))?
-                        .with_timezone(&Utc),
-                };
-                Ok(Some(contact))
-            },
+            | Some(row) => Ok(Some(row_to_contact(&row)?)),
             | None => Ok(None),
         }
     }
@@ -97,25 +119,7 @@ impl ContactRepository for SqliteContactRepository {
             .await
             .map_err(|e| DomainError::DatabaseError(e.to_string()))?;
 
-        let mut contacts = Vec::new();
-        for row in rows {
-            let contact = Contact {
-                id: Uuid::parse_str(row.get("id")).map_err(|e| DomainError::DatabaseError(e.to_string()))?,
-                name: row.get("name"),
-                email: row.get("email"),
-                phone: row.get("phone"),
-                address: row.get("address"),
-                created_at: DateTime::parse_from_rfc3339(row.get("created_at"))
-                    .map_err(|e| DomainError::DatabaseError(e.to_string()))?
-                    .with_timezone(&Utc),
-                updated_at: DateTime::parse_from_rfc3339(row.get("updated_at"))
-                    .map_err(|e| DomainError::DatabaseError(e.to_string()))?
-                    .with_timezone(&Utc),
-            };
-            contacts.push(contact);
-        }
-
-        Ok(contacts)
+        rows.iter().map(row_to_contact).collect()
     }
 
     async fn update(&self, contact: Contact) -> Result<Contact, DomainError> {
@@ -150,42 +154,24 @@ impl ContactRepository for SqliteContactRepository {
     }
 
     async fn search(&self, query: &str) -> Result<Vec<Contact>, DomainError> {
-        let search_pattern = format!("%{}%", query);
+        let search_pattern = format!("%{}%", escape_like_pattern(query));
         let rows = sqlx::query(
             r#"
-            SELECT id, name, email, phone, address, created_at, updated_at 
-            FROM contacts 
-            WHERE name LIKE ? OR email LIKE ? OR phone LIKE ? OR address LIKE ?
+            SELECT id, name, email, phone, address, created_at, updated_at
+            FROM contacts
+            WHERE name LIKE ?1 ESCAPE '\'
+               OR email LIKE ?1 ESCAPE '\'
+               OR phone LIKE ?1 ESCAPE '\'
+               OR address LIKE ?1 ESCAPE '\'
             ORDER BY name
             "#,
         )
-        .bind(&search_pattern)
-        .bind(&search_pattern)
-        .bind(&search_pattern)
         .bind(&search_pattern)
         .fetch_all(&self.pool)
         .await
         .map_err(|e| DomainError::DatabaseError(e.to_string()))?;
 
-        let mut contacts = Vec::new();
-        for row in rows {
-            let contact = Contact {
-                id: Uuid::parse_str(row.get("id")).map_err(|e| DomainError::DatabaseError(e.to_string()))?,
-                name: row.get("name"),
-                email: row.get("email"),
-                phone: row.get("phone"),
-                address: row.get("address"),
-                created_at: DateTime::parse_from_rfc3339(row.get("created_at"))
-                    .map_err(|e| DomainError::DatabaseError(e.to_string()))?
-                    .with_timezone(&Utc),
-                updated_at: DateTime::parse_from_rfc3339(row.get("updated_at"))
-                    .map_err(|e| DomainError::DatabaseError(e.to_string()))?
-                    .with_timezone(&Utc),
-            };
-            contacts.push(contact);
-        }
-
-        Ok(contacts)
+        rows.iter().map(row_to_contact).collect()
     }
 }
 
@@ -241,5 +227,23 @@ mod tests {
         repository.delete(id).await.expect("contact should be deleted");
         let deleted = repository.get_by_id(id).await.expect("contact lookup should succeed");
         assert_eq!(deleted, None);
+    }
+
+    #[tokio::test]
+    async fn search_treats_like_wildcards_literally() {
+        let repository = repository().await;
+        repository
+            .create(Contact::new("Ada".to_string(), Some("ada@example.com".to_string()), None, None))
+            .await
+            .expect("contact should be created");
+        repository
+            .create(Contact::new("100% Cotton".to_string(), None, None, None))
+            .await
+            .expect("contact should be created");
+
+        // A bare "%" must not match every row — only the literal "100% Cotton".
+        let matches = repository.search("%").await.expect("search should succeed");
+        assert_eq!(matches.len(), 1);
+        assert_eq!(matches[0].name, "100% Cotton");
     }
 }

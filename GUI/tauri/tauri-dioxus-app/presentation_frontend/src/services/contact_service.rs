@@ -1,4 +1,5 @@
-use crate::models::{Contact,
+use crate::models::{ApiError,
+                    Contact,
                     CreateContactRequest,
                     UpdateContactRequest};
 use js_sys::Reflect;
@@ -6,11 +7,26 @@ use wasm_bindgen::prelude::*;
 
 #[wasm_bindgen]
 extern "C" {
-    #[wasm_bindgen(js_namespace = ["window", "__TAURI__", "core"])]
-    async fn invoke(cmd: &str, args: JsValue) -> JsValue;
+    // `catch` turns a rejected promise into `Err(JsValue)` instead of panicking,
+    // which is how Tauri delivers a command's `Err` value to the frontend.
+    #[wasm_bindgen(js_namespace = ["window", "__TAURI__", "core"], catch)]
+    async fn invoke(cmd: &str, args: JsValue) -> Result<JsValue, JsValue>;
 }
 
 pub struct ContactService;
+
+/// Converts a Tauri command rejection into a user-facing message, preferring the
+/// structured `ApiError` payload and falling back to the raw JS error text.
+fn rejection_to_message(error: JsValue) -> String {
+    if let Ok(api_error) = serde_wasm_bindgen::from_value::<ApiError>(error.clone()) {
+        return api_error.message;
+    }
+
+    error
+        .as_string()
+        .or_else(|| js_sys::Error::from(error).message().as_string())
+        .unwrap_or_else(|| "알 수 없는 오류가 발생했습니다.".to_string())
+}
 
 fn is_tauri_runtime_available() -> bool {
     let Some(window) = web_sys::window() else {
@@ -50,18 +66,7 @@ impl ContactService {
 
         let args = serde_wasm_bindgen::to_value(&serde_json::json!({ "request": request })).map_err(|e| format!("Serialization error: {}", e))?;
 
-        let result = invoke("create_contact", args).await;
-
-        serde_wasm_bindgen::from_value(result).map_err(|e| format!("Deserialization error: {}", e))
-    }
-
-    #[allow(dead_code)]
-    pub async fn get_contact(id: String) -> Result<Contact, String> {
-        require_tauri_runtime()?;
-
-        let args = serde_wasm_bindgen::to_value(&serde_json::json!({ "id": id })).map_err(|e| format!("Serialization error: {}", e))?;
-
-        let result = invoke("get_contact", args).await;
+        let result = invoke("create_contact", args).await.map_err(rejection_to_message)?;
 
         serde_wasm_bindgen::from_value(result).map_err(|e| format!("Deserialization error: {}", e))
     }
@@ -71,7 +76,7 @@ impl ContactService {
             return Ok(Vec::new());
         }
 
-        let result = invoke("list_contacts", JsValue::NULL).await;
+        let result = invoke("list_contacts", JsValue::NULL).await.map_err(rejection_to_message)?;
 
         serde_wasm_bindgen::from_value(result).map_err(|e| format!("Deserialization error: {}", e))
     }
@@ -81,7 +86,7 @@ impl ContactService {
 
         let args = serde_wasm_bindgen::to_value(&serde_json::json!({ "request": request })).map_err(|e| format!("Serialization error: {}", e))?;
 
-        let result = invoke("update_contact", args).await;
+        let result = invoke("update_contact", args).await.map_err(rejection_to_message)?;
 
         serde_wasm_bindgen::from_value(result).map_err(|e| format!("Deserialization error: {}", e))
     }
@@ -91,7 +96,7 @@ impl ContactService {
 
         let args = serde_wasm_bindgen::to_value(&serde_json::json!({ "id": id })).map_err(|e| format!("Serialization error: {}", e))?;
 
-        let result = invoke("delete_contact", args).await;
+        let result = invoke("delete_contact", args).await.map_err(rejection_to_message)?;
 
         if result.is_null() || result.is_undefined() {
             Ok(())
@@ -107,7 +112,7 @@ impl ContactService {
 
         let args = serde_wasm_bindgen::to_value(&serde_json::json!({ "query": query })).map_err(|e| format!("Serialization error: {}", e))?;
 
-        let result = invoke("search_contacts", args).await;
+        let result = invoke("search_contacts", args).await.map_err(rejection_to_message)?;
 
         serde_wasm_bindgen::from_value(result).map_err(|e| format!("Deserialization error: {}", e))
     }

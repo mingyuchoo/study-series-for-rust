@@ -11,3 +11,6 @@
   # External dependencies
   async-trait.workspace = true
   uuid.workspace        = true
+
+[dev-dependencies]
+  tokio.workspace = true

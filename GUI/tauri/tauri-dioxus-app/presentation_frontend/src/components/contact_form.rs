@@ -28,7 +28,8 @@ pub fn ContactForm(props: ContactFormProps) -> Element {
     let is_edit = props.contact.is_some();
     let title = if is_edit { "연락처 수정" } else { "새 연락처 추가" };
 
-    let handle_submit = move |_: FormEvent| {
+    let handle_submit = move |evt: FormEvent| {
+        evt.prevent_default();
         if name.read().trim().is_empty() {
             form_error.set(Some("이름을 입력하세요.".to_string()));
             return;
