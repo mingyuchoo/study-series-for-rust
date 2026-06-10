@@ -189,25 +189,30 @@ pub fn ItemForm(props: ItemFormProps) -> Element {
                 // 조상을 누르면 그 항목의 수정 화면으로 이동한다.
                 if let Some((chain, current_title)) = edit_context.as_ref() {
                     nav { class: "edit-breadcrumb", aria_label: "상위 항목 경로",
-                        span { class: "row-kind", "{selected_kind.label()}" }
                         for ancestor in chain.iter() {
                             {
                                 let ancestor = ancestor.clone();
                                 let ancestor_title = ancestor.title.clone();
                                 let ancestor_kind = ancestor.kind.label();
                                 rsx! {
-                                    button {
-                                        r#type: "button",
-                                        class: "breadcrumb-link",
-                                        title: "{ancestor_kind} 수정으로 이동",
-                                        onclick: move |_| props.on_navigate.call(ancestor.clone()),
-                                        "{ancestor_title}"
+                                    span { class: "breadcrumb-seg",
+                                        span { class: "breadcrumb-kind", "{ancestor_kind}" }
+                                        button {
+                                            r#type: "button",
+                                            class: "breadcrumb-link",
+                                            title: "{ancestor_kind} 수정으로 이동",
+                                            onclick: move |_| props.on_navigate.call(ancestor.clone()),
+                                            "{ancestor_title}"
+                                        }
                                     }
                                     span { class: "breadcrumb-sep", "›" }
                                 }
                             }
                         }
-                        span { class: "breadcrumb-current", "{current_title}" }
+                        span { class: "breadcrumb-seg",
+                            span { class: "breadcrumb-kind", "{selected_kind.label()}" }
+                            span { class: "breadcrumb-current", "{current_title}" }
+                        }
                     }
                 }
 

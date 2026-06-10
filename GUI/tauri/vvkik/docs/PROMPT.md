@@ -6,7 +6,7 @@
 * Key Performance Indicator (핵심 성과 지표)
 을 관리하는 앱으로 만들고자 한다. 
 
-VVIKK의 구조는 아래와 같다.
+vvkik의 구조는 아래와 같다.
 ```
 VVKIK
 ├─ Value 가치

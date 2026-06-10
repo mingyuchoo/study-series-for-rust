@@ -25,7 +25,7 @@ Value 가치
 ## 프로젝트 구조
 
 ```text
-vvikk/
+vvkik/
 ├── domain/                    # 엔티티와 리포지토리 인터페이스
 ├── application/               # VVKIK 유스케이스와 검증 규칙
 ├── infrastructure/            # SQLite 구현체

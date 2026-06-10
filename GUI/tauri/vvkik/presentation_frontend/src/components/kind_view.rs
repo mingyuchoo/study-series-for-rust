@@ -68,10 +68,13 @@ pub fn VvkikKindView(props: VvkikKindViewProps) -> Element {
                                 let description = item.description.clone().filter(|text| !text.is_empty()).unwrap_or_else(|| "—".to_string());
                                 let progress = progress_text(&item);
                                 let percent = kpi_percent(&item);
-                                let edit_item = item.clone();
+                                let row_item = item.clone();
                                 let delete_item = item.clone();
                                 rsx! {
                                     tr {
+                                        // 행 전체가 수정 진입점이다. 삭제 버튼만 전파를
+                                        // 차단해 행 클릭과 분리한다.
+                                        onclick: move |_| props.on_edit.call(row_item.clone()),
                                         td { class: "cell-title", title: "{item.title}", "{item.title}" }
                                         td { class: "cell-path", title: "{path_tooltip}", "{path_display}" }
                                         if is_kpi {
@@ -100,13 +103,10 @@ pub fn VvkikKindView(props: VvkikKindViewProps) -> Element {
                                                 button {
                                                     r#type: "button",
                                                     class: "btn row-btn",
-                                                    onclick: move |_| props.on_edit.call(edit_item.clone()),
-                                                    "수정"
-                                                }
-                                                button {
-                                                    r#type: "button",
-                                                    class: "btn row-btn",
-                                                    onclick: move |_| props.on_delete.call(delete_item.clone()),
+                                                    onclick: move |evt| {
+                                                        evt.stop_propagation();
+                                                        props.on_delete.call(delete_item.clone());
+                                                    },
                                                     "삭제"
                                                 }
                                             }
