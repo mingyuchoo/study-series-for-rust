@@ -2,7 +2,8 @@ mod models;
 mod routes;
 
 use application::*;
-use infrastructure::SqliteVvkikRepository;
+use infrastructure::{SqliteVvkikRepository,
+                     seed_if_empty};
 use routes::*;
 use sqlx::{SqlitePool,
            sqlite::{SqliteConnectOptions,
@@ -26,6 +27,10 @@ async fn setup_database(app_data_dir: &Path) -> Result<SqlitePool, Box<dyn std::
 
     let repository = SqliteVvkikRepository::new(pool.clone());
     repository.init().await?;
+
+    if seed_if_empty(&repository).await? {
+        tracing::info!("seeded initial VVKIK example data");
+    }
 
     Ok(pool)
 }
@@ -86,13 +91,17 @@ mod tests {
     use uuid::Uuid;
 
     #[tokio::test]
-    async fn setup_database_creates_a_persistent_sqlite_file() {
+    async fn setup_database_creates_a_persistent_seeded_sqlite_file() {
         let app_data_dir = std::env::temp_dir().join(format!("tauri-dioxus-vvkik-{}", Uuid::new_v4()));
 
         let pool = setup_database(&app_data_dir).await.expect("database should be initialized");
         assert!(app_data_dir.join("vvkik.sqlite").exists());
 
+        // 첫 실행에서 2×2×2×2×2 시드(총 62개)가 들어간다.
         let repository = SqliteVvkikRepository::new(pool.clone());
+        let seeded_items = repository.list_items().await.expect("items should be loaded");
+        assert_eq!(seeded_items.len(), 62);
+
         repository
             .create_item(VvkikItem::new(domain::NewVvkikItem {
                 kind: ItemKind::Value,
@@ -102,18 +111,19 @@ mod tests {
                 target_value: None,
                 current_value: None,
                 unit: None,
-                position: 0,
+                position: 2,
             }))
             .await
             .expect("item should be created");
         pool.close().await;
 
+        // 두 번째 실행은 사용자 데이터를 보존하고 시드를 다시 넣지 않는다.
         let pool = setup_database(&app_data_dir).await.expect("database should reopen");
         let repository = SqliteVvkikRepository::new(pool.clone());
         let items = repository.list_items().await.expect("items should be loaded");
 
-        assert_eq!(items.len(), 1);
-        assert_eq!(items[0].title, "Freedom");
+        assert_eq!(items.len(), 63);
+        assert!(items.iter().any(|item| item.title == "Freedom"));
 
         pool.close().await;
         let _ = fs::remove_dir_all(app_data_dir);

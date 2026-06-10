@@ -55,17 +55,20 @@ pub async fn update_item(state: State<'_, AppState>, request: UpdateItemRequest)
 
     state
         .update_item_use_case
-        .execute(uuid, domain::ItemPatch {
-            kind: request.kind,
-            parent_id,
-            title: request.title,
-            description: request.description,
-            target_value: request.target_value,
-            current_value: request.current_value,
-            unit: request.unit,
-            position: request.position,
-            status: request.status,
-        })
+        .execute(
+            uuid,
+            domain::ItemPatch {
+                kind: request.kind,
+                parent_id,
+                title: request.title,
+                description: request.description,
+                target_value: request.target_value,
+                current_value: request.current_value,
+                unit: request.unit,
+                position: request.position,
+                status: request.status,
+            },
+        )
         .await
         .map(item_to_dto)
         .map_err(domain_error_to_api)

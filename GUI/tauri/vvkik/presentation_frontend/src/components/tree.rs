@@ -152,13 +152,12 @@ fn VvkikTreeNode(props: VvkikTreeNodeProps) -> Element {
     // 드래그 상태에 따라 자신·유효 대상·무효 대상을 시각적으로 구분한다.
     let row_class = match drag_source.read().as_ref() {
         | Some(dragged) if dragged.id == item.id => "tree-row dragging",
-        | Some(dragged) if is_valid_drop(dragged, &item) => {
+        | Some(dragged) if is_valid_drop(dragged, &item) =>
             if drop_target.read().as_deref() == Some(item.id.as_str()) {
                 "tree-row drop-ok drop-hover"
             } else {
                 "tree-row drop-ok"
-            }
-        },
+            },
         | Some(_) => "tree-row drop-dim",
         | None => "tree-row",
     };

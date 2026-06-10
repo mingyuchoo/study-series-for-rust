@@ -1,6 +1,7 @@
 #![allow(non_snake_case)]
 
-use super::{item_form::AddPreset,
+use super::{dashboard::VvkikDashboard,
+            item_form::AddPreset,
             kind_view::VvkikKindView,
             quick_add::QuickAddData,
             tree::VvkikTreeView};
@@ -24,7 +25,9 @@ pub struct VvkikBoardProps {
 pub fn VvkikBoard(props: VvkikBoardProps) -> Element {
     let mut active_tab = props.active_tab;
     let current_tab = active_tab.read().clone();
+    let is_dashboard = current_tab == "dashboard";
     let kind_tab: Option<ItemKind> = current_tab.parse().ok();
+    let is_tree = !is_dashboard && kind_tab.is_none();
 
     rsx! {
         div { class: "vvkik-board",
@@ -32,8 +35,16 @@ pub fn VvkikBoard(props: VvkikBoardProps) -> Element {
                 button {
                     r#type: "button",
                     role: "tab",
-                    aria_selected: kind_tab.is_none(),
-                    class: if kind_tab.is_none() { "board-tab active" } else { "board-tab" },
+                    aria_selected: is_dashboard,
+                    class: if is_dashboard { "board-tab active" } else { "board-tab" },
+                    onclick: move |_| active_tab.set("dashboard".to_string()),
+                    "대시보드"
+                }
+                button {
+                    r#type: "button",
+                    role: "tab",
+                    aria_selected: is_tree,
+                    class: if is_tree { "board-tab active" } else { "board-tab" },
                     onclick: move |_| active_tab.set("tree".to_string()),
                     "전체 구조"
                 }
@@ -61,25 +72,33 @@ pub fn VvkikBoard(props: VvkikBoardProps) -> Element {
                     p { "검색 결과가 없습니다." }
                 }
             } else {
-                match kind_tab {
-                    Some(kind) => rsx! {
-                        VvkikKindView {
-                            kind,
-                            items: props.items.clone(),
-                            on_edit: props.on_edit,
-                            on_delete: props.on_delete
-                        }
-                    },
-                    None => rsx! {
-                        VvkikTreeView {
-                            items: props.items.clone(),
-                            on_edit: props.on_edit,
-                            on_delete: props.on_delete,
-                            on_quick_add: props.on_quick_add,
-                            on_add_child: props.on_add_child,
-                            on_reparent: props.on_reparent
-                        }
-                    },
+                if is_dashboard {
+                    VvkikDashboard {
+                        items: props.items.clone(),
+                        is_filtering: props.is_filtering,
+                        on_edit: props.on_edit
+                    }
+                } else {
+                    match kind_tab {
+                        Some(kind) => rsx! {
+                            VvkikKindView {
+                                kind,
+                                items: props.items.clone(),
+                                on_edit: props.on_edit,
+                                on_delete: props.on_delete
+                            }
+                        },
+                        None => rsx! {
+                            VvkikTreeView {
+                                items: props.items.clone(),
+                                on_edit: props.on_edit,
+                                on_delete: props.on_delete,
+                                on_quick_add: props.on_quick_add,
+                                on_add_child: props.on_add_child,
+                                on_reparent: props.on_reparent
+                            }
+                        },
+                    }
                 }
             }
         }

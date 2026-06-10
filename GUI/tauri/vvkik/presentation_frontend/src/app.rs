@@ -26,7 +26,7 @@ pub fn App() -> Element {
     let store: VvkikStore = use_vvkik_store();
     let mut current_view = use_signal(|| AppView::Board);
     let mut pending_delete = use_signal(|| None::<VvkikItem>);
-    let active_tab = use_signal(|| "tree".to_string());
+    let active_tab = use_signal(|| "dashboard".to_string());
 
     let items = store.items;
     let loading = store.loading;

@@ -10,13 +10,7 @@ pub const MAX_TREE_DEPTH: usize = 6;
 
 /// 단계 순서 → 정렬값 → 제목 순으로 정렬한다.
 pub fn sort_items(items: &mut [VvkikItem]) {
-    items.sort_by(|a, b| {
-        a.kind
-            .rank()
-            .cmp(&b.kind.rank())
-            .then(a.position.cmp(&b.position))
-            .then(a.title.cmp(&b.title))
-    });
+    items.sort_by(|a, b| a.kind.rank().cmp(&b.kind.rank()).then(a.position.cmp(&b.position)).then(a.title.cmp(&b.title)));
 }
 
 pub fn sorted_children(parent_id: &str, items: &[VvkikItem]) -> Vec<VvkikItem> {
@@ -177,9 +171,7 @@ pub fn has_children(id: &str, items: &[VvkikItem]) -> bool { items.iter().any(|i
 /// 자기 자신·현재 부모·계층 규칙에 어긋나는 단계는 제외한다.
 /// (자손은 항상 하위 단계라 계층 규칙만으로 순환이 차단된다.)
 pub fn is_valid_drop(dragged: &VvkikItem, target: &VvkikItem) -> bool {
-    dragged.id != target.id
-        && dragged.parent_id.as_deref() != Some(target.id.as_str())
-        && dragged.kind.allowed_parent_kinds().contains(&target.kind)
+    dragged.id != target.id && dragged.parent_id.as_deref() != Some(target.id.as_str()) && dragged.kind.allowed_parent_kinds().contains(&target.kind)
 }
 
 #[cfg(test)]

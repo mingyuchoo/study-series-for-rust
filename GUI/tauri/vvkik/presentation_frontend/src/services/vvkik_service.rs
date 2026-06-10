@@ -75,9 +75,7 @@ async fn call<R: DeserializeOwned>(cmd: &str, args: &impl Serialize) -> Result<R
 }
 
 impl VvkikService {
-    pub async fn create_item(request: CreateItemRequest) -> Result<VvkikItem, String> {
-        call("create_item", &serde_json::json!({ "request": request })).await
-    }
+    pub async fn create_item(request: CreateItemRequest) -> Result<VvkikItem, String> { call("create_item", &serde_json::json!({ "request": request })).await }
 
     pub async fn list_items() -> Result<Vec<VvkikItem>, String> {
         // 브라우저 단독 실행(개발 미리보기 등)에서는 빈 목록으로 동작한다.
@@ -88,9 +86,7 @@ impl VvkikService {
         call("list_items", &serde_json::json!({})).await
     }
 
-    pub async fn update_item(request: UpdateItemRequest) -> Result<VvkikItem, String> {
-        call("update_item", &serde_json::json!({ "request": request })).await
-    }
+    pub async fn update_item(request: UpdateItemRequest) -> Result<VvkikItem, String> { call("update_item", &serde_json::json!({ "request": request })).await }
 
     pub async fn delete_item(id: String) -> Result<(), String> {
         let result = call_raw("delete_item", &serde_json::json!({ "id": id })).await?;
