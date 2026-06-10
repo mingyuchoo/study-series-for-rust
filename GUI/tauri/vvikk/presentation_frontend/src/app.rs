@@ -212,9 +212,16 @@ pub fn App() -> Element {
                 },
                 AppView::Edit(item) => rsx! {
                     ItemForm {
+                        // 브레드크럼으로 다른 항목 수정으로 건너뛸 때 폼
+                        // 시그널이 새 항목 값으로 초기화되도록 강제 재마운트.
+                        key: "{item.id}",
                         item: Some((*item).clone()),
                         items: items.read().clone(),
                         on_submit: handle_edit_item,
+                        on_navigate: move |target: VvkikItem| {
+                            store.clear_error();
+                            current_view.set(AppView::Edit(Box::new(target)));
+                        },
                         on_cancel: move |_| {
                             store.clear_error();
                             current_view.set(AppView::Board);

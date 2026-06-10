@@ -70,6 +70,27 @@ pub fn parent_path(item: &VvkikItem, items: &[VvkikItem]) -> Option<String> {
     }
 }
 
+/// 루트부터 직계 부모까지의 조상 목록. 브레드크럼처럼 조상으로
+/// 이동하는 UI에 쓴다. 끊긴 부모를 만나면 거기서 멈춘다.
+pub fn parent_chain(item: &VvkikItem, items: &[VvkikItem]) -> Vec<VvkikItem> {
+    let mut chain = Vec::new();
+    let mut current = item.parent_id.clone();
+
+    while let Some(parent_id) = current {
+        let Some(parent) = items.iter().find(|candidate| candidate.id == parent_id) else {
+            break;
+        };
+        chain.push(parent.clone());
+        current = parent.parent_id.clone();
+        if chain.len() >= MAX_TREE_DEPTH {
+            break;
+        }
+    }
+
+    chain.reverse();
+    chain
+}
+
 /// 표 표시용 짧은 경로: 부모 제목만 모으고, 3단계 이상이면 가운데를
 /// 줄여 "최상위 › … › 직계 부모" 형태로 만든다.
 pub fn short_parent_path(item: &VvkikItem, items: &[VvkikItem]) -> Option<String> {
@@ -232,6 +253,18 @@ mod tests {
         let items = sample();
         let orphan = items.iter().find(|item| item.id == "orphan").unwrap();
         assert_eq!(parent_path(orphan, &items).unwrap(), "(연결된 상위 항목 없음)");
+    }
+
+    #[test]
+    fn parent_chain_lists_ancestors_root_first() {
+        let items = sample();
+        let find = |id: &str| items.iter().find(|item| item.id == id).unwrap();
+
+        let chain_ids: Vec<String> = parent_chain(find("p1"), &items).iter().map(|item| item.id.clone()).collect();
+        assert_eq!(chain_ids, vec!["v1", "vi1", "k1", "i1"]);
+
+        assert!(parent_chain(find("v1"), &items).is_empty(), "루트는 조상이 없다");
+        assert!(parent_chain(find("orphan"), &items).is_empty(), "끊긴 부모에서 멈춘다");
     }
 
     #[test]

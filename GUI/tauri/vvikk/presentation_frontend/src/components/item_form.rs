@@ -7,8 +7,7 @@ use crate::models::{CreateItemRequest,
                     VvkikItem,
                     kind_description,
                     status_label,
-                    tree::{parent_path,
-                           short_parent_path}};
+                    tree::parent_chain};
 use dioxus::prelude::*;
 
 /// 폼을 여는 시점의 문맥. `parent`가 `Some`이면 트리에서 "+ 하위 추가"로
@@ -28,6 +27,9 @@ pub struct ItemFormProps {
     pub preset: Option<AddPreset>,
     pub on_submit: EventHandler<ItemFormData>,
     pub on_cancel: EventHandler<()>,
+    /// 브레드크럼에서 조상을 클릭하면 그 항목의 수정 화면으로 이동한다.
+    #[props(default)]
+    pub on_navigate: EventHandler<VvkikItem>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -133,13 +135,9 @@ pub fn ItemForm(props: ItemFormProps) -> Element {
 
     let selected_kind = *kind.read();
     let selected_status = *status.read();
-    // 수정 모드: 구조는 읽기 전용 문맥으로만 보여 준다.
-    let edit_context = props.item.as_ref().map(|item| {
-        (
-            short_parent_path(item, &props.items).unwrap_or_else(|| "최상위".to_string()),
-            parent_path(item, &props.items).unwrap_or_else(|| "최상위".to_string()),
-        )
-    });
+    // 수정 모드: 구조는 브레드크럼으로만 보여 주고, 조상 클릭으로 그
+    // 항목의 수정 화면으로 이동할 수 있다.
+    let edit_context = props.item.as_ref().map(|item| (parent_chain(item, &props.items), item.title.clone()));
     let parent_kinds = selected_kind.allowed_parent_kinds();
     let parent_options: Vec<VvkikItem> = props
         .items
@@ -187,12 +185,29 @@ pub fn ItemForm(props: ItemFormProps) -> Element {
                 div { class: "form-error", "{error}" }
             }
             form { onsubmit: handle_submit,
-                // 수정 모드: 단계·상위는 전체 구조 탭(드래그)에서 바꾸므로
-                // 어떤 항목을 고치는지만 읽기 전용으로 보여 준다.
-                if let Some((short_path, full_path)) = edit_context.as_ref() {
-                    div { class: "edit-context",
+                // 수정 모드: 어떤 항목을 고치는지 브레드크럼으로 보여 주고,
+                // 조상을 누르면 그 항목의 수정 화면으로 이동한다.
+                if let Some((chain, current_title)) = edit_context.as_ref() {
+                    nav { class: "edit-breadcrumb", aria_label: "상위 항목 경로",
                         span { class: "row-kind", "{selected_kind.label()}" }
-                        span { class: "edit-context-path", title: "{full_path}", "{short_path}" }
+                        for ancestor in chain.iter() {
+                            {
+                                let ancestor = ancestor.clone();
+                                let ancestor_title = ancestor.title.clone();
+                                let ancestor_kind = ancestor.kind.label();
+                                rsx! {
+                                    button {
+                                        r#type: "button",
+                                        class: "breadcrumb-link",
+                                        title: "{ancestor_kind} 수정으로 이동",
+                                        onclick: move |_| props.on_navigate.call(ancestor.clone()),
+                                        "{ancestor_title}"
+                                    }
+                                    span { class: "breadcrumb-sep", "›" }
+                                }
+                            }
+                        }
+                        span { class: "breadcrumb-current", "{current_title}" }
                     }
                 }
 
