@@ -1,5 +1,4 @@
 pub mod board;
-pub mod card;
 pub mod item_form;
 pub mod kind_view;
 pub mod quick_add;

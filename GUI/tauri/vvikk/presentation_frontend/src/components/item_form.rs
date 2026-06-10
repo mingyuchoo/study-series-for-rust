@@ -6,7 +6,9 @@ use crate::models::{CreateItemRequest,
                     UpdateItemRequest,
                     VvkikItem,
                     kind_description,
-                    status_label};
+                    status_label,
+                    tree::{parent_path,
+                           short_parent_path}};
 use dioxus::prelude::*;
 
 /// 폼을 여는 시점의 문맥. `parent`가 `Some`이면 트리에서 "+ 하위 추가"로
@@ -71,12 +73,13 @@ impl ItemFormData {
         })
     }
 
-    /// 폼 입력을 수정 요청으로 변환한다. 정렬값은 건드리지 않는다.
+    /// 폼 입력을 수정 요청으로 변환한다. 구조(단계·상위·정렬)는 전체
+    /// 구조 탭에서만 바꾸므로 여기서는 건드리지 않는다.
     pub fn to_update_request(&self, id: String) -> Result<UpdateItemRequest, String> {
         Ok(UpdateItemRequest {
             id,
-            kind: Some(self.kind),
-            parent_id: Some(self.parent_id_opt()),
+            kind: None,
+            parent_id: None,
             title: Some(self.title.trim().to_string()),
             description: Some(self.description.trim().to_string()),
             target_value: Some(parse_optional_f64(&self.target_value, "목표값")?),
@@ -130,6 +133,13 @@ pub fn ItemForm(props: ItemFormProps) -> Element {
 
     let selected_kind = *kind.read();
     let selected_status = *status.read();
+    // 수정 모드: 구조는 읽기 전용 문맥으로만 보여 준다.
+    let edit_context = props.item.as_ref().map(|item| {
+        (
+            short_parent_path(item, &props.items).unwrap_or_else(|| "최상위".to_string()),
+            parent_path(item, &props.items).unwrap_or_else(|| "최상위".to_string()),
+        )
+    });
     let parent_kinds = selected_kind.allowed_parent_kinds();
     let parent_options: Vec<VvkikItem> = props
         .items
@@ -144,7 +154,7 @@ pub fn ItemForm(props: ItemFormProps) -> Element {
             form_error.set(Some("제목을 입력하세요.".to_string()));
             return;
         }
-        if *kind.read() != ItemKind::Value && parent_id.read().trim().is_empty() {
+        if !is_edit && *kind.read() != ItemKind::Value && parent_id.read().trim().is_empty() {
             form_error.set(Some("상위 항목을 선택하세요.".to_string()));
             return;
         }
@@ -177,50 +187,61 @@ pub fn ItemForm(props: ItemFormProps) -> Element {
                 div { class: "form-error", "{error}" }
             }
             form { onsubmit: handle_submit,
-                if let Some(parent) = locked_parent.as_ref() {
-                    div { class: "form-grid",
+                // 수정 모드: 단계·상위는 전체 구조 탭(드래그)에서 바꾸므로
+                // 어떤 항목을 고치는지만 읽기 전용으로 보여 준다.
+                if let Some((short_path, full_path)) = edit_context.as_ref() {
+                    div { class: "edit-context",
+                        span { class: "row-kind", "{selected_kind.label()}" }
+                        span { class: "edit-context-path", title: "{full_path}", "{short_path}" }
+                    }
+                }
+
+                if !is_edit {
+                    if let Some(parent) = locked_parent.as_ref() {
+                        div { class: "form-grid",
+                            div { class: "form-group",
+                                label { "단계" }
+                                div { class: "locked-field", "{selected_kind.label()}" }
+                            }
+                            div { class: "form-group",
+                                label { "상위 항목" }
+                                div { class: "locked-field", "{parent.kind.label()} · {parent.title}" }
+                            }
+                        }
+                    } else {
                         div { class: "form-group",
                             label { "단계" }
-                            div { class: "locked-field", "{selected_kind.label()}" }
-                        }
-                        div { class: "form-group",
-                            label { "상위 항목" }
-                            div { class: "locked-field", "{parent.kind.label()} · {parent.title}" }
-                        }
-                    }
-                } else {
-                    div { class: "form-group",
-                        label { "단계" }
-                        div { class: "kind-segment", role: "radiogroup", aria_label: "단계 선택",
-                            for kind_option in ItemKind::ALL {
-                                button {
-                                    r#type: "button",
-                                    role: "radio",
-                                    aria_checked: selected_kind == kind_option,
-                                    title: "{kind_description(kind_option)}",
-                                    class: if selected_kind == kind_option { "segment-btn active" } else { "segment-btn" },
-                                    onclick: move |_| {
-                                        if *kind.read() != kind_option {
-                                            kind.set(kind_option);
-                                            parent_id.set(String::new());
-                                        }
-                                    },
-                                    "{kind_option.label()}"
+                            div { class: "kind-segment", role: "radiogroup", aria_label: "단계 선택",
+                                for kind_option in ItemKind::ALL {
+                                    button {
+                                        r#type: "button",
+                                        role: "radio",
+                                        aria_checked: selected_kind == kind_option,
+                                        title: "{kind_description(kind_option)}",
+                                        class: if selected_kind == kind_option { "segment-btn active" } else { "segment-btn" },
+                                        onclick: move |_| {
+                                            if *kind.read() != kind_option {
+                                                kind.set(kind_option);
+                                                parent_id.set(String::new());
+                                            }
+                                        },
+                                        "{kind_option.label()}"
+                                    }
                                 }
                             }
                         }
-                    }
 
-                    if selected_kind != ItemKind::Value {
-                        div { class: "form-group",
-                            label { r#for: "parent", "상위 항목" }
-                            select {
-                                id: "parent",
-                                value: "{parent_id}",
-                                onchange: move |evt| parent_id.set(evt.value()),
-                                option { value: "", "상위 항목 선택" }
-                                for parent in parent_options.iter() {
-                                    option { value: "{parent.id}", "{parent.kind.label()} · {parent.title}" }
+                        if selected_kind != ItemKind::Value {
+                            div { class: "form-group",
+                                label { r#for: "parent", "상위 항목" }
+                                select {
+                                    id: "parent",
+                                    value: "{parent_id}",
+                                    onchange: move |evt| parent_id.set(evt.value()),
+                                    option { value: "", "상위 항목 선택" }
+                                    for parent in parent_options.iter() {
+                                        option { value: "{parent.id}", "{parent.kind.label()} · {parent.title}" }
+                                    }
                                 }
                             }
                         }

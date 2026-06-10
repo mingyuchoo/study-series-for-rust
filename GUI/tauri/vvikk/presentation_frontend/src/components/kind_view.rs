@@ -1,11 +1,13 @@
 #![allow(non_snake_case)]
 
-use super::card::VvkikCard;
 use crate::models::{ItemKind,
                     VvkikItem,
                     kind_description,
-                    tree::{parent_path,
-                           sort_items}};
+                    status_label,
+                    tree::{kpi_percent,
+                           parent_path,
+                           progress_text,
+                           short_parent_path}};
 use dioxus::prelude::*;
 
 #[derive(Props, Clone, PartialEq)]
@@ -16,21 +18,21 @@ pub struct VvkikKindViewProps {
     pub on_delete: EventHandler<VvkikItem>,
 }
 
-/// 한 단계의 항목들을 상위 경로별로 묶어 보여 주는 탭 화면.
+/// 한 단계의 항목들을 표로 보여 주는 탭 화면. 상위 경로를 컬럼으로
+/// 노출해 모든 행에서 위상이 보이고, KPI 탭은 설명 대신 진행률을
+/// 보여 준다.
 pub fn VvkikKindView(props: VvkikKindViewProps) -> Element {
-    let mut kind_items: Vec<VvkikItem> = props.items.iter().filter(|item| item.kind == props.kind).cloned().collect();
-    sort_items(&mut kind_items);
+    let is_kpi = props.kind == ItemKind::Kpi;
 
-    // 같은 상위 경로를 가진 항목끼리 묶는다.
-    let mut groups: Vec<(Option<String>, Vec<VvkikItem>)> = Vec::new();
-    for item in kind_items.iter() {
-        let path = parent_path(item, &props.items);
-        match groups.iter_mut().find(|(candidate, _)| *candidate == path) {
-            | Some((_, group)) => group.push(item.clone()),
-            | None => groups.push((path, vec![item.clone()])),
-        }
-    }
-    groups.sort_by(|a, b| a.0.cmp(&b.0));
+    // (항목, 짧은 경로, 전체 경로 툴팁) — 경로 → 정렬값 → 제목 순으로
+    // 정렬해 같은 가지의 항목이 모이게 한다.
+    let mut rows: Vec<(VvkikItem, Option<String>, Option<String>)> = props
+        .items
+        .iter()
+        .filter(|item| item.kind == props.kind)
+        .map(|item| (item.clone(), short_parent_path(item, &props.items), parent_path(item, &props.items)))
+        .collect();
+    rows.sort_by(|a, b| a.2.cmp(&b.2).then(a.0.position.cmp(&b.0.position)).then(a.0.title.cmp(&b.0.title)));
 
     rsx! {
         section { class: "vvkik-lane",
@@ -39,24 +41,75 @@ pub fn VvkikKindView(props: VvkikKindViewProps) -> Element {
                     h2 { "{props.kind.label()}" }
                     p { "{kind_description(props.kind)}" }
                 }
-                span { class: "lane-count", "{kind_items.len()}" }
+                span { class: "lane-count", "{rows.len()}" }
             }
-            if kind_items.is_empty() {
+            if rows.is_empty() {
                 div { class: "lane-empty", "비어 있음" }
             } else {
-                for (path, group_items) in groups {
-                    {
-                        let path_label = path.unwrap_or_else(|| "최상위".to_string());
-                        rsx! {
-                            div { class: "kind-group",
-                                p { class: "group-path", "{path_label}" }
-                                div { class: "item-grid",
-                                    for item in group_items {
-                                        VvkikCard {
-                                            item,
-                                            parent_title: None,
-                                            on_edit: props.on_edit,
-                                            on_delete: props.on_delete
+                table { class: "kind-table",
+                    thead {
+                        tr {
+                            th { class: "col-title", "제목" }
+                            th { class: "col-path", "상위 경로" }
+                            if is_kpi {
+                                th { class: "col-mid", "진행률" }
+                            } else {
+                                th { class: "col-mid col-desc", "설명" }
+                            }
+                            th { class: "col-status", "상태" }
+                            th { class: "col-actions" }
+                        }
+                    }
+                    tbody {
+                        for (item, short_path, full_path) in rows {
+                            {
+                                let path_display = short_path.unwrap_or_else(|| "최상위".to_string());
+                                let path_tooltip = full_path.unwrap_or_else(|| "최상위".to_string());
+                                let description = item.description.clone().filter(|text| !text.is_empty()).unwrap_or_else(|| "—".to_string());
+                                let progress = progress_text(&item);
+                                let percent = kpi_percent(&item);
+                                let edit_item = item.clone();
+                                let delete_item = item.clone();
+                                rsx! {
+                                    tr {
+                                        td { class: "cell-title", title: "{item.title}", "{item.title}" }
+                                        td { class: "cell-path", title: "{path_tooltip}", "{path_display}" }
+                                        if is_kpi {
+                                            td { class: "cell-kpi",
+                                                if let Some(progress) = progress {
+                                                    span { class: "cell-kpi-wrap",
+                                                        if let Some(percent) = percent {
+                                                            span { class: "kpi-track",
+                                                                span { class: "kpi-fill", style: "width: {percent}%;" }
+                                                            }
+                                                        }
+                                                        span { class: "cell-kpi-text", "{progress}" }
+                                                    }
+                                                } else {
+                                                    span { class: "cell-empty", "—" }
+                                                }
+                                            }
+                                        } else {
+                                            td { class: "col-desc cell-desc", title: "{description}", "{description}" }
+                                        }
+                                        td {
+                                            span { class: "status-pill {item.status}", "{status_label(item.status)}" }
+                                        }
+                                        td { class: "cell-actions",
+                                            div { class: "table-actions",
+                                                button {
+                                                    r#type: "button",
+                                                    class: "btn row-btn",
+                                                    onclick: move |_| props.on_edit.call(edit_item.clone()),
+                                                    "수정"
+                                                }
+                                                button {
+                                                    r#type: "button",
+                                                    class: "btn row-btn",
+                                                    onclick: move |_| props.on_delete.call(delete_item.clone()),
+                                                    "삭제"
+                                                }
+                                            }
                                         }
                                     }
                                 }

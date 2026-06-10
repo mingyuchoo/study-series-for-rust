@@ -70,6 +70,40 @@ pub fn parent_path(item: &VvkikItem, items: &[VvkikItem]) -> Option<String> {
     }
 }
 
+/// 표 표시용 짧은 경로: 부모 제목만 모으고, 3단계 이상이면 가운데를
+/// 줄여 "최상위 › … › 직계 부모" 형태로 만든다.
+pub fn short_parent_path(item: &VvkikItem, items: &[VvkikItem]) -> Option<String> {
+    let mut titles = Vec::new();
+    let mut current = item.parent_id.clone();
+
+    while let Some(parent_id) = current {
+        match items.iter().find(|candidate| candidate.id == parent_id) {
+            | Some(parent) => {
+                titles.push(parent.title.clone());
+                current = parent.parent_id.clone();
+            },
+            | None => {
+                titles.push("(연결된 상위 항목 없음)".to_string());
+                break;
+            },
+        }
+        if titles.len() >= MAX_TREE_DEPTH {
+            break;
+        }
+    }
+
+    if titles.is_empty() {
+        return None;
+    }
+    titles.reverse();
+
+    if titles.len() > 2 {
+        Some(format!("{} › … › {}", titles.first().unwrap(), titles.last().unwrap()))
+    } else {
+        Some(titles.join(" › "))
+    }
+}
+
 pub fn progress_text(item: &VvkikItem) -> Option<String> {
     if item.kind != ItemKind::Kpi {
         return None;
@@ -198,6 +232,21 @@ mod tests {
         let items = sample();
         let orphan = items.iter().find(|item| item.id == "orphan").unwrap();
         assert_eq!(parent_path(orphan, &items).unwrap(), "(연결된 상위 항목 없음)");
+    }
+
+    #[test]
+    fn short_parent_path_collapses_middle_segments() {
+        let items = sample();
+        let find = |id: &str| items.iter().find(|item| item.id == id).unwrap();
+
+        // 4단계 경로는 가운데가 줄어든다.
+        assert_eq!(short_parent_path(find("p1"), &items).unwrap(), "경제적 자유 › … › 강의 제작");
+        // 2단계 이하는 그대로 보여 준다.
+        assert_eq!(short_parent_path(find("k1"), &items).unwrap(), "경제적 자유 › 지식기업");
+        assert_eq!(short_parent_path(find("vi1"), &items).unwrap(), "경제적 자유");
+        // 루트와 고아 항목.
+        assert_eq!(short_parent_path(find("v1"), &items), None);
+        assert_eq!(short_parent_path(find("orphan"), &items).unwrap(), "(연결된 상위 항목 없음)");
     }
 
     #[test]
