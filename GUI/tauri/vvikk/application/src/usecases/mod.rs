@@ -1,6 +1,5 @@
 mod create_item;
 mod delete_item;
-mod get_item;
 mod list_items;
 mod record_kpi_measurement;
 mod search_items;
@@ -9,7 +8,6 @@ mod validation;
 
 pub use create_item::*;
 pub use delete_item::*;
-pub use get_item::*;
 pub use list_items::*;
 pub use record_kpi_measurement::*;
 pub use search_items::*;

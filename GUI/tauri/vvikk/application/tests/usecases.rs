@@ -2,7 +2,6 @@
 
 use application::{CreateItemUseCase,
                   DeleteItemUseCase,
-                  GetItemUseCase,
                   ListItemsUseCase,
                   RecordKpiMeasurementUseCase,
                   SearchItemsUseCase,
@@ -165,11 +164,8 @@ async fn create_persists_valid_hierarchy() {
 }
 
 #[tokio::test]
-async fn get_and_update_return_not_found_for_missing_item() {
+async fn update_returns_not_found_for_missing_item() {
     let repository = MockVvkikRepository::arc();
-
-    let get_result = GetItemUseCase::new(repository.clone()).execute(Uuid::new_v4()).await;
-    assert!(matches!(get_result, Err(DomainError::ItemNotFound)));
 
     let update_result = UpdateItemUseCase::new(repository)
         .execute(Uuid::new_v4(), ItemPatch {
