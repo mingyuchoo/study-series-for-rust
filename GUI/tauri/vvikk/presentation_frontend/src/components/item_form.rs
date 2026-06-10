@@ -5,7 +5,8 @@ use crate::models::{CreateItemRequest,
                     ItemStatus,
                     UpdateItemRequest,
                     VvkikItem,
-                    kind_description};
+                    kind_description,
+                    status_label};
 use dioxus::prelude::*;
 
 /// 폼을 여는 시점의 문맥. `parent`가 `Some`이면 트리에서 "+ 하위 추가"로
@@ -128,6 +129,7 @@ pub fn ItemForm(props: ItemFormProps) -> Element {
     };
 
     let selected_kind = *kind.read();
+    let selected_status = *status.read();
     let parent_kinds = selected_kind.allowed_parent_kinds();
     let parent_options: Vec<VvkikItem> = props
         .items
@@ -284,14 +286,18 @@ pub fn ItemForm(props: ItemFormProps) -> Element {
 
                 if is_edit {
                     div { class: "form-group",
-                        label { r#for: "status", "상태" }
-                        select {
-                            id: "status",
-                            value: "{status}",
-                            onchange: move |evt| status.set(evt.value().parse().unwrap_or(ItemStatus::Active)),
-                            option { value: "active", "Active" }
-                            option { value: "paused", "Paused" }
-                            option { value: "completed", "Completed" }
+                        label { "상태" }
+                        div { class: "kind-segment", role: "radiogroup", aria_label: "상태 선택",
+                            for status_option in ItemStatus::ALL {
+                                button {
+                                    r#type: "button",
+                                    role: "radio",
+                                    aria_checked: selected_status == status_option,
+                                    class: if selected_status == status_option { "segment-btn active" } else { "segment-btn" },
+                                    onclick: move |_| status.set(status_option),
+                                    "{status_label(status_option)}"
+                                }
+                            }
                         }
                     }
                 }

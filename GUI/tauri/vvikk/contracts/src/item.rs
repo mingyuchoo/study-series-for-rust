@@ -93,6 +93,8 @@ pub enum ItemStatus {
 }
 
 impl ItemStatus {
+    pub const ALL: [ItemStatus; 3] = [Self::Active, Self::Paused, Self::Completed];
+
     pub fn as_str(self) -> &'static str {
         match self {
             | Self::Active => "active",

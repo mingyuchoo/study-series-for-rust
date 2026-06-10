@@ -10,6 +10,15 @@ pub use contracts::{ApiError,
                     UpdateItemRequest,
                     VvkikItemDto as VvkikItem};
 
+/// 상태의 화면용 레이블. 와이어 포맷(소문자)과 달리 대문자로 시작한다.
+pub fn status_label(status: ItemStatus) -> &'static str {
+    match status {
+        | ItemStatus::Active => "Active",
+        | ItemStatus::Paused => "Paused",
+        | ItemStatus::Completed => "Completed",
+    }
+}
+
 /// 각 단계의 화면용 설명 문구.
 pub fn kind_description(kind: ItemKind) -> &'static str {
     match kind {
