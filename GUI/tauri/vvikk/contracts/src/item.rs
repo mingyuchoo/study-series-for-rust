@@ -42,13 +42,14 @@ impl ItemKind {
         Self::ALL.iter().position(|kind| *kind == self).expect("ALL covers every kind")
     }
 
+    /// 부모는 항상 정확히 1단계 위의 단계만 허용한다.
     pub fn allowed_parent_kinds(self) -> &'static [ItemKind] {
         match self {
             | Self::Value => &[],
             | Self::Vision => &[Self::Value],
             | Self::Kra => &[Self::Vision],
             | Self::Igt => &[Self::Kra],
-            | Self::Kpi => &[Self::Kra, Self::Igt],
+            | Self::Kpi => &[Self::Igt],
         }
     }
 
@@ -56,7 +57,7 @@ impl ItemKind {
         match self {
             | Self::Value => &[Self::Vision],
             | Self::Vision => &[Self::Kra],
-            | Self::Kra => &[Self::Igt, Self::Kpi],
+            | Self::Kra => &[Self::Igt],
             | Self::Igt => &[Self::Kpi],
             | Self::Kpi => &[],
         }
@@ -135,8 +136,21 @@ mod tests {
     fn kind_knows_allowed_hierarchy() {
         assert!(ItemKind::Vision.allows_parent(ItemKind::Value));
         assert!(ItemKind::Kpi.allows_parent(ItemKind::Igt));
-        assert!(ItemKind::Kpi.allows_parent(ItemKind::Kra));
+        assert!(!ItemKind::Kpi.allows_parent(ItemKind::Kra), "KPI는 정확히 1단계 위인 IGT만 허용");
         assert!(!ItemKind::Value.allows_parent(ItemKind::Vision));
+    }
+
+    #[test]
+    fn every_kind_has_exactly_one_parent_kind_except_value() {
+        for kind in ItemKind::ALL {
+            let parents = kind.allowed_parent_kinds();
+            if kind == ItemKind::Value {
+                assert!(parents.is_empty());
+            } else {
+                assert_eq!(parents.len(), 1, "{kind}의 부모는 정확히 1종류");
+                assert_eq!(parents[0].rank() + 1, kind.rank(), "{kind}의 부모는 정확히 1단계 위");
+            }
+        }
     }
 
     #[test]

@@ -155,7 +155,8 @@ mod tests {
             item("vi1", ItemKind::Vision, Some("v1"), 0, "지식기업"),
             item("k1", ItemKind::Kra, Some("vi1"), 0, "온라인 강의"),
             item("i1", ItemKind::Igt, Some("k1"), 0, "강의 제작"),
-            item("p1", ItemKind::Kpi, Some("k1"), 0, "월 매출"),
+            item("i2", ItemKind::Igt, Some("k1"), 1, "출강 영업"),
+            item("p1", ItemKind::Kpi, Some("i1"), 0, "월 매출"),
             item("orphan", ItemKind::Kra, Some("missing"), 0, "고아 항목"),
         ]
     }
@@ -186,7 +187,10 @@ mod tests {
     fn parent_path_walks_up_to_the_root() {
         let items = sample();
         let kpi = items.iter().find(|item| item.id == "p1").unwrap();
-        assert_eq!(parent_path(kpi, &items).unwrap(), "Value · 경제적 자유 › Vision · 지식기업 › KRA · 온라인 강의");
+        assert_eq!(
+            parent_path(kpi, &items).unwrap(),
+            "Value · 경제적 자유 › Vision · 지식기업 › KRA · 온라인 강의 › IGT · 강의 제작"
+        );
     }
 
     #[test]
@@ -206,8 +210,8 @@ mod tests {
     #[test]
     fn descendants_count_recursively() {
         let items = sample();
-        assert_eq!(count_descendants("v1", &items), 4);
-        assert_eq!(count_descendants("k1", &items), 2);
+        assert_eq!(count_descendants("v1", &items), 5);
+        assert_eq!(count_descendants("k1", &items), 3);
         assert_eq!(count_descendants("p1", &items), 0);
         assert!(has_children("v1", &items));
         assert!(!has_children("p1", &items));
@@ -257,9 +261,10 @@ mod tests {
         assert!(!is_valid_drop(igt, find("vi1")), "Vision은 IGT의 부모가 될 수 없음");
         assert!(!is_valid_drop(igt, igt), "자기 자신 불가");
 
-        let kpi = find("p1"); // 현재 부모: k1
-        assert!(is_valid_drop(kpi, find("i1")), "KPI는 IGT 아래로 이동 가능");
-        assert!(!is_valid_drop(kpi, find("k1")), "현재 부모 제외");
+        let kpi = find("p1"); // 현재 부모: i1
+        assert!(is_valid_drop(kpi, find("i2")), "KPI는 다른 IGT 아래로 이동 가능");
+        assert!(!is_valid_drop(kpi, find("i1")), "현재 부모 제외");
+        assert!(!is_valid_drop(kpi, find("k1")), "KRA는 더 이상 KPI의 부모가 될 수 없음");
         assert!(!is_valid_drop(kpi, find("v1")), "Value는 KPI의 부모가 될 수 없음");
     }
 

@@ -264,8 +264,12 @@ async fn record_kpi_measurement_updates_current_value() {
         .execute(draft(ItemKind::Kra, Some(vision.id), "Revenue"))
         .await
         .unwrap();
+    let igt = CreateItemUseCase::new(repository.clone())
+        .execute(draft(ItemKind::Igt, Some(kra.id), "Publish offer"))
+        .await
+        .unwrap();
     let kpi = CreateItemUseCase::new(repository.clone())
-        .execute(kpi_draft(Some(kra.id), "Monthly revenue"))
+        .execute(kpi_draft(Some(igt.id), "Monthly revenue"))
         .await
         .unwrap();
 
