@@ -15,6 +15,7 @@
 [dependencies]
   # Presentation layer can depend on all lower layers
   application    = {path = "../application"}
+  contracts      = {path = "../contracts"}
   domain         = {path = "../domain"}
   infrastructure = {path = "../infrastructure"}
 

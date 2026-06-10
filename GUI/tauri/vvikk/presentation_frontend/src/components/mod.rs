@@ -1,5 +1,10 @@
+pub mod board;
+pub mod card;
 pub mod item_form;
-pub mod vvkik_tree;
+pub mod kind_view;
+pub mod quick_add;
+pub mod tree;
 
+pub use board::*;
 pub use item_form::*;
-pub use vvkik_tree::*;
+pub use quick_add::*;

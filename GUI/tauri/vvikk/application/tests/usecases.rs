@@ -10,7 +10,9 @@ use application::{CreateItemUseCase,
 use async_trait::async_trait;
 use domain::{DomainError,
              ItemKind,
+             ItemPatch,
              KpiMeasurement,
+             NewVvkikItem,
              VvkikItem,
              VvkikRepository};
 use std::{collections::HashMap,
@@ -84,12 +86,34 @@ impl VvkikRepository for MockVvkikRepository {
     }
 }
 
+fn draft(kind: ItemKind, parent_id: Option<Uuid>, title: &str) -> NewVvkikItem {
+    NewVvkikItem {
+        kind,
+        parent_id,
+        title: title.to_string(),
+        description: None,
+        target_value: None,
+        current_value: None,
+        unit: None,
+        position: 0,
+    }
+}
+
+fn kpi_draft(parent_id: Option<Uuid>, title: &str) -> NewVvkikItem {
+    NewVvkikItem {
+        target_value: Some(10_000.0),
+        current_value: Some(0.0),
+        unit: Some("USD".to_string()),
+        ..draft(ItemKind::Kpi, parent_id, title)
+    }
+}
+
 #[tokio::test]
 async fn create_rejects_blank_title() {
     let repository = MockVvkikRepository::arc();
     let use_case = CreateItemUseCase::new(repository.clone());
 
-    let result = use_case.execute(ItemKind::Value, None, "   ".to_string(), None, None, None, None, 0).await;
+    let result = use_case.execute(draft(ItemKind::Value, None, "   ")).await;
 
     assert!(matches!(result, Err(DomainError::InvalidVvkikData(_))));
     assert_eq!(repository.count(), 0);
@@ -100,13 +124,11 @@ async fn create_rejects_invalid_parent_hierarchy() {
     let repository = MockVvkikRepository::arc();
     let create = CreateItemUseCase::new(repository.clone());
     let value = create
-        .execute(ItemKind::Value, None, "Freedom".to_string(), None, None, None, None, 0)
+        .execute(draft(ItemKind::Value, None, "Freedom"))
         .await
         .expect("value should be created");
 
-    let result = create
-        .execute(ItemKind::Kra, Some(value.id), "Sales engine".to_string(), None, None, None, None, 0)
-        .await;
+    let result = create.execute(draft(ItemKind::Kra, Some(value.id), "Sales engine")).await;
 
     assert!(matches!(result, Err(DomainError::InvalidVvkikData(_))));
     assert_eq!(repository.count(), 1);
@@ -118,32 +140,23 @@ async fn create_persists_valid_hierarchy() {
     let create = CreateItemUseCase::new(repository.clone());
 
     let value = create
-        .execute(ItemKind::Value, None, "Freedom".to_string(), None, None, None, None, 0)
+        .execute(draft(ItemKind::Value, None, "Freedom"))
         .await
         .expect("value should be created");
     let vision = create
-        .execute(ItemKind::Vision, Some(value.id), "Independent studio".to_string(), None, None, None, None, 0)
+        .execute(draft(ItemKind::Vision, Some(value.id), "Independent studio"))
         .await
         .expect("vision should be created");
     let kra = create
-        .execute(ItemKind::Kra, Some(vision.id), "Audience growth".to_string(), None, None, None, None, 0)
+        .execute(draft(ItemKind::Kra, Some(vision.id), "Audience growth"))
         .await
         .expect("kra should be created");
     let igt = create
-        .execute(ItemKind::Igt, Some(kra.id), "Publish offer".to_string(), None, None, None, None, 0)
+        .execute(draft(ItemKind::Igt, Some(kra.id), "Publish offer"))
         .await
         .expect("igt should be created");
     let kpi = create
-        .execute(
-            ItemKind::Kpi,
-            Some(igt.id),
-            "Monthly revenue".to_string(),
-            None,
-            Some(10_000.0),
-            Some(0.0),
-            Some("USD".to_string()),
-            0,
-        )
+        .execute(kpi_draft(Some(igt.id), "Monthly revenue"))
         .await
         .expect("kpi should be created");
 
@@ -159,7 +172,10 @@ async fn get_and_update_return_not_found_for_missing_item() {
     assert!(matches!(get_result, Err(DomainError::ItemNotFound)));
 
     let update_result = UpdateItemUseCase::new(repository)
-        .execute(Uuid::new_v4(), None, None, Some("New title".to_string()), None, None, None, None, None, None)
+        .execute(Uuid::new_v4(), ItemPatch {
+            title: Some("New title".to_string()),
+            ..ItemPatch::default()
+        })
         .await;
     assert!(matches!(update_result, Err(DomainError::ItemNotFound)));
 }
@@ -168,23 +184,17 @@ async fn get_and_update_return_not_found_for_missing_item() {
 async fn update_mutates_existing_item() {
     let repository = MockVvkikRepository::arc();
     let created = CreateItemUseCase::new(repository.clone())
-        .execute(ItemKind::Value, None, "Freedom".to_string(), None, None, None, None, 0)
+        .execute(draft(ItemKind::Value, None, "Freedom"))
         .await
         .expect("item should be created");
 
     let updated = UpdateItemUseCase::new(repository.clone())
-        .execute(
-            created.id,
-            None,
-            None,
-            Some("Creative freedom".to_string()),
-            Some("Build a calm operating system".to_string()),
-            None,
-            None,
-            None,
-            Some(3),
-            None,
-        )
+        .execute(created.id, ItemPatch {
+            title: Some("Creative freedom".to_string()),
+            description: Some("Build a calm operating system".to_string()),
+            position: Some(3),
+            ..ItemPatch::default()
+        })
         .await
         .expect("item should be updated");
 
@@ -198,7 +208,7 @@ async fn update_mutates_existing_item() {
 async fn delete_removes_item() {
     let repository = MockVvkikRepository::arc();
     let created = CreateItemUseCase::new(repository.clone())
-        .execute(ItemKind::Value, None, "Freedom".to_string(), None, None, None, None, 0)
+        .execute(draft(ItemKind::Value, None, "Freedom"))
         .await
         .expect("item should be created");
 
@@ -215,29 +225,18 @@ async fn list_and_search_return_expected_items() {
     let repository = MockVvkikRepository::arc();
     let create = CreateItemUseCase::new(repository.clone());
     create
-        .execute(
-            ItemKind::Value,
-            None,
-            "Freedom".to_string(),
-            Some("Primary filter".to_string()),
-            None,
-            None,
-            None,
-            0,
-        )
+        .execute(NewVvkikItem {
+            description: Some("Primary filter".to_string()),
+            ..draft(ItemKind::Value, None, "Freedom")
+        })
         .await
         .unwrap();
     create
-        .execute(
-            ItemKind::Value,
-            None,
-            "Mastery".to_string(),
-            Some("Skill growth".to_string()),
-            None,
-            None,
-            None,
-            1,
-        )
+        .execute(NewVvkikItem {
+            description: Some("Skill growth".to_string()),
+            position: 1,
+            ..draft(ItemKind::Value, None, "Mastery")
+        })
         .await
         .unwrap();
 
@@ -253,42 +252,24 @@ async fn list_and_search_return_expected_items() {
 async fn record_kpi_measurement_updates_current_value() {
     let repository = MockVvkikRepository::arc();
     let kpi = CreateItemUseCase::new(repository.clone())
-        .execute(
-            ItemKind::Kpi,
-            Some(Uuid::new_v4()),
-            "Monthly revenue".to_string(),
-            None,
-            Some(10_000.0),
-            Some(0.0),
-            Some("USD".to_string()),
-            0,
-        )
+        .execute(kpi_draft(Some(Uuid::new_v4()), "Monthly revenue"))
         .await;
     assert!(matches!(kpi, Err(DomainError::ItemNotFound)));
 
     let value = CreateItemUseCase::new(repository.clone())
-        .execute(ItemKind::Value, None, "Freedom".to_string(), None, None, None, None, 0)
+        .execute(draft(ItemKind::Value, None, "Freedom"))
         .await
         .unwrap();
     let vision = CreateItemUseCase::new(repository.clone())
-        .execute(ItemKind::Vision, Some(value.id), "Independent studio".to_string(), None, None, None, None, 0)
+        .execute(draft(ItemKind::Vision, Some(value.id), "Independent studio"))
         .await
         .unwrap();
     let kra = CreateItemUseCase::new(repository.clone())
-        .execute(ItemKind::Kra, Some(vision.id), "Revenue".to_string(), None, None, None, None, 0)
+        .execute(draft(ItemKind::Kra, Some(vision.id), "Revenue"))
         .await
         .unwrap();
     let kpi = CreateItemUseCase::new(repository.clone())
-        .execute(
-            ItemKind::Kpi,
-            Some(kra.id),
-            "Monthly revenue".to_string(),
-            None,
-            Some(10_000.0),
-            Some(0.0),
-            Some("USD".to_string()),
-            0,
-        )
+        .execute(kpi_draft(Some(kra.id), "Monthly revenue"))
         .await
         .unwrap();
 

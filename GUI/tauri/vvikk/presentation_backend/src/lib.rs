@@ -94,7 +94,16 @@ mod tests {
 
         let repository = SqliteVvkikRepository::new(pool.clone());
         repository
-            .create_item(VvkikItem::new(ItemKind::Value, None, "Freedom".to_string(), None, None, None, None, 0))
+            .create_item(VvkikItem::new(domain::NewVvkikItem {
+                kind: ItemKind::Value,
+                parent_id: None,
+                title: "Freedom".to_string(),
+                description: None,
+                target_value: None,
+                current_value: None,
+                unit: None,
+                position: 0,
+            }))
             .await
             .expect("item should be created");
         pool.close().await;

@@ -1,0 +1,13 @@
+[package]
+name = "contracts"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+
+[dependencies]
+# Wire contract shared by the Tauri backend and the wasm frontend.
+# Keep this crate dependency-light so it compiles for every target.
+serde.workspace = true
+
+[dev-dependencies]
+serde_json.workspace = true

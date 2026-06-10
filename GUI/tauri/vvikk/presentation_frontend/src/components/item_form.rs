@@ -1,52 +1,138 @@
 #![allow(non_snake_case)]
 
-use crate::models::{VvkikItem,
-                    allowed_parent_kinds,
-                    kind_label};
+use crate::models::{CreateItemRequest,
+                    ItemKind,
+                    ItemStatus,
+                    UpdateItemRequest,
+                    VvkikItem,
+                    kind_description};
 use dioxus::prelude::*;
+
+/// 폼을 여는 시점의 문맥. `parent`가 `Some`이면 트리에서 "+ 하위 추가"로
+/// 진입한 것이므로 단계와 상위 항목을 잠근다.
+#[derive(Debug, Clone, PartialEq)]
+pub struct AddPreset {
+    pub kind: ItemKind,
+    pub parent: Option<VvkikItem>,
+    pub title: String,
+}
 
 #[derive(Props, Clone, PartialEq)]
 pub struct ItemFormProps {
     pub item: Option<VvkikItem>,
     pub items: Vec<VvkikItem>,
+    #[props(default)]
+    pub preset: Option<AddPreset>,
     pub on_submit: EventHandler<ItemFormData>,
     pub on_cancel: EventHandler<()>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct ItemFormData {
-    pub kind: String,
+    pub kind: ItemKind,
     pub parent_id: String,
     pub title: String,
     pub description: String,
     pub target_value: String,
     pub current_value: String,
     pub unit: String,
-    pub position: String,
-    pub status: String,
+    pub status: ItemStatus,
+}
+
+fn blank_to_none(value: &str) -> Option<String> {
+    let value = value.trim();
+    (!value.is_empty()).then(|| value.to_string())
+}
+
+fn parse_optional_f64(value: &str, label: &str) -> Result<Option<f64>, String> {
+    let Some(value) = blank_to_none(value) else {
+        return Ok(None);
+    };
+
+    value.parse::<f64>().map(Some).map_err(|_| format!("{label}은 숫자로 입력하세요."))
+}
+
+impl ItemFormData {
+    pub fn parent_id_opt(&self) -> Option<String> { blank_to_none(&self.parent_id) }
+
+    /// 폼 입력을 생성 요청으로 변환한다. 숫자 파싱 실패 시 사용자에게
+    /// 보여줄 메시지를 돌려준다.
+    pub fn to_create_request(&self, position: i64) -> Result<CreateItemRequest, String> {
+        Ok(CreateItemRequest {
+            kind: self.kind,
+            parent_id: self.parent_id_opt(),
+            title: self.title.trim().to_string(),
+            description: blank_to_none(&self.description),
+            target_value: parse_optional_f64(&self.target_value, "목표값")?,
+            current_value: parse_optional_f64(&self.current_value, "현재값")?,
+            unit: blank_to_none(&self.unit),
+            position: Some(position),
+        })
+    }
+
+    /// 폼 입력을 수정 요청으로 변환한다. 정렬값은 건드리지 않는다.
+    pub fn to_update_request(&self, id: String) -> Result<UpdateItemRequest, String> {
+        Ok(UpdateItemRequest {
+            id,
+            kind: Some(self.kind),
+            parent_id: Some(self.parent_id_opt()),
+            title: Some(self.title.trim().to_string()),
+            description: Some(self.description.trim().to_string()),
+            target_value: Some(parse_optional_f64(&self.target_value, "목표값")?),
+            current_value: Some(parse_optional_f64(&self.current_value, "현재값")?),
+            unit: Some(self.unit.trim().to_string()),
+            position: None,
+            status: Some(self.status),
+        })
+    }
 }
 
 fn number_to_string(value: Option<f64>) -> String { value.map(|value| value.to_string()).unwrap_or_default() }
 
 pub fn ItemForm(props: ItemFormProps) -> Element {
-    let mut kind = use_signal(|| props.item.as_ref().map(|item| item.kind.clone()).unwrap_or_else(|| "value".to_string()));
-    let mut parent_id = use_signal(|| props.item.as_ref().and_then(|item| item.parent_id.clone()).unwrap_or_default());
-    let mut title = use_signal(|| props.item.as_ref().map(|item| item.title.clone()).unwrap_or_default());
+    let initial_kind = props
+        .item
+        .as_ref()
+        .map(|item| item.kind)
+        .or_else(|| props.preset.as_ref().map(|preset| preset.kind))
+        .unwrap_or(ItemKind::Value);
+    let initial_parent_id = props
+        .item
+        .as_ref()
+        .and_then(|item| item.parent_id.clone())
+        .or_else(|| props.preset.as_ref().and_then(|preset| preset.parent.as_ref().map(|parent| parent.id.clone())))
+        .unwrap_or_default();
+    let initial_title = props
+        .item
+        .as_ref()
+        .map(|item| item.title.clone())
+        .or_else(|| props.preset.as_ref().map(|preset| preset.title.clone()))
+        .unwrap_or_default();
+
+    let mut kind = use_signal(|| initial_kind);
+    let mut parent_id = use_signal(|| initial_parent_id);
+    let mut title = use_signal(|| initial_title);
     let mut description = use_signal(|| props.item.as_ref().and_then(|item| item.description.clone()).unwrap_or_default());
     let mut target_value = use_signal(|| props.item.as_ref().map(|item| number_to_string(item.target_value)).unwrap_or_default());
     let mut current_value = use_signal(|| props.item.as_ref().map(|item| number_to_string(item.current_value)).unwrap_or_default());
     let mut unit = use_signal(|| props.item.as_ref().and_then(|item| item.unit.clone()).unwrap_or_default());
-    let mut position = use_signal(|| props.item.as_ref().map(|item| item.position.to_string()).unwrap_or_else(|| "0".to_string()));
-    let mut status = use_signal(|| props.item.as_ref().map(|item| item.status.clone()).unwrap_or_else(|| "active".to_string()));
+    let mut status = use_signal(|| props.item.as_ref().map(|item| item.status).unwrap_or(ItemStatus::Active));
     let mut form_error = use_signal(|| None::<String>);
 
     let is_edit = props.item.is_some();
-    let selected_kind = kind.read().clone();
-    let parent_kinds = allowed_parent_kinds(&selected_kind);
+    // 트리에서 하위 추가로 진입하면 단계와 상위 항목이 이미 결정되어 있다.
+    let locked_parent = if is_edit {
+        None
+    } else {
+        props.preset.as_ref().and_then(|preset| preset.parent.clone())
+    };
+
+    let selected_kind = *kind.read();
+    let parent_kinds = selected_kind.allowed_parent_kinds();
     let parent_options: Vec<VvkikItem> = props
         .items
         .iter()
-        .filter(|candidate| parent_kinds.contains(&candidate.kind.as_str()) && props.item.as_ref().is_none_or(|current| current.id != candidate.id))
+        .filter(|candidate| parent_kinds.contains(&candidate.kind) && props.item.as_ref().is_none_or(|current| current.id != candidate.id))
         .cloned()
         .collect();
 
@@ -56,60 +142,84 @@ pub fn ItemForm(props: ItemFormProps) -> Element {
             form_error.set(Some("제목을 입력하세요.".to_string()));
             return;
         }
-        if kind.read().as_str() != "value" && parent_id.read().trim().is_empty() {
+        if *kind.read() != ItemKind::Value && parent_id.read().trim().is_empty() {
             form_error.set(Some("상위 항목을 선택하세요.".to_string()));
             return;
         }
 
         form_error.set(None);
         props.on_submit.call(ItemFormData {
-            kind: kind.read().clone(),
+            kind: *kind.read(),
             parent_id: parent_id.read().clone(),
             title: title.read().clone(),
             description: description.read().clone(),
             target_value: target_value.read().clone(),
             current_value: current_value.read().clone(),
             unit: unit.read().clone(),
-            position: position.read().clone(),
-            status: status.read().clone(),
+            status: *status.read(),
         });
     };
 
     rsx! {
         div { class: "item-form",
-            h2 { if is_edit { "항목 수정" } else { "새 VVKIK 항목" } }
+            h2 {
+                if is_edit {
+                    "항목 수정"
+                } else if locked_parent.is_some() {
+                    "새 {selected_kind.label()} 항목"
+                } else {
+                    "새 VVKIK 항목"
+                }
+            }
             if let Some(error) = form_error.read().clone() {
                 div { class: "form-error", "{error}" }
             }
             form { onsubmit: handle_submit,
-                div { class: "form-grid",
+                if let Some(parent) = locked_parent.as_ref() {
+                    div { class: "form-grid",
+                        div { class: "form-group",
+                            label { "단계" }
+                            div { class: "locked-field", "{selected_kind.label()}" }
+                        }
+                        div { class: "form-group",
+                            label { "상위 항목" }
+                            div { class: "locked-field", "{parent.kind.label()} · {parent.title}" }
+                        }
+                    }
+                } else {
                     div { class: "form-group",
-                        label { r#for: "kind", "단계" }
-                        select {
-                            id: "kind",
-                            value: "{kind}",
-                            onchange: move |evt| {
-                                kind.set(evt.value());
-                                parent_id.set(String::new());
-                            },
-                            option { value: "value", "Value 가치" }
-                            option { value: "vision", "Vision 비전" }
-                            option { value: "kra", "KRA 핵심 결과 영역" }
-                            option { value: "igt", "IGT 소득 창출 업무" }
-                            option { value: "kpi", "KPI 핵심 성과 지표" }
+                        label { "단계" }
+                        div { class: "kind-segment", role: "radiogroup", aria_label: "단계 선택",
+                            for kind_option in ItemKind::ALL {
+                                button {
+                                    r#type: "button",
+                                    role: "radio",
+                                    aria_checked: selected_kind == kind_option,
+                                    title: "{kind_description(kind_option)}",
+                                    class: if selected_kind == kind_option { "segment-btn active" } else { "segment-btn" },
+                                    onclick: move |_| {
+                                        if *kind.read() != kind_option {
+                                            kind.set(kind_option);
+                                            parent_id.set(String::new());
+                                        }
+                                    },
+                                    "{kind_option.label()}"
+                                }
+                            }
                         }
                     }
 
-                    div { class: "form-group",
-                        label { r#for: "parent", "상위 항목" }
-                        select {
-                            id: "parent",
-                            value: "{parent_id}",
-                            disabled: selected_kind == "value",
-                            onchange: move |evt| parent_id.set(evt.value()),
-                            option { value: "", if selected_kind == "value" { "최상위 Value" } else { "상위 항목 선택" } }
-                            for parent in parent_options.iter() {
-                                option { value: "{parent.id}", "{kind_label(&parent.kind)} · {parent.title}" }
+                    if selected_kind != ItemKind::Value {
+                        div { class: "form-group",
+                            label { r#for: "parent", "상위 항목" }
+                            select {
+                                id: "parent",
+                                value: "{parent_id}",
+                                onchange: move |evt| parent_id.set(evt.value()),
+                                option { value: "", "상위 항목 선택" }
+                                for parent in parent_options.iter() {
+                                    option { value: "{parent.id}", "{parent.kind.label()} · {parent.title}" }
+                                }
                             }
                         }
                     }
@@ -121,6 +231,7 @@ pub fn ItemForm(props: ItemFormProps) -> Element {
                         id: "title",
                         r#type: "text",
                         required: true,
+                        autofocus: true,
                         value: "{title}",
                         oninput: move |evt| title.set(evt.value())
                     }
@@ -136,8 +247,8 @@ pub fn ItemForm(props: ItemFormProps) -> Element {
                     }
                 }
 
-                if selected_kind == "kpi" {
-                    div { class: "form-grid",
+                if selected_kind == ItemKind::Kpi {
+                    div { class: "form-grid compact",
                         div { class: "form-group",
                             label { r#for: "current_value", "현재값" }
                             input {
@@ -171,28 +282,16 @@ pub fn ItemForm(props: ItemFormProps) -> Element {
                     }
                 }
 
-                div { class: "form-grid compact",
+                if is_edit {
                     div { class: "form-group",
-                        label { r#for: "position", "정렬" }
-                        input {
-                            id: "position",
-                            r#type: "number",
-                            value: "{position}",
-                            oninput: move |evt| position.set(evt.value())
-                        }
-                    }
-
-                    if is_edit {
-                        div { class: "form-group",
-                            label { r#for: "status", "상태" }
-                            select {
-                                id: "status",
-                                value: "{status}",
-                                onchange: move |evt| status.set(evt.value()),
-                                option { value: "active", "Active" }
-                                option { value: "paused", "Paused" }
-                                option { value: "completed", "Completed" }
-                            }
+                        label { r#for: "status", "상태" }
+                        select {
+                            id: "status",
+                            value: "{status}",
+                            onchange: move |evt| status.set(evt.value().parse().unwrap_or(ItemStatus::Active)),
+                            option { value: "active", "Active" }
+                            option { value: "paused", "Paused" }
+                            option { value: "completed", "Completed" }
                         }
                     }
                 }

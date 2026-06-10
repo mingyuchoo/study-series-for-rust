@@ -1,108 +1,12 @@
 use chrono::{DateTime,
              Utc};
+// 단계/상태 enum은 공유 와이어 계약(contracts)이 단일 정의를 갖고,
+// 도메인은 이를 재노출한다.
+pub use contracts::{ItemKind,
+                    ItemStatus};
 use serde::{Deserialize,
             Serialize};
-use std::{fmt,
-          str::FromStr};
 use uuid::Uuid;
-
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "snake_case")]
-pub enum ItemKind {
-    Value,
-    Vision,
-    Kra,
-    Igt,
-    Kpi,
-}
-
-impl ItemKind {
-    pub fn as_str(self) -> &'static str {
-        match self {
-            | Self::Value => "value",
-            | Self::Vision => "vision",
-            | Self::Kra => "kra",
-            | Self::Igt => "igt",
-            | Self::Kpi => "kpi",
-        }
-    }
-
-    pub fn label(self) -> &'static str {
-        match self {
-            | Self::Value => "Value",
-            | Self::Vision => "Vision",
-            | Self::Kra => "KRA",
-            | Self::Igt => "IGT",
-            | Self::Kpi => "KPI",
-        }
-    }
-
-    pub fn allowed_parent_kinds(self) -> &'static [ItemKind] {
-        match self {
-            | Self::Value => &[],
-            | Self::Vision => &[Self::Value],
-            | Self::Kra => &[Self::Vision],
-            | Self::Igt => &[Self::Kra],
-            | Self::Kpi => &[Self::Kra, Self::Igt],
-        }
-    }
-
-    pub fn allows_parent(self, parent_kind: ItemKind) -> bool { self.allowed_parent_kinds().contains(&parent_kind) }
-}
-
-impl fmt::Display for ItemKind {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result { f.write_str(self.as_str()) }
-}
-
-impl FromStr for ItemKind {
-    type Err = String;
-
-    fn from_str(value: &str) -> Result<Self, Self::Err> {
-        match value.trim().to_ascii_lowercase().as_str() {
-            | "value" => Ok(Self::Value),
-            | "vision" => Ok(Self::Vision),
-            | "kra" => Ok(Self::Kra),
-            | "igt" => Ok(Self::Igt),
-            | "kpi" => Ok(Self::Kpi),
-            | _ => Err(format!("Unsupported VVKIK item kind: {value}")),
-        }
-    }
-}
-
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "snake_case")]
-pub enum ItemStatus {
-    Active,
-    Paused,
-    Completed,
-}
-
-impl ItemStatus {
-    pub fn as_str(self) -> &'static str {
-        match self {
-            | Self::Active => "active",
-            | Self::Paused => "paused",
-            | Self::Completed => "completed",
-        }
-    }
-}
-
-impl fmt::Display for ItemStatus {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result { f.write_str(self.as_str()) }
-}
-
-impl FromStr for ItemStatus {
-    type Err = String;
-
-    fn from_str(value: &str) -> Result<Self, Self::Err> {
-        match value.trim().to_ascii_lowercase().as_str() {
-            | "active" => Ok(Self::Active),
-            | "paused" => Ok(Self::Paused),
-            | "completed" => Ok(Self::Completed),
-            | _ => Err(format!("Unsupported VVKIK item status: {value}")),
-        }
-    }
-}
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct VvkikItem {
@@ -120,73 +24,79 @@ pub struct VvkikItem {
     pub updated_at: DateTime<Utc>,
 }
 
+/// 새 항목을 만들 때 호출자가 결정하는 값들. id·status·시각은 엔티티가
+/// 부여한다.
+#[derive(Debug, Clone, PartialEq)]
+pub struct NewVvkikItem {
+    pub kind: ItemKind,
+    pub parent_id: Option<Uuid>,
+    pub title: String,
+    pub description: Option<String>,
+    pub target_value: Option<f64>,
+    pub current_value: Option<f64>,
+    pub unit: Option<String>,
+    pub position: i64,
+}
+
+/// 부분 수정. `None`은 "변경하지 않음", `Some(None)`은 "값을 비움"이다.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct ItemPatch {
+    pub kind: Option<ItemKind>,
+    pub parent_id: Option<Option<Uuid>>,
+    pub title: Option<String>,
+    pub description: Option<String>,
+    pub target_value: Option<Option<f64>>,
+    pub current_value: Option<Option<f64>>,
+    pub unit: Option<String>,
+    pub position: Option<i64>,
+    pub status: Option<ItemStatus>,
+}
+
 impl VvkikItem {
-    #[allow(clippy::too_many_arguments)]
-    pub fn new(
-        kind: ItemKind,
-        parent_id: Option<Uuid>,
-        title: String,
-        description: Option<String>,
-        target_value: Option<f64>,
-        current_value: Option<f64>,
-        unit: Option<String>,
-        position: i64,
-    ) -> Self {
+    pub fn new(draft: NewVvkikItem) -> Self {
         let now = Utc::now();
         Self {
             id: Uuid::new_v4(),
-            kind,
-            parent_id,
-            title: title.trim().to_string(),
-            description: Self::normalize_optional_field(description),
-            target_value,
-            current_value,
-            unit: Self::normalize_optional_field(unit),
-            position,
+            kind: draft.kind,
+            parent_id: draft.parent_id,
+            title: draft.title.trim().to_string(),
+            description: Self::normalize_optional_field(draft.description),
+            target_value: draft.target_value,
+            current_value: draft.current_value,
+            unit: Self::normalize_optional_field(draft.unit),
+            position: draft.position,
             status: ItemStatus::Active,
             created_at: now,
             updated_at: now,
         }
     }
 
-    #[allow(clippy::too_many_arguments)]
-    pub fn update(
-        &mut self,
-        kind: Option<ItemKind>,
-        parent_id: Option<Option<Uuid>>,
-        title: Option<String>,
-        description: Option<String>,
-        target_value: Option<Option<f64>>,
-        current_value: Option<Option<f64>>,
-        unit: Option<String>,
-        position: Option<i64>,
-        status: Option<ItemStatus>,
-    ) {
-        if let Some(kind) = kind {
+    pub fn update(&mut self, patch: ItemPatch) {
+        if let Some(kind) = patch.kind {
             self.kind = kind;
         }
-        if let Some(parent_id) = parent_id {
+        if let Some(parent_id) = patch.parent_id {
             self.parent_id = parent_id;
         }
-        if let Some(title) = title {
+        if let Some(title) = patch.title {
             self.title = title.trim().to_string();
         }
-        if let Some(description) = description {
+        if let Some(description) = patch.description {
             self.description = Self::normalize_optional_field(Some(description));
         }
-        if let Some(target_value) = target_value {
+        if let Some(target_value) = patch.target_value {
             self.target_value = target_value;
         }
-        if let Some(current_value) = current_value {
+        if let Some(current_value) = patch.current_value {
             self.current_value = current_value;
         }
-        if let Some(unit) = unit {
+        if let Some(unit) = patch.unit {
             self.unit = Self::normalize_optional_field(Some(unit));
         }
-        if let Some(position) = position {
+        if let Some(position) = patch.position {
             self.position = position;
         }
-        if let Some(status) = status {
+        if let Some(status) = patch.status {
             self.status = status;
         }
         self.updated_at = Utc::now();
@@ -224,21 +134,46 @@ mod tests {
 
     #[test]
     fn new_trims_title_and_discards_blank_optional_fields() {
-        let item = VvkikItem::new(
-            ItemKind::Vision,
-            None,
-            "  Build a focused practice  ".to_string(),
-            Some("  ".to_string()),
-            None,
-            None,
-            Some("  sessions  ".to_string()),
-            0,
-        );
+        let item = VvkikItem::new(NewVvkikItem {
+            kind: ItemKind::Vision,
+            parent_id: None,
+            title: "  Build a focused practice  ".to_string(),
+            description: Some("  ".to_string()),
+            target_value: None,
+            current_value: None,
+            unit: Some("  sessions  ".to_string()),
+            position: 0,
+        });
 
         assert_eq!(item.title, "Build a focused practice");
         assert_eq!(item.description, None);
         assert_eq!(item.unit, Some("sessions".to_string()));
         assert_eq!(item.status, ItemStatus::Active);
+    }
+
+    #[test]
+    fn update_applies_only_patched_fields() {
+        let mut item = VvkikItem::new(NewVvkikItem {
+            kind: ItemKind::Value,
+            parent_id: None,
+            title: "Freedom".to_string(),
+            description: Some("First".to_string()),
+            target_value: None,
+            current_value: None,
+            unit: None,
+            position: 0,
+        });
+
+        item.update(ItemPatch {
+            title: Some("  Creative freedom  ".to_string()),
+            position: Some(3),
+            ..ItemPatch::default()
+        });
+
+        assert_eq!(item.title, "Creative freedom");
+        assert_eq!(item.position, 3);
+        assert_eq!(item.description, Some("First".to_string()));
+        assert_eq!(item.kind, ItemKind::Value);
     }
 
     #[test]

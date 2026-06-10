@@ -319,16 +319,16 @@ mod tests {
     #[tokio::test]
     async fn creates_lists_searches_updates_and_deletes_items() {
         let repository = repository().await;
-        let mut item = VvkikItem::new(
-            ItemKind::Value,
-            None,
-            "  Freedom  ".to_string(),
-            Some("Primary filter".to_string()),
-            None,
-            None,
-            None,
-            0,
-        );
+        let mut item = VvkikItem::new(domain::NewVvkikItem {
+            kind: ItemKind::Value,
+            parent_id: None,
+            title: "  Freedom  ".to_string(),
+            description: Some("Primary filter".to_string()),
+            target_value: None,
+            current_value: None,
+            unit: None,
+            position: 0,
+        });
         let id = item.id;
 
         repository.create_item(item.clone()).await.expect("item should be created");
@@ -341,17 +341,11 @@ mod tests {
         assert_eq!(matches.len(), 1);
         assert_eq!(matches[0].id, id);
 
-        item.update(
-            None,
-            None,
-            Some("Financial freedom".to_string()),
-            Some("  ".to_string()),
-            None,
-            None,
-            None,
-            None,
-            None,
-        );
+        item.update(domain::ItemPatch {
+            title: Some("Financial freedom".to_string()),
+            description: Some("  ".to_string()),
+            ..domain::ItemPatch::default()
+        });
         repository.update_item(item).await.expect("item should be updated");
 
         let updated = repository
@@ -371,20 +365,29 @@ mod tests {
     async fn search_treats_like_wildcards_literally() {
         let repository = repository().await;
         repository
-            .create_item(VvkikItem::new(ItemKind::Value, None, "100% Ownership".to_string(), None, None, None, None, 0))
+            .create_item(VvkikItem::new(domain::NewVvkikItem {
+                kind: ItemKind::Value,
+                parent_id: None,
+                title: "100% Ownership".to_string(),
+                description: None,
+                target_value: None,
+                current_value: None,
+                unit: None,
+                position: 0,
+            }))
             .await
             .expect("item should be created");
         repository
-            .create_item(VvkikItem::new(
-                ItemKind::Value,
-                None,
-                "Value Stream".to_string(),
-                Some("Plain text".to_string()),
-                None,
-                None,
-                None,
-                1,
-            ))
+            .create_item(VvkikItem::new(domain::NewVvkikItem {
+                kind: ItemKind::Value,
+                parent_id: None,
+                title: "Value Stream".to_string(),
+                description: Some("Plain text".to_string()),
+                target_value: None,
+                current_value: None,
+                unit: None,
+                position: 1,
+            }))
             .await
             .expect("item should be created");
 
@@ -398,16 +401,16 @@ mod tests {
     async fn records_kpi_measurements() {
         let repository = repository().await;
         let kpi = repository
-            .create_item(VvkikItem::new(
-                ItemKind::Kpi,
-                None,
-                "Monthly recurring revenue".to_string(),
-                None,
-                Some(10_000.0),
-                Some(0.0),
-                Some("USD".to_string()),
-                0,
-            ))
+            .create_item(VvkikItem::new(domain::NewVvkikItem {
+                kind: ItemKind::Kpi,
+                parent_id: None,
+                title: "Monthly recurring revenue".to_string(),
+                description: None,
+                target_value: Some(10_000.0),
+                current_value: Some(0.0),
+                unit: Some("USD".to_string()),
+                position: 0,
+            }))
             .await
             .expect("kpi should be created");
 

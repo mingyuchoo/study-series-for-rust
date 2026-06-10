@@ -6,6 +6,7 @@ authors.workspace = true
 
 [dependencies]
 # Frontend presentation layer
+contracts = {path = "../contracts"}
 dioxus.workspace = true
 dioxus-logger.workspace = true
 js-sys.workspace = true

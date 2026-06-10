@@ -52,7 +52,16 @@ mod tests {
 
     #[test]
     fn validates_parent_hierarchy() {
-        let value = VvkikItem::new(ItemKind::Value, None, "Freedom".to_string(), None, None, None, None, 0);
+        let value = VvkikItem::new(domain::NewVvkikItem {
+            kind: ItemKind::Value,
+            parent_id: None,
+            title: "Freedom".to_string(),
+            description: None,
+            target_value: None,
+            current_value: None,
+            unit: None,
+            position: 0,
+        });
         assert!(validate_parent(ItemKind::Vision, Some(&value)).is_ok());
         assert!(validate_parent(ItemKind::Kra, Some(&value)).is_err());
         assert!(validate_parent(ItemKind::Value, Some(&value)).is_err());

@@ -1,12 +1,15 @@
 #![allow(non_snake_case)]
 
-use crate::{components::{ItemForm,
+use crate::{components::{AddPreset,
+                         ItemForm,
                          ItemFormData,
+                         QuickAddData,
                          VvkikBoard},
             models::{CreateItemRequest,
-                     UpdateItemRequest,
+                     ItemKind,
                      VvkikItem},
-            services::VvkikService};
+            store::{VvkikStore,
+                    use_vvkik_store}};
 use dioxus::prelude::*;
 
 static CSS: Asset = asset!("/assets/styles.css");
@@ -14,227 +17,83 @@ static CSS: Asset = asset!("/assets/styles.css");
 #[derive(Debug, Clone, PartialEq)]
 enum AppView {
     Board,
-    Add,
+    Add(Box<AddPreset>),
     Edit(Box<VvkikItem>),
 }
 
-async fn fetch_items(query: String) -> Result<Vec<VvkikItem>, String> {
-    let query = query.trim().to_string();
-
-    if query.is_empty() {
-        VvkikService::list_items().await
-    } else {
-        VvkikService::search_items(query).await
-    }
-}
-
-fn blank_to_none(value: String) -> Option<String> {
-    let value = value.trim().to_string();
-    (!value.is_empty()).then_some(value)
-}
-
-fn parse_optional_f64(value: String, label: &str) -> Result<Option<f64>, String> {
-    let Some(value) = blank_to_none(value) else {
-        return Ok(None);
-    };
-
-    value.parse::<f64>().map(Some).map_err(|_| format!("{label}은 숫자로 입력하세요."))
-}
-
-fn parse_i64_or_zero(value: String) -> i64 { value.trim().parse::<i64>().unwrap_or_default() }
-
 pub fn App() -> Element {
-    let mut items = use_signal(Vec::<VvkikItem>::new);
+    let store: VvkikStore = use_vvkik_store();
     let mut current_view = use_signal(|| AppView::Board);
-    let mut search_query = use_signal(String::new);
-    let mut loading = use_signal(|| false);
-    let mut error_message = use_signal(|| None::<String>);
     let mut pending_delete = use_signal(|| None::<VvkikItem>);
+    let active_tab = use_signal(|| "tree".to_string());
 
-    use_effect(move || {
-        spawn(async move {
-            loading.set(true);
-            match fetch_items(String::new()).await {
-                | Ok(item_list) => {
-                    items.set(item_list);
-                    error_message.set(None);
-                },
-                | Err(e) => {
-                    error_message.set(Some(format!("VVKIK 항목을 불러오지 못했습니다: {}", e)));
-                },
-            }
-            loading.set(false);
-        });
-    });
-
-    let handle_search = move |evt: FormEvent| {
-        evt.prevent_default();
-        let query = search_query.read().clone();
-        spawn(async move {
-            loading.set(true);
-            match fetch_items(query).await {
-                | Ok(item_list) => {
-                    items.set(item_list);
-                    error_message.set(None);
-                },
-                | Err(e) => {
-                    error_message.set(Some(format!("검색에 실패했습니다: {}", e)));
-                },
-            }
-            loading.set(false);
-        });
-    };
-
-    let handle_clear_search = move |_| {
-        search_query.set(String::new());
-        spawn(async move {
-            loading.set(true);
-            match fetch_items(String::new()).await {
-                | Ok(item_list) => {
-                    items.set(item_list);
-                    error_message.set(None);
-                },
-                | Err(e) => {
-                    error_message.set(Some(format!("VVKIK 항목을 불러오지 못했습니다: {}", e)));
-                },
-            }
-            loading.set(false);
-        });
-    };
+    let items = store.items;
+    let loading = store.loading;
+    let error_message = store.error;
+    let mut search_query = store.search_query;
 
     let handle_add_item = move |form_data: ItemFormData| {
-        if *loading.read() {
+        if store.is_busy() {
             return;
         }
 
-        let target_value = match parse_optional_f64(form_data.target_value.clone(), "목표값") {
-            | Ok(value) => value,
-            | Err(message) => {
-                error_message.set(Some(message));
-                return;
-            },
-        };
-        let current_value = match parse_optional_f64(form_data.current_value.clone(), "현재값") {
-            | Ok(value) => value,
-            | Err(message) => {
-                error_message.set(Some(message));
-                return;
-            },
-        };
-
-        loading.set(true);
-        spawn(async move {
-            let request = CreateItemRequest {
-                kind: form_data.kind,
-                parent_id: blank_to_none(form_data.parent_id),
-                title: form_data.title.trim().to_string(),
-                description: blank_to_none(form_data.description),
-                target_value,
-                current_value,
-                unit: blank_to_none(form_data.unit),
-                position: Some(parse_i64_or_zero(form_data.position)),
-            };
-
-            match VvkikService::create_item(request).await {
-                | Ok(_) => {
-                    current_view.set(AppView::Board);
-                    search_query.set(String::new());
-                    match fetch_items(String::new()).await {
-                        | Ok(item_list) => {
-                            items.set(item_list);
-                            error_message.set(None);
-                        },
-                        | Err(e) => {
-                            error_message.set(Some(format!("목록을 새로고침하지 못했습니다: {}", e)));
-                        },
+        let position = store.next_position(form_data.kind, form_data.parent_id_opt().as_deref());
+        match form_data.to_create_request(position) {
+            | Ok(request) => {
+                spawn(async move {
+                    if store.create(request).await {
+                        current_view.set(AppView::Board);
                     }
-                },
-                | Err(e) => {
-                    error_message.set(Some(format!("항목 추가에 실패했습니다: {}", e)));
-                },
-            }
-            loading.set(false);
+                });
+            },
+            | Err(message) => store.set_error(message),
+        }
+    };
+
+    let handle_quick_add = move |quick_add: QuickAddData| {
+        if store.is_busy() {
+            return;
+        }
+
+        let position = store.next_position(quick_add.kind, quick_add.parent_id.as_deref());
+        let request = CreateItemRequest {
+            kind: quick_add.kind,
+            parent_id: quick_add.parent_id,
+            title: quick_add.title,
+            description: None,
+            target_value: None,
+            current_value: None,
+            unit: None,
+            position: Some(position),
+        };
+        spawn(async move {
+            store.create(request).await;
         });
     };
 
     let handle_edit_item = move |form_data: ItemFormData| {
-        if *loading.read() {
+        if store.is_busy() {
             return;
         }
 
-        let target_value = match parse_optional_f64(form_data.target_value.clone(), "목표값") {
-            | Ok(value) => value,
-            | Err(message) => {
-                error_message.set(Some(message));
-                return;
-            },
+        let AppView::Edit(item) = current_view.read().clone() else {
+            return;
         };
-        let current_value = match parse_optional_f64(form_data.current_value.clone(), "현재값") {
-            | Ok(value) => value,
-            | Err(message) => {
-                error_message.set(Some(message));
-                return;
-            },
-        };
-
-        if let AppView::Edit(item) = current_view.read().clone() {
-            loading.set(true);
-            spawn(async move {
-                let request = UpdateItemRequest {
-                    id: item.id.clone(),
-                    kind: Some(form_data.kind),
-                    parent_id: Some(blank_to_none(form_data.parent_id)),
-                    title: Some(form_data.title.trim().to_string()),
-                    description: Some(form_data.description.trim().to_string()),
-                    target_value: Some(target_value),
-                    current_value: Some(current_value),
-                    unit: Some(form_data.unit.trim().to_string()),
-                    position: Some(parse_i64_or_zero(form_data.position)),
-                    status: Some(form_data.status),
-                };
-
-                match VvkikService::update_item(request).await {
-                    | Ok(_) => {
+        match form_data.to_update_request(item.id.clone()) {
+            | Ok(request) => {
+                spawn(async move {
+                    if store.update(request).await {
                         current_view.set(AppView::Board);
-                        let query = search_query.read().clone();
-                        match fetch_items(query).await {
-                            | Ok(item_list) => {
-                                items.set(item_list);
-                                error_message.set(None);
-                            },
-                            | Err(e) => {
-                                error_message.set(Some(format!("목록을 새로고침하지 못했습니다: {}", e)));
-                            },
-                        }
-                    },
-                    | Err(e) => {
-                        error_message.set(Some(format!("항목 수정에 실패했습니다: {}", e)));
-                    },
-                }
-                loading.set(false);
-            });
+                    }
+                });
+            },
+            | Err(message) => store.set_error(message),
         }
     };
 
     let handle_delete_item = move |id: String| {
-        let query = search_query.read().clone();
         spawn(async move {
-            loading.set(true);
-            match VvkikService::delete_item(id).await {
-                | Ok(_) => match fetch_items(query).await {
-                    | Ok(item_list) => {
-                        items.set(item_list);
-                        error_message.set(None);
-                    },
-                    | Err(e) => {
-                        error_message.set(Some(format!("목록을 새로고침하지 못했습니다: {}", e)));
-                    },
-                },
-                | Err(e) => {
-                    error_message.set(Some(format!("항목 삭제에 실패했습니다: {}", e)));
-                },
-            }
-            loading.set(false);
+            store.delete(id).await;
         });
     };
 
@@ -249,7 +108,12 @@ pub fn App() -> Element {
 
                 if let AppView::Board = current_view.read().clone() {
                     div { class: "header-actions",
-                        form { class: "search-form", onsubmit: handle_search,
+                        form {
+                            class: "search-form",
+                            onsubmit: move |evt: FormEvent| {
+                                evt.prevent_default();
+                                spawn(async move { store.search().await });
+                            },
                             input {
                                 r#type: "text",
                                 placeholder: "Value, Vision, KRA, IGT, KPI 검색...",
@@ -261,7 +125,9 @@ pub fn App() -> Element {
                                 button {
                                     r#type: "button",
                                     class: "btn btn-secondary",
-                                    onclick: handle_clear_search,
+                                    onclick: move |_| {
+                                        spawn(async move { store.clear_search().await });
+                                    },
                                     "초기화"
                                 }
                             }
@@ -269,8 +135,10 @@ pub fn App() -> Element {
                         button {
                             class: "btn btn-primary",
                             onclick: move |_| {
-                                error_message.set(None);
-                                current_view.set(AppView::Add);
+                                store.clear_error();
+                                // 단계 탭을 보고 있었다면 그 단계를 기본 선택한다.
+                                let kind = active_tab.read().parse::<ItemKind>().unwrap_or(ItemKind::Value);
+                                current_view.set(AppView::Add(Box::new(AddPreset { kind, parent: None, title: String::new() })));
                             },
                             "새 항목"
                         }
@@ -291,20 +159,27 @@ pub fn App() -> Element {
                     VvkikBoard {
                         items: items.read().clone(),
                         is_filtering: !search_query.read().trim().is_empty(),
+                        active_tab,
                         on_edit: move |item| {
-                            error_message.set(None);
+                            store.clear_error();
                             current_view.set(AppView::Edit(Box::new(item)));
                         },
-                        on_delete: move |item| pending_delete.set(Some(item))
+                        on_delete: move |item| pending_delete.set(Some(item)),
+                        on_quick_add: handle_quick_add,
+                        on_add_child: move |preset: AddPreset| {
+                            store.clear_error();
+                            current_view.set(AppView::Add(Box::new(preset)));
+                        }
                     }
                 },
-                AppView::Add => rsx! {
+                AppView::Add(preset) => rsx! {
                     ItemForm {
                         item: None,
                         items: items.read().clone(),
+                        preset: Some(*preset),
                         on_submit: handle_add_item,
                         on_cancel: move |_| {
-                            error_message.set(None);
+                            store.clear_error();
                             current_view.set(AppView::Board);
                         }
                     }
@@ -315,7 +190,7 @@ pub fn App() -> Element {
                         items: items.read().clone(),
                         on_submit: handle_edit_item,
                         on_cancel: move |_| {
-                            error_message.set(None);
+                            store.clear_error();
                             current_view.set(AppView::Board);
                         }
                     }

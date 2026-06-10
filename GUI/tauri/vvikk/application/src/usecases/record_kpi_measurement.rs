@@ -1,6 +1,7 @@
 use super::validation::validate_measurement_value;
 use domain::{DomainError,
              ItemKind,
+             ItemPatch,
              KpiMeasurement,
              VvkikRepository};
 use std::sync::Arc;
@@ -25,7 +26,10 @@ impl RecordKpiMeasurementUseCase {
             return Err(DomainError::InvalidVvkikData("KPI 항목에만 측정값을 기록할 수 있습니다.".to_string()));
         }
 
-        kpi.update(None, None, None, None, None, Some(Some(value)), None, None, None);
+        kpi.update(ItemPatch {
+            current_value: Some(Some(value)),
+            ..ItemPatch::default()
+        });
         self.repository.update_item(kpi).await?;
 
         let measurement = KpiMeasurement::new(kpi_id, value, note);
