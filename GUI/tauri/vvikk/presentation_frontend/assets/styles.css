@@ -426,10 +426,30 @@ textarea:focus {
   min-width: 0;
   padding: 6px 8px;
   border-radius: var(--radius-sm);
+  cursor: grab;
 }
 
 .tree-row:hover {
   background: var(--color-surface-soft);
+}
+
+.tree-row.dragging {
+  opacity: 0.4;
+}
+
+.tree-row.drop-ok {
+  outline: 1px dashed var(--color-hairline-strong);
+  outline-offset: -1px;
+}
+
+.tree-row.drop-hover {
+  outline: 2px solid var(--color-ink);
+  outline-offset: -2px;
+  background: var(--color-surface-soft);
+}
+
+.tree-row.drop-dim {
+  opacity: 0.35;
 }
 
 .chevron-btn {

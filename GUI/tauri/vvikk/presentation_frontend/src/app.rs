@@ -7,6 +7,7 @@ use crate::{components::{AddPreset,
                          VvkikBoard},
             models::{CreateItemRequest,
                      ItemKind,
+                     UpdateItemRequest,
                      VvkikItem},
             store::{VvkikStore,
                     use_vvkik_store}};
@@ -97,6 +98,30 @@ pub fn App() -> Element {
         });
     };
 
+    // 트리에서 행을 드래그해 새 상위 항목 위에 놓으면 그 아래 맨 뒤로 이동한다.
+    let handle_reparent = move |(item, new_parent): (VvkikItem, VvkikItem)| {
+        if store.is_busy() {
+            return;
+        }
+
+        let position = store.next_position(item.kind, Some(new_parent.id.as_str()));
+        let request = UpdateItemRequest {
+            id: item.id.clone(),
+            kind: None,
+            parent_id: Some(Some(new_parent.id.clone())),
+            title: None,
+            description: None,
+            target_value: None,
+            current_value: None,
+            unit: None,
+            position: Some(position),
+            status: None,
+        };
+        spawn(async move {
+            store.update(request).await;
+        });
+    };
+
     rsx! {
         link { rel: "stylesheet", href: CSS }
         main { class: "app",
@@ -169,7 +194,8 @@ pub fn App() -> Element {
                         on_add_child: move |preset: AddPreset| {
                             store.clear_error();
                             current_view.set(AppView::Add(Box::new(preset)));
-                        }
+                        },
+                        on_reparent: handle_reparent
                     }
                 },
                 AppView::Add(preset) => rsx! {

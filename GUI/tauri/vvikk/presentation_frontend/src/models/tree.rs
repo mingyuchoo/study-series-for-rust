@@ -118,6 +118,15 @@ pub fn count_descendants(id: &str, items: &[VvkikItem]) -> usize {
 
 pub fn has_children(id: &str, items: &[VvkikItem]) -> bool { items.iter().any(|item| item.parent_id.as_deref() == Some(id)) }
 
+/// 드래그한 항목을 `target` 위에 놓아 상위를 바꿀 수 있는지.
+/// 자기 자신·현재 부모·계층 규칙에 어긋나는 단계는 제외한다.
+/// (자손은 항상 하위 단계라 계층 규칙만으로 순환이 차단된다.)
+pub fn is_valid_drop(dragged: &VvkikItem, target: &VvkikItem) -> bool {
+    dragged.id != target.id
+        && dragged.parent_id.as_deref() != Some(target.id.as_str())
+        && dragged.kind.allowed_parent_kinds().contains(&target.kind)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -235,6 +244,23 @@ mod tests {
 
         kpi.current_value = None;
         assert_eq!(progress_text(&kpi), None);
+    }
+
+    #[test]
+    fn drop_targets_follow_hierarchy_rules() {
+        let items = sample();
+        let find = |id: &str| items.iter().find(|item| item.id == id).unwrap();
+
+        let igt = find("i1"); // 현재 부모: k1
+        assert!(is_valid_drop(igt, find("orphan")), "다른 KRA로는 이동 가능");
+        assert!(!is_valid_drop(igt, find("k1")), "현재 부모로는 이동 불가(무의미)");
+        assert!(!is_valid_drop(igt, find("vi1")), "Vision은 IGT의 부모가 될 수 없음");
+        assert!(!is_valid_drop(igt, igt), "자기 자신 불가");
+
+        let kpi = find("p1"); // 현재 부모: k1
+        assert!(is_valid_drop(kpi, find("i1")), "KPI는 IGT 아래로 이동 가능");
+        assert!(!is_valid_drop(kpi, find("k1")), "현재 부모 제외");
+        assert!(!is_valid_drop(kpi, find("v1")), "Value는 KPI의 부모가 될 수 없음");
     }
 
     #[test]

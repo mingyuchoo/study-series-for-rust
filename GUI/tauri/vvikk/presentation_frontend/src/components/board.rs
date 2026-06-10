@@ -17,6 +17,7 @@ pub struct VvkikBoardProps {
     pub on_delete: EventHandler<VvkikItem>,
     pub on_quick_add: EventHandler<QuickAddData>,
     pub on_add_child: EventHandler<AddPreset>,
+    pub on_reparent: EventHandler<(VvkikItem, VvkikItem)>,
 }
 
 /// 탭 바와 탭별 화면(전체 구조 트리 / 단계별 카드)을 배선한다.
@@ -75,7 +76,8 @@ pub fn VvkikBoard(props: VvkikBoardProps) -> Element {
                             on_edit: props.on_edit,
                             on_delete: props.on_delete,
                             on_quick_add: props.on_quick_add,
-                            on_add_child: props.on_add_child
+                            on_add_child: props.on_add_child,
+                            on_reparent: props.on_reparent
                         }
                     },
                 }

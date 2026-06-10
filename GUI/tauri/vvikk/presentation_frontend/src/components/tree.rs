@@ -11,6 +11,7 @@ use crate::models::{ItemKind,
                            count_descendants,
                            default_open,
                            has_children,
+                           is_valid_drop,
                            kpi_percent,
                            progress_text,
                            root_items,
@@ -25,14 +26,20 @@ pub struct VvkikTreeViewProps {
     pub on_delete: EventHandler<VvkikItem>,
     pub on_quick_add: EventHandler<QuickAddData>,
     pub on_add_child: EventHandler<AddPreset>,
+    /// (드래그한 항목, 새 상위 항목)
+    pub on_reparent: EventHandler<(VvkikItem, VvkikItem)>,
 }
 
-/// 전체 구조 탭: 접기/펼치기가 가능한 컴팩트 트리.
+/// 전체 구조 탭: 접기/펼치기가 가능한 컴팩트 트리. 행을 끌어 유효한
+/// 상위 항목 위에 놓으면 그 아래로 이동한다.
 pub fn VvkikTreeView(props: VvkikTreeViewProps) -> Element {
     let mut adding_value = use_signal(|| false);
     // 기본 펼침 상태에서 뒤집힌 노드 집합. 펼침 여부 = default_open XOR
     // 포함 여부라서, 항목이 추가·삭제돼도 나머지 노드의 상태가 유지된다.
     let mut toggled = use_signal(HashSet::<String>::new);
+    // 드래그 중인 항목과, 지금 드롭 대상으로 가리키는 행.
+    let drag_source = use_signal(|| None::<VvkikItem>);
+    let drop_target = use_signal(|| None::<String>);
     let roots = root_items(&props.items);
 
     let expand_all = {
@@ -69,7 +76,7 @@ pub fn VvkikTreeView(props: VvkikTreeViewProps) -> Element {
                 div { class: "tree-toolbar",
                     button { r#type: "button", class: "btn btn-sm btn-outline", onclick: expand_all, "모두 펼치기" }
                     button { r#type: "button", class: "btn btn-sm btn-outline", onclick: collapse_all, "모두 접기" }
-                    span { class: "tree-flow", "Value → Vision → KRA → IGT → KPI" }
+                    span { class: "tree-flow", "Value → Vision → KRA → IGT → KPI · 행을 끌어 새 상위 항목 위에 놓으면 이동합니다" }
                 }
             }
             for item in roots {
@@ -78,10 +85,13 @@ pub fn VvkikTreeView(props: VvkikTreeViewProps) -> Element {
                     all_items: props.items.clone(),
                     depth: 0,
                     toggled,
+                    drag_source,
+                    drop_target,
                     on_edit: props.on_edit,
                     on_delete: props.on_delete,
                     on_quick_add: props.on_quick_add,
-                    on_add_child: props.on_add_child
+                    on_add_child: props.on_add_child,
+                    on_reparent: props.on_reparent
                 }
             }
 
@@ -111,15 +121,20 @@ struct VvkikTreeNodeProps {
     all_items: Vec<VvkikItem>,
     depth: usize,
     toggled: Signal<HashSet<String>>,
+    drag_source: Signal<Option<VvkikItem>>,
+    drop_target: Signal<Option<String>>,
     on_edit: EventHandler<VvkikItem>,
     on_delete: EventHandler<VvkikItem>,
     on_quick_add: EventHandler<QuickAddData>,
     on_add_child: EventHandler<AddPreset>,
+    on_reparent: EventHandler<(VvkikItem, VvkikItem)>,
 }
 
 fn VvkikTreeNode(props: VvkikTreeNodeProps) -> Element {
     let mut quick_add_kind = use_signal(|| None::<ItemKind>);
     let mut toggled = props.toggled;
+    let mut drag_source = props.drag_source;
+    let mut drop_target = props.drop_target;
 
     let item = props.item.clone();
     let children = if props.depth >= MAX_TREE_DEPTH {
@@ -133,6 +148,20 @@ fn VvkikTreeNode(props: VvkikTreeNodeProps) -> Element {
     let progress = progress_text(&item);
     let percent = kpi_percent(&item);
     let descendant_count = count_descendants(&item.id, &props.all_items);
+
+    // 드래그 상태에 따라 자신·유효 대상·무효 대상을 시각적으로 구분한다.
+    let row_class = match drag_source.read().as_ref() {
+        | Some(dragged) if dragged.id == item.id => "tree-row dragging",
+        | Some(dragged) if is_valid_drop(dragged, &item) => {
+            if drop_target.read().as_deref() == Some(item.id.as_str()) {
+                "tree-row drop-ok drop-hover"
+            } else {
+                "tree-row drop-ok"
+            }
+        },
+        | Some(_) => "tree-row drop-dim",
+        | None => "tree-row",
+    };
 
     let toggle = {
         let item_id = item.id.clone();
@@ -153,9 +182,60 @@ fn VvkikTreeNode(props: VvkikTreeNodeProps) -> Element {
         }
     };
 
+    let handle_drag_start = {
+        let item = item.clone();
+        move |_| drag_source.set(Some(item.clone()))
+    };
+    let handle_drag_end = move |_| {
+        drag_source.set(None);
+        drop_target.set(None);
+    };
+    // prevent_default를 호출해야 브라우저가 이 행을 드롭 대상으로 받아들인다.
+    let handle_drag_over = {
+        let item = item.clone();
+        move |evt: DragEvent| {
+            let Some(dragged) = drag_source.peek().clone() else {
+                return;
+            };
+            if is_valid_drop(&dragged, &item) {
+                evt.prevent_default();
+                if drop_target.peek().as_deref() != Some(item.id.as_str()) {
+                    drop_target.set(Some(item.id.clone()));
+                }
+            }
+        }
+    };
+    let handle_drag_leave = {
+        let item_id = item.id.clone();
+        move |_| {
+            if drop_target.peek().as_deref() == Some(item_id.as_str()) {
+                drop_target.set(None);
+            }
+        }
+    };
+    let handle_drop = {
+        let item = item.clone();
+        move |evt: DragEvent| {
+            evt.prevent_default();
+            if let Some(dragged) = drag_source.peek().clone()
+                && is_valid_drop(&dragged, &item)
+            {
+                props.on_reparent.call((dragged, item.clone()));
+            }
+            drag_source.set(None);
+            drop_target.set(None);
+        }
+    };
+
     rsx! {
         div { class: "tree-node",
-            div { class: "tree-row",
+            div { class: "{row_class}",
+                draggable: true,
+                ondragstart: handle_drag_start,
+                ondragend: handle_drag_end,
+                ondragover: handle_drag_over,
+                ondragleave: handle_drag_leave,
+                ondrop: handle_drop,
                 if has_kids {
                     button {
                         r#type: "button",
@@ -253,10 +333,13 @@ fn VvkikTreeNode(props: VvkikTreeNodeProps) -> Element {
                             all_items: props.all_items.clone(),
                             depth: props.depth + 1,
                             toggled,
+                            drag_source,
+                            drop_target,
                             on_edit: props.on_edit,
                             on_delete: props.on_delete,
                             on_quick_add: props.on_quick_add,
-                            on_add_child: props.on_add_child
+                            on_add_child: props.on_add_child,
+                            on_reparent: props.on_reparent
                         }
                     }
                 }
