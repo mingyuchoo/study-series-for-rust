@@ -1,0 +1,316 @@
+#![allow(non_snake_case)]
+
+use crate::{components::{AddPreset,
+                         ItemDetail,
+                         ItemForm,
+                         ItemFormData,
+                         IvkikBoard,
+                         QuickAddData},
+            models::{CreateItemRequest,
+                     ItemKind,
+                     IvkikItem,
+                     UpdateItemRequest},
+            store::{IvkikStore,
+                    use_ivkik_store}};
+use dioxus::prelude::*;
+
+static CSS: Asset = asset!("/assets/styles.css");
+
+#[derive(Debug, Clone, PartialEq)]
+enum AppView {
+    Board,
+    Add(Box<AddPreset>),
+    /// 항목 상세 보기. 목록이 새로고침되어도 최신 항목을 보여 주도록
+    /// 스냅숏 대신 id를 들고 매 렌더마다 스토어에서 찾는다.
+    Detail(String),
+    Edit(Box<IvkikItem>),
+}
+
+pub fn App() -> Element {
+    let store: IvkikStore = use_ivkik_store();
+    let mut current_view = use_signal(|| AppView::Board);
+    let mut pending_delete = use_signal(|| None::<IvkikItem>);
+    let active_tab = use_signal(|| "dashboard".to_string());
+
+    let items = store.items;
+    let loading = store.loading;
+    let error_message = store.error;
+    let mut search_query = store.search_query;
+
+    let handle_add_item = move |form_data: ItemFormData| {
+        if store.is_busy() {
+            return;
+        }
+
+        let position = store.next_position(form_data.kind, form_data.parent_id_opt().as_deref());
+        match form_data.to_create_request(position) {
+            | Ok(request) => {
+                spawn(async move {
+                    if store.create(request).await {
+                        current_view.set(AppView::Board);
+                    }
+                });
+            },
+            | Err(message) => store.set_error(message),
+        }
+    };
+
+    let handle_quick_add = move |quick_add: QuickAddData| {
+        if store.is_busy() {
+            return;
+        }
+
+        let position = store.next_position(quick_add.kind, quick_add.parent_id.as_deref());
+        let request = CreateItemRequest {
+            kind: quick_add.kind,
+            parent_id: quick_add.parent_id,
+            title: quick_add.title,
+            description: None,
+            target_value: None,
+            current_value: None,
+            unit: None,
+            position: Some(position),
+            aggregation: Default::default(),
+        };
+        spawn(async move {
+            store.create(request).await;
+        });
+    };
+
+    let handle_edit_item = move |form_data: ItemFormData| {
+        if store.is_busy() {
+            return;
+        }
+
+        let AppView::Edit(item) = current_view.read().clone() else {
+            return;
+        };
+        match form_data.to_update_request(item.id.clone()) {
+            | Ok(request) => {
+                spawn(async move {
+                    if store.update(request).await {
+                        // 수정을 마치면 상세 보기로 돌아간다.
+                        current_view.set(AppView::Detail(item.id.clone()));
+                    }
+                });
+            },
+            | Err(message) => store.set_error(message),
+        }
+    };
+
+    let handle_delete_item = move |id: String| {
+        spawn(async move {
+            store.delete(id).await;
+        });
+    };
+
+    // 트리에서 행을 드래그해 새 상위 항목 위에 놓으면 그 아래 맨 뒤로 이동한다.
+    let handle_reparent = move |(item, new_parent): (IvkikItem, IvkikItem)| {
+        if store.is_busy() {
+            return;
+        }
+
+        let position = store.next_position(item.kind, Some(new_parent.id.as_str()));
+        let request = UpdateItemRequest {
+            id: item.id.clone(),
+            kind: None,
+            parent_id: Some(Some(new_parent.id.clone())),
+            title: None,
+            description: None,
+            target_value: None,
+            current_value: None,
+            unit: None,
+            position: Some(position),
+            status: None,
+            aggregation: None,
+        };
+        spawn(async move {
+            store.update(request).await;
+        });
+    };
+
+    rsx! {
+        link { rel: "stylesheet", href: CSS }
+        main { class: "app",
+            header { class: "app-header",
+                div { class: "brand-block",
+                    h1 { "IVKIK" }
+                    p { "Identity에서 KPI까지, 큰 그림을 실행과 피드백으로 연결합니다." }
+                }
+
+                if let AppView::Board = current_view.read().clone() {
+                    div { class: "header-actions",
+                        form {
+                            class: "search-form",
+                            onsubmit: move |evt: FormEvent| {
+                                evt.prevent_default();
+                                spawn(async move { store.search().await });
+                            },
+                            input {
+                                r#type: "text",
+                                placeholder: "Identity, Vision, KRA, IGT, KPI 검색...",
+                                value: "{search_query}",
+                                oninput: move |evt| search_query.set(evt.value())
+                            }
+                            button { r#type: "submit", class: "btn btn-secondary", "검색" }
+                            if !search_query.read().trim().is_empty() {
+                                button {
+                                    r#type: "button",
+                                    class: "btn btn-secondary",
+                                    onclick: move |_| {
+                                        spawn(async move { store.clear_search().await });
+                                    },
+                                    "초기화"
+                                }
+                            }
+                        }
+                        button {
+                            class: "btn btn-primary",
+                            onclick: move |_| {
+                                store.clear_error();
+                                // 단계 탭을 보고 있었다면 그 단계를 기본 선택한다.
+                                let kind = active_tab.read().parse::<ItemKind>().unwrap_or(ItemKind::Identity);
+                                current_view.set(AppView::Add(Box::new(AddPreset { kind, parent: None, title: String::new() })));
+                            },
+                            "새 항목"
+                        }
+                    }
+                }
+            }
+
+            if *loading.read() {
+                div { class: "loading", "로딩 중..." }
+            }
+
+            if let Some(error) = error_message.read().clone() {
+                div { class: "error-message", "{error}" }
+            }
+
+            match current_view.read().clone() {
+                AppView::Board => rsx! {
+                    IvkikBoard {
+                        items: items.read().clone(),
+                        is_filtering: !search_query.read().trim().is_empty(),
+                        active_tab,
+                        // 행 클릭은 수정이 아니라 읽기 전용 상세 보기를 연다.
+                        on_open: move |item: IvkikItem| {
+                            store.clear_error();
+                            current_view.set(AppView::Detail(item.id.clone()));
+                        },
+                        on_delete: move |item| pending_delete.set(Some(item)),
+                        on_quick_add: handle_quick_add,
+                        on_add_child: move |preset: AddPreset| {
+                            store.clear_error();
+                            current_view.set(AppView::Add(Box::new(preset)));
+                        },
+                        on_reparent: handle_reparent
+                    }
+                },
+                AppView::Add(preset) => rsx! {
+                    ItemForm {
+                        item: None,
+                        items: items.read().clone(),
+                        preset: Some(*preset),
+                        on_submit: handle_add_item,
+                        on_cancel: move |_| {
+                            store.clear_error();
+                            current_view.set(AppView::Board);
+                        }
+                    }
+                },
+                AppView::Detail(id) => {
+                    match items.read().iter().find(|item| item.id == id).cloned() {
+                        Some(item) => rsx! {
+                            ItemDetail {
+                                // 브레드크럼으로 다른 항목 상세로 건너뛸 때
+                                // 변경 이력 등이 새로 불러와지도록 강제 재마운트.
+                                key: "{item.id}",
+                                item,
+                                items: items.read().clone(),
+                                on_edit: move |target: IvkikItem| {
+                                    store.clear_error();
+                                    current_view.set(AppView::Edit(Box::new(target)));
+                                },
+                                on_delete: move |target| pending_delete.set(Some(target)),
+                                on_navigate: move |target: IvkikItem| {
+                                    store.clear_error();
+                                    current_view.set(AppView::Detail(target.id.clone()));
+                                },
+                                on_back: move |_| {
+                                    store.clear_error();
+                                    current_view.set(AppView::Board);
+                                }
+                            }
+                        },
+                        // 삭제 등으로 사라진 항목이면 보드로 안내한다.
+                        None => rsx! {
+                            div { class: "empty-state",
+                                p { "항목을 찾을 수 없습니다." }
+                                button {
+                                    r#type: "button",
+                                    class: "btn btn-secondary",
+                                    onclick: move |_| current_view.set(AppView::Board),
+                                    "목록으로"
+                                }
+                            }
+                        },
+                    }
+                },
+                AppView::Edit(item) => rsx! {
+                    ItemForm {
+                        // 브레드크럼으로 다른 항목 수정으로 건너뛸 때 폼
+                        // 시그널이 새 항목 값으로 초기화되도록 강제 재마운트.
+                        key: "{item.id}",
+                        item: Some((*item).clone()),
+                        items: items.read().clone(),
+                        on_submit: handle_edit_item,
+                        on_navigate: move |target: IvkikItem| {
+                            store.clear_error();
+                            current_view.set(AppView::Detail(target.id.clone()));
+                        },
+                        on_cancel: {
+                            let item_id = item.id.clone();
+                            move |_| {
+                                store.clear_error();
+                                current_view.set(AppView::Detail(item_id.clone()));
+                            }
+                        }
+                    }
+                }
+            }
+
+            if let Some(item) = pending_delete.read().clone() {
+                div { class: "confirm-backdrop",
+                    div { class: "confirm-dialog", role: "dialog", aria_label: "IVKIK 항목 삭제 확인",
+                        h2 { "항목 삭제" }
+                        p { "\"{item.title}\" 항목을 삭제할까요? 하위 항목도 함께 삭제됩니다." }
+                        div { class: "confirm-actions",
+                            button {
+                                r#type: "button",
+                                class: "btn btn-secondary",
+                                onclick: move |_| pending_delete.set(None),
+                                "취소"
+                            }
+                            button {
+                                r#type: "button",
+                                class: "btn btn-danger",
+                                onclick: {
+                                    let item_id = item.id.clone();
+                                    move |_| {
+                                        pending_delete.set(None);
+                                        // 상세 화면에서 그 항목을 지우면 보드로 돌아간다.
+                                        if matches!(current_view.read().clone(), AppView::Detail(id) if id == item_id) {
+                                            current_view.set(AppView::Board);
+                                        }
+                                        handle_delete_item(item_id.clone());
+                                    }
+                                },
+                                "삭제"
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
