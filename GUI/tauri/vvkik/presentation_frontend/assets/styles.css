@@ -868,13 +868,109 @@ textarea:focus {
   display: flex;
   justify-content: flex-end;
   gap: 4px;
+}
+
+/* 삭제처럼 평소에 숨겨 둘 버튼만 호버 시 노출한다. 퀵 기록 버튼은
+   가장 자주 쓰는 동작이라 항상 보인다. */
+.row-hover-btn {
   opacity: 0;
   transition: opacity 0.12s ease;
 }
 
-.kind-table tbody tr:hover .table-actions,
-.kind-table tbody tr:focus-within .table-actions {
+.kind-table tbody tr:hover .row-hover-btn,
+.kind-table tbody tr:focus-within .row-hover-btn {
   opacity: 1;
+}
+
+.quick-record-btn {
+  border-color: var(--color-hairline-strong);
+  color: var(--color-ink);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.quick-record-btn:hover {
+  border-color: var(--color-ink);
+}
+
+/* KPI 탭은 동작 컬럼에 버튼이 둘이라 폭을 넓힌다. */
+.kind-table th.col-path-kpi {
+  width: 26%;
+}
+
+.kind-table th.col-mid-kpi {
+  width: 24%;
+}
+
+.kind-table th.col-actions-kpi {
+  width: 18%;
+}
+
+/* 행 바로 아래에 펼쳐지는 측정값 입력 팝오버. */
+.record-row {
+  cursor: default;
+}
+
+.kind-table tbody tr.record-row:hover {
+  background: none;
+}
+
+.record-row td {
+  padding: 0 12px 12px;
+  white-space: normal;
+}
+
+.record-popover {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px 16px;
+  border: 1px solid var(--color-hairline);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-soft);
+}
+
+.record-popover-hint {
+  color: var(--color-body);
+  font-size: 12px;
+}
+
+.record-popover-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.record-popover-input {
+  width: 140px;
+  height: 36px;
+  background: var(--color-canvas);
+}
+
+.record-popover-unit {
+  color: var(--color-charcoal);
+  font-size: 13px;
+}
+
+/* 기록 직후 결과와 실행 취소를 보여 주는 토스트. */
+.record-toast {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 16px;
+  border: 1px solid var(--color-hairline-strong);
+  border-radius: var(--radius-full);
+  background: var(--color-canvas);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+  color: var(--color-ink);
+  font-size: 13px;
+  transform: translateX(-50%);
+  white-space: nowrap;
 }
 
 .loading {
@@ -982,7 +1078,7 @@ textarea:focus {
     display: none;
   }
 
-  .table-actions {
+  .row-hover-btn {
     opacity: 1;
   }
 
