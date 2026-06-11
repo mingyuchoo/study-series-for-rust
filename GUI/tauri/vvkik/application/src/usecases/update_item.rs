@@ -6,7 +6,8 @@ use domain::{DomainError,
              ItemKind,
              ItemPatch,
              VvkikItem,
-             VvkikRepository};
+             VvkikRepository,
+             diff_item_revisions};
 use std::sync::Arc;
 use uuid::Uuid;
 
@@ -44,12 +45,27 @@ impl UpdateItemUseCase {
         };
         validate_parent(next_kind, parent.as_ref())?;
 
+        // 상위 항목이 실제로 바뀔 때만 이전 상위 항목의 제목을 찾아 둔다.
+        let parent_changed = next_parent_id != item.parent_id;
+        let old_parent_title = match (parent_changed, item.parent_id) {
+            | (true, Some(old_parent_id)) => self.repository.get_item_by_id(old_parent_id).await?.map(|parent| parent.title),
+            | _ => None,
+        };
+        let new_parent_title = parent.as_ref().map(|parent| parent.title.clone());
+
         // 상위 항목은 검증을 거친 확정값으로 항상 덮어쓴다.
+        let before = item.clone();
         item.update(ItemPatch {
             parent_id: Some(next_parent_id),
             ..patch
         });
         let updated = self.repository.update_item(item).await?;
+
+        // 무엇이 어떻게 바뀌었는지 변경 이력으로 남긴다.
+        let revisions = diff_item_revisions(&before, &updated, old_parent_title, new_parent_title);
+        if !revisions.is_empty() {
+            self.repository.record_item_revisions(revisions).await?;
+        }
 
         // 측정 기록이 있는 KPI는 현재값이 기록의 집계 결과여야 한다.
         // 집계 방식이 바뀐 경우에도 여기서 따라잡는다.

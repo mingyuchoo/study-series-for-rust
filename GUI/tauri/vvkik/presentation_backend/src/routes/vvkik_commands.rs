@@ -13,6 +13,7 @@ pub struct AppState {
     pub record_kpi_measurement_use_case: Arc<RecordKpiMeasurementUseCase>,
     pub list_kpi_measurements_use_case: Arc<ListKpiMeasurementsUseCase>,
     pub delete_kpi_measurement_use_case: Arc<DeleteKpiMeasurementUseCase>,
+    pub list_item_revisions_use_case: Arc<ListItemRevisionsUseCase>,
 }
 
 fn parse_id(id: &str) -> Result<Uuid, ApiError> { Uuid::parse_str(id).map_err(|e| ApiError::invalid_id(format!("Invalid VVKIK item id: {e}"))) }
@@ -116,6 +117,18 @@ pub async fn list_kpi_measurements(state: State<'_, AppState>, kpi_id: String) -
         .execute(kpi_id)
         .await
         .map(|measurements| measurements.into_iter().map(measurement_to_dto).collect())
+        .map_err(domain_error_to_api)
+}
+
+#[tauri::command]
+pub async fn list_item_revisions(state: State<'_, AppState>, item_id: String) -> Result<Vec<ItemRevisionDto>, ApiError> {
+    let item_id = parse_id(&item_id)?;
+
+    state
+        .list_item_revisions_use_case
+        .execute(item_id)
+        .await
+        .map(|revisions| revisions.into_iter().map(revision_to_dto).collect())
         .map_err(domain_error_to_api)
 }
 

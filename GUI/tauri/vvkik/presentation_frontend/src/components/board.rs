@@ -14,7 +14,7 @@ pub struct VvkikBoardProps {
     pub items: Vec<VvkikItem>,
     pub is_filtering: bool,
     pub active_tab: Signal<String>,
-    pub on_edit: EventHandler<VvkikItem>,
+    pub on_open: EventHandler<VvkikItem>,
     pub on_delete: EventHandler<VvkikItem>,
     pub on_quick_add: EventHandler<QuickAddData>,
     pub on_add_child: EventHandler<AddPreset>,
@@ -79,7 +79,7 @@ pub fn VvkikBoard(props: VvkikBoardProps) -> Element {
                     VvkikDashboard {
                         items: props.items.clone(),
                         is_filtering: props.is_filtering,
-                        on_edit: props.on_edit
+                        on_open: props.on_open
                     }
                 } else {
                     match kind_tab {
@@ -87,7 +87,7 @@ pub fn VvkikBoard(props: VvkikBoardProps) -> Element {
                             VvkikKindView {
                                 kind,
                                 items: props.items.clone(),
-                                on_edit: props.on_edit,
+                                on_open: props.on_open,
                                 on_delete: props.on_delete,
                                 on_data_change: props.on_data_change
                             }
@@ -95,7 +95,7 @@ pub fn VvkikBoard(props: VvkikBoardProps) -> Element {
                         None => rsx! {
                             VvkikTreeView {
                                 items: props.items.clone(),
-                                on_edit: props.on_edit,
+                                on_open: props.on_open,
                                 on_delete: props.on_delete,
                                 on_quick_add: props.on_quick_add,
                                 on_add_child: props.on_add_child,

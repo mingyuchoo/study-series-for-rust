@@ -22,7 +22,7 @@ use std::collections::HashSet;
 #[derive(Props, Clone, PartialEq)]
 pub struct VvkikTreeViewProps {
     pub items: Vec<VvkikItem>,
-    pub on_edit: EventHandler<VvkikItem>,
+    pub on_open: EventHandler<VvkikItem>,
     pub on_delete: EventHandler<VvkikItem>,
     pub on_quick_add: EventHandler<QuickAddData>,
     pub on_add_child: EventHandler<AddPreset>,
@@ -87,7 +87,7 @@ pub fn VvkikTreeView(props: VvkikTreeViewProps) -> Element {
                     toggled,
                     drag_source,
                     drop_target,
-                    on_edit: props.on_edit,
+                    on_open: props.on_open,
                     on_delete: props.on_delete,
                     on_quick_add: props.on_quick_add,
                     on_add_child: props.on_add_child,
@@ -123,7 +123,7 @@ struct VvkikTreeNodeProps {
     toggled: Signal<HashSet<String>>,
     drag_source: Signal<Option<VvkikItem>>,
     drop_target: Signal<Option<String>>,
-    on_edit: EventHandler<VvkikItem>,
+    on_open: EventHandler<VvkikItem>,
     on_delete: EventHandler<VvkikItem>,
     on_quick_add: EventHandler<QuickAddData>,
     on_add_child: EventHandler<AddPreset>,
@@ -287,7 +287,7 @@ fn VvkikTreeNode(props: VvkikTreeNodeProps) -> Element {
                         class: "btn row-btn",
                         onclick: {
                             let item = item.clone();
-                            move |_| props.on_edit.call(item.clone())
+                            move |_| props.on_open.call(item.clone())
                         },
                         "수정"
                     }
@@ -334,7 +334,7 @@ fn VvkikTreeNode(props: VvkikTreeNodeProps) -> Element {
                             toggled,
                             drag_source,
                             drop_target,
-                            on_edit: props.on_edit,
+                            on_open: props.on_open,
                             on_delete: props.on_delete,
                             on_quick_add: props.on_quick_add,
                             on_add_child: props.on_add_child,

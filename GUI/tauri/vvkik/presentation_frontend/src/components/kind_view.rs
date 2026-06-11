@@ -18,7 +18,7 @@ use dioxus::prelude::*;
 pub struct VvkikKindViewProps {
     pub kind: ItemKind,
     pub items: Vec<VvkikItem>,
-    pub on_edit: EventHandler<VvkikItem>,
+    pub on_open: EventHandler<VvkikItem>,
     pub on_delete: EventHandler<VvkikItem>,
     /// 퀵 기록으로 측정값이 추가·삭제되면 호출된다. 목록이 새 현재값을
     /// 반영하게 한다.
@@ -241,7 +241,7 @@ pub fn VvkikKindView(props: VvkikKindViewProps) -> Element {
                                     tr {
                                         // 행 전체가 수정 진입점이다. 행 안의 버튼들만
                                         // 전파를 차단해 행 클릭과 분리한다.
-                                        onclick: move |_| props.on_edit.call(row_item.clone()),
+                                        onclick: move |_| props.on_open.call(row_item.clone()),
                                         td { class: title_class, title: "{item.title}", "{item.title}" }
                                         if is_kpi {
                                             td { class: "cell-kpi",

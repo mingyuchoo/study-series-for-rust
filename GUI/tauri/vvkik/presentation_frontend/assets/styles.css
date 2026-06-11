@@ -228,6 +228,163 @@ textarea:focus {
   text-align: center;
 }
 
+/* 항목 상세 보기: 기준 문서를 읽는 화면. 폼과 같은 카드 틀을 쓴다. */
+.item-detail {
+  max-width: 640px;
+  margin: 0 auto;
+  padding: 32px;
+  border: 1px solid var(--color-hairline);
+  border-radius: var(--radius-lg);
+  background: var(--color-canvas);
+}
+
+.detail-heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 8px;
+}
+
+.detail-title-block {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.detail-title-block h2 {
+  margin: 0;
+  overflow: hidden;
+  color: var(--color-ink);
+  font-family: var(--font-rounded);
+  font-size: 26px;
+  font-weight: 500;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.detail-actions {
+  display: flex;
+  flex: none;
+  gap: 6px;
+}
+
+.detail-description {
+  margin: 12px 0 0;
+  color: var(--color-charcoal);
+  font-size: 15px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+}
+
+.detail-description.empty {
+  color: var(--color-mute);
+}
+
+.detail-progress {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-top: 20px;
+  padding: 14px 16px;
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-soft);
+}
+
+.detail-kpi-track {
+  width: 120px;
+  height: 5px;
+}
+
+.detail-progress-text {
+  color: var(--color-ink);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.detail-progress-hint {
+  color: var(--color-body);
+  font-size: 12px;
+}
+
+.detail-revisions {
+  margin-top: 28px;
+  padding-top: 18px;
+  border-top: 1px solid var(--color-hairline);
+}
+
+.detail-revisions h3 {
+  margin: 0 0 10px;
+  color: var(--color-ink);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.revision-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.revision-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 7px 0;
+  border-bottom: 1px solid var(--color-hairline);
+  font-size: 13px;
+}
+
+.revision-list li:last-child {
+  border-bottom: none;
+}
+
+.revision-change {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+}
+
+.revision-field {
+  color: var(--color-body);
+}
+
+.revision-old {
+  overflow: hidden;
+  max-width: 180px;
+  color: var(--color-charcoal);
+  text-decoration: line-through;
+  text-decoration-color: var(--color-mute);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.revision-arrow {
+  color: var(--color-mute);
+}
+
+.revision-new {
+  overflow: hidden;
+  max-width: 180px;
+  color: var(--color-ink);
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.revision-date {
+  flex: none;
+  color: var(--color-mute);
+  font-size: 12px;
+}
+
 .form-error,
 .error-message {
   border: 1px solid #ffd7d4;
@@ -1085,6 +1242,7 @@ textarea:focus {
   }
 
   .item-form,
+  .item-detail,
   .confirm-dialog {
     padding: 24px;
   }

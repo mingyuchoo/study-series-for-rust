@@ -1,5 +1,6 @@
 use crate::models::{ApiError,
                     CreateItemRequest,
+                    ItemRevision,
                     KpiMeasurement,
                     RecordKpiMeasurementRequest,
                     UpdateItemRequest,
@@ -112,6 +113,10 @@ impl VvkikService {
 
     pub async fn list_kpi_measurements(kpi_id: String) -> Result<Vec<KpiMeasurement>, String> {
         call("list_kpi_measurements", &serde_json::json!({ "kpiId": kpi_id })).await
+    }
+
+    pub async fn list_item_revisions(item_id: String) -> Result<Vec<ItemRevision>, String> {
+        call("list_item_revisions", &serde_json::json!({ "itemId": item_id })).await
     }
 
     pub async fn delete_kpi_measurement(kpi_id: String, measurement_id: String) -> Result<(), String> {

@@ -1,6 +1,7 @@
 #![allow(non_snake_case)]
 
 use crate::{components::{AddPreset,
+                         ItemDetail,
                          ItemForm,
                          ItemFormData,
                          QuickAddData,
@@ -19,6 +20,9 @@ static CSS: Asset = asset!("/assets/styles.css");
 enum AppView {
     Board,
     Add(Box<AddPreset>),
+    /// 항목 상세 보기. 목록이 새로고침되어도 최신 항목을 보여 주도록
+    /// 스냅숏 대신 id를 들고 매 렌더마다 스토어에서 찾는다.
+    Detail(String),
     Edit(Box<VvkikItem>),
 }
 
@@ -85,7 +89,8 @@ pub fn App() -> Element {
             | Ok(request) => {
                 spawn(async move {
                     if store.update(request).await {
-                        current_view.set(AppView::Board);
+                        // 수정을 마치면 상세 보기로 돌아간다.
+                        current_view.set(AppView::Detail(item.id.clone()));
                     }
                 });
             },
@@ -187,9 +192,10 @@ pub fn App() -> Element {
                         items: items.read().clone(),
                         is_filtering: !search_query.read().trim().is_empty(),
                         active_tab,
-                        on_edit: move |item| {
+                        // 행 클릭은 수정이 아니라 읽기 전용 상세 보기를 연다.
+                        on_open: move |item: VvkikItem| {
                             store.clear_error();
-                            current_view.set(AppView::Edit(Box::new(item)));
+                            current_view.set(AppView::Detail(item.id.clone()));
                         },
                         on_delete: move |item| pending_delete.set(Some(item)),
                         on_quick_add: handle_quick_add,
@@ -217,6 +223,47 @@ pub fn App() -> Element {
                         }
                     }
                 },
+                AppView::Detail(id) => {
+                    match items.read().iter().find(|item| item.id == id).cloned() {
+                        Some(item) => rsx! {
+                            ItemDetail {
+                                // 브레드크럼으로 다른 항목 상세로 건너뛸 때
+                                // 변경 이력 등이 새로 불러와지도록 강제 재마운트.
+                                key: "{item.id}",
+                                item,
+                                items: items.read().clone(),
+                                on_edit: move |target: VvkikItem| {
+                                    store.clear_error();
+                                    current_view.set(AppView::Edit(Box::new(target)));
+                                },
+                                on_delete: move |target| pending_delete.set(Some(target)),
+                                on_navigate: move |target: VvkikItem| {
+                                    store.clear_error();
+                                    current_view.set(AppView::Detail(target.id.clone()));
+                                },
+                                on_back: move |_| {
+                                    store.clear_error();
+                                    current_view.set(AppView::Board);
+                                },
+                                on_data_change: move |_| {
+                                    spawn(async move { store.refresh().await });
+                                }
+                            }
+                        },
+                        // 삭제 등으로 사라진 항목이면 보드로 안내한다.
+                        None => rsx! {
+                            div { class: "empty-state",
+                                p { "항목을 찾을 수 없습니다." }
+                                button {
+                                    r#type: "button",
+                                    class: "btn btn-secondary",
+                                    onclick: move |_| current_view.set(AppView::Board),
+                                    "목록으로"
+                                }
+                            }
+                        },
+                    }
+                },
                 AppView::Edit(item) => rsx! {
                     ItemForm {
                         // 브레드크럼으로 다른 항목 수정으로 건너뛸 때 폼
@@ -225,18 +272,16 @@ pub fn App() -> Element {
                         item: Some((*item).clone()),
                         items: items.read().clone(),
                         on_submit: handle_edit_item,
-                        // 측정 기록이 추가·삭제되면 목록의 현재값·진행률을
-                        // 새로 불러온다.
-                        on_data_change: move |_| {
-                            spawn(async move { store.refresh().await });
-                        },
                         on_navigate: move |target: VvkikItem| {
                             store.clear_error();
-                            current_view.set(AppView::Edit(Box::new(target)));
+                            current_view.set(AppView::Detail(target.id.clone()));
                         },
-                        on_cancel: move |_| {
-                            store.clear_error();
-                            current_view.set(AppView::Board);
+                        on_cancel: {
+                            let item_id = item.id.clone();
+                            move |_| {
+                                store.clear_error();
+                                current_view.set(AppView::Detail(item_id.clone()));
+                            }
                         }
                     }
                 }
@@ -261,6 +306,10 @@ pub fn App() -> Element {
                                     let item_id = item.id.clone();
                                     move |_| {
                                         pending_delete.set(None);
+                                        // 상세 화면에서 그 항목을 지우면 보드로 돌아간다.
+                                        if matches!(current_view.read().clone(), AppView::Detail(id) if id == item_id) {
+                                            current_view.set(AppView::Board);
+                                        }
                                         handle_delete_item(item_id.clone());
                                     }
                                 },

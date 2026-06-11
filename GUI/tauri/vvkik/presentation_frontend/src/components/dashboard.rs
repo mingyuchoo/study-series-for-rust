@@ -14,7 +14,7 @@ use dioxus::prelude::*;
 pub struct VvkikDashboardProps {
     pub items: Vec<VvkikItem>,
     pub is_filtering: bool,
-    pub on_edit: EventHandler<VvkikItem>,
+    pub on_open: EventHandler<VvkikItem>,
 }
 
 /// KPI 목록 한 줄을 그리는 데 필요한 값 묶음.
@@ -122,7 +122,7 @@ pub fn VvkikDashboard(props: VvkikDashboardProps) -> Element {
                                     button {
                                         r#type: "button",
                                         class: "dash-kpi-row",
-                                        onclick: move |_| props.on_edit.call(row_item.clone()),
+                                        onclick: move |_| props.on_open.call(row_item.clone()),
                                         div { class: "dash-kpi-info",
                                             span { class: "dash-kpi-title", "{item.title}" }
                                             span { class: "dash-kpi-path", "{path_display}" }

@@ -5,11 +5,13 @@
 //! 변환한다.
 
 pub use contracts::{CreateItemRequest,
+                    ItemRevisionDto,
                     KpiMeasurementDto,
                     RecordKpiMeasurementRequest,
                     UpdateItemRequest,
                     VvkikItemDto};
-use domain::{KpiMeasurement,
+use domain::{ItemRevision,
+             KpiMeasurement,
              VvkikItem};
 
 pub fn item_to_dto(item: VvkikItem) -> VvkikItemDto {
@@ -37,5 +39,16 @@ pub fn measurement_to_dto(measurement: KpiMeasurement) -> KpiMeasurementDto {
         value: measurement.value,
         measured_at: measurement.measured_at.to_rfc3339(),
         note: measurement.note,
+    }
+}
+
+pub fn revision_to_dto(revision: ItemRevision) -> ItemRevisionDto {
+    ItemRevisionDto {
+        id: revision.id.to_string(),
+        item_id: revision.item_id.to_string(),
+        field: revision.field,
+        old_value: revision.old_value,
+        new_value: revision.new_value,
+        changed_at: revision.changed_at.to_rfc3339(),
     }
 }

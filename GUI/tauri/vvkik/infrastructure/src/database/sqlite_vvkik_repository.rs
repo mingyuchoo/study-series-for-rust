@@ -3,6 +3,7 @@ use chrono::{DateTime,
              Utc};
 use domain::{DomainError,
              ItemKind,
+             ItemRevision,
              ItemStatus,
              KpiAggregation,
              KpiMeasurement,
@@ -52,6 +53,17 @@ fn row_to_measurement(row: &SqliteRow) -> Result<KpiMeasurement, DomainError> {
         value: row.get("value"),
         measured_at: parse_datetime(row.get("measured_at"))?,
         note: row.get("note"),
+    })
+}
+
+fn row_to_revision(row: &SqliteRow) -> Result<ItemRevision, DomainError> {
+    Ok(ItemRevision {
+        id: Uuid::parse_str(row.get("id")).map_err(|e| DomainError::DatabaseError(e.to_string()))?,
+        item_id: Uuid::parse_str(row.get("item_id")).map_err(|e| DomainError::DatabaseError(e.to_string()))?,
+        field: row.get("field"),
+        old_value: row.get("old_value"),
+        new_value: row.get("new_value"),
+        changed_at: parse_datetime(row.get("changed_at"))?,
     })
 }
 
@@ -126,6 +138,21 @@ impl SqliteVvkikRepository {
         .execute(&self.pool)
         .await?;
 
+        sqlx::query(
+            r#"
+            CREATE TABLE IF NOT EXISTS item_revisions (
+                id TEXT PRIMARY KEY,
+                item_id TEXT NOT NULL REFERENCES vvkik_items(id) ON DELETE CASCADE,
+                field TEXT NOT NULL,
+                old_value TEXT,
+                new_value TEXT,
+                changed_at TEXT NOT NULL
+            )
+            "#,
+        )
+        .execute(&self.pool)
+        .await?;
+
         sqlx::query("CREATE INDEX IF NOT EXISTS idx_vvkik_items_parent ON vvkik_items(parent_id)")
             .execute(&self.pool)
             .await?;
@@ -133,6 +160,9 @@ impl SqliteVvkikRepository {
             .execute(&self.pool)
             .await?;
         sqlx::query("CREATE INDEX IF NOT EXISTS idx_kpi_measurements_kpi ON kpi_measurements(kpi_id, measured_at)")
+            .execute(&self.pool)
+            .await?;
+        sqlx::query("CREATE INDEX IF NOT EXISTS idx_item_revisions_item ON item_revisions(item_id, changed_at)")
             .execute(&self.pool)
             .await?;
 
@@ -324,6 +354,45 @@ impl VvkikRepository for SqliteVvkikRepository {
 
         Ok(())
     }
+
+    async fn record_item_revisions(&self, revisions: Vec<ItemRevision>) -> Result<(), DomainError> {
+        for revision in revisions {
+            sqlx::query(
+                r#"
+                INSERT INTO item_revisions (id, item_id, field, old_value, new_value, changed_at)
+                VALUES (?, ?, ?, ?, ?, ?)
+                "#,
+            )
+            .bind(revision.id.to_string())
+            .bind(revision.item_id.to_string())
+            .bind(&revision.field)
+            .bind(&revision.old_value)
+            .bind(&revision.new_value)
+            .bind(revision.changed_at.to_rfc3339())
+            .execute(&self.pool)
+            .await
+            .map_err(|e| DomainError::DatabaseError(e.to_string()))?;
+        }
+
+        Ok(())
+    }
+
+    async fn list_item_revisions(&self, item_id: Uuid) -> Result<Vec<ItemRevision>, DomainError> {
+        let rows = sqlx::query(
+            r#"
+            SELECT id, item_id, field, old_value, new_value, changed_at
+            FROM item_revisions
+            WHERE item_id = ?
+            ORDER BY changed_at DESC, field
+            "#,
+        )
+        .bind(item_id.to_string())
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| DomainError::DatabaseError(e.to_string()))?;
+
+        rows.iter().map(row_to_revision).collect()
+    }
 }
 
 #[cfg(test)]
@@ -473,6 +542,39 @@ mod tests {
             .await
             .expect("measurement should be deleted");
         assert!(repository.list_kpi_measurements(kpi.id).await.unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn records_and_lists_item_revisions_newest_first() {
+        let repository = repository().await;
+        let item = repository
+            .create_item(VvkikItem::new(domain::NewVvkikItem {
+                kind: ItemKind::Kpi,
+                parent_id: None,
+                title: "Monthly commits".to_string(),
+                description: None,
+                target_value: Some(40.0),
+                current_value: None,
+                unit: Some("회".to_string()),
+                position: 0,
+                aggregation: KpiAggregation::Sum,
+            }))
+            .await
+            .expect("kpi should be created");
+
+        let first = ItemRevision::new(item.id, "target_value", Some("40".to_string()), Some("60".to_string()), Utc::now());
+        let second = ItemRevision::new(item.id, "title", Some("Monthly commits".to_string()), Some("Weekly commits".to_string()), Utc::now() + chrono::Duration::seconds(1));
+        repository
+            .record_item_revisions(vec![first.clone(), second.clone()])
+            .await
+            .expect("revisions should be recorded");
+
+        let revisions = repository.list_item_revisions(item.id).await.expect("revisions should be listed");
+        assert_eq!(revisions, vec![second, first]);
+
+        // 항목을 지우면 이력도 함께 사라진다(ON DELETE CASCADE).
+        repository.delete(item.id).await.expect("item should be deleted");
+        assert!(repository.list_item_revisions(item.id).await.unwrap().is_empty());
     }
 
     #[tokio::test]

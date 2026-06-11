@@ -4,6 +4,7 @@
 pub use contracts::{ApiError,
                     CreateItemRequest,
                     ItemKind,
+                    ItemRevisionDto as ItemRevision,
                     ItemStatus,
                     KpiAggregation,
                     KpiMeasurementDto as KpiMeasurement,
@@ -35,6 +36,42 @@ pub fn aggregation_description(aggregation: KpiAggregation) -> &'static str {
         | KpiAggregation::Latest => "가장 최근 기록값을 현재값으로 사용 (체지방률, 중량 등 수준 지표)",
         | KpiAggregation::Sum => "기록값을 모두 더해 현재값으로 사용 (커밋 수, 거리 등 누적 지표)",
         | KpiAggregation::Average => "기록값의 평균을 현재값으로 사용 (수면 시간 등 평균 지표)",
+    }
+}
+
+/// 변경 이력의 와이어 필드 이름 → 화면 레이블.
+pub fn revision_field_label(field: &str) -> &'static str {
+    match field {
+        | "kind" => "단계",
+        | "parent" => "상위 항목",
+        | "title" => "제목",
+        | "description" => "설명",
+        | "target_value" => "목표값",
+        | "unit" => "단위",
+        | "status" => "상태",
+        | "aggregation" => "집계 방식",
+        | _ => "기타",
+    }
+}
+
+/// 변경 이력 값의 화면 표기. enum 필드는 와이어 값(latest 등)을
+/// 화면 레이블로 바꾸고, 빈 값은 "없음"으로 보여 준다.
+pub fn revision_value_label(field: &str, value: Option<&str>) -> String {
+    let Some(value) = value else {
+        return "없음".to_string();
+    };
+
+    match field {
+        | "kind" => value.parse::<ItemKind>().map(|kind| kind.label().to_string()).unwrap_or_else(|_| value.to_string()),
+        | "status" => value
+            .parse::<ItemStatus>()
+            .map(|status| status_label(status).to_string())
+            .unwrap_or_else(|_| value.to_string()),
+        | "aggregation" => value
+            .parse::<KpiAggregation>()
+            .map(|aggregation| aggregation_label(aggregation).to_string())
+            .unwrap_or_else(|_| value.to_string()),
+        | _ => value.to_string(),
     }
 }
 

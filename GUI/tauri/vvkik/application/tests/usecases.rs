@@ -3,6 +3,7 @@
 use application::{CreateItemUseCase,
                   DeleteItemUseCase,
                   DeleteKpiMeasurementUseCase,
+                  ListItemRevisionsUseCase,
                   ListItemsUseCase,
                   ListKpiMeasurementsUseCase,
                   RecordKpiMeasurementUseCase,
@@ -12,6 +13,7 @@ use async_trait::async_trait;
 use domain::{DomainError,
              ItemKind,
              ItemPatch,
+             ItemRevision,
              KpiAggregation,
              KpiMeasurement,
              NewVvkikItem,
@@ -26,6 +28,7 @@ use uuid::Uuid;
 struct MockVvkikRepository {
     items: Mutex<HashMap<Uuid, VvkikItem>>,
     measurements: Mutex<HashMap<Uuid, Vec<KpiMeasurement>>>,
+    revisions: Mutex<Vec<ItemRevision>>,
 }
 
 impl MockVvkikRepository {
@@ -95,6 +98,24 @@ impl VvkikRepository for MockVvkikRepository {
             measurements.retain(|measurement| measurement.id != measurement_id);
         }
         Ok(())
+    }
+
+    async fn record_item_revisions(&self, revisions: Vec<ItemRevision>) -> Result<(), DomainError> {
+        self.revisions.lock().unwrap().extend(revisions);
+        Ok(())
+    }
+
+    async fn list_item_revisions(&self, item_id: Uuid) -> Result<Vec<ItemRevision>, DomainError> {
+        let mut revisions: Vec<ItemRevision> = self
+            .revisions
+            .lock()
+            .unwrap()
+            .iter()
+            .filter(|revision| revision.item_id == item_id)
+            .cloned()
+            .collect();
+        revisions.sort_by(|a, b| b.changed_at.cmp(&a.changed_at));
+        Ok(revisions)
     }
 }
 
@@ -209,6 +230,49 @@ async fn update_mutates_existing_item() {
     assert_eq!(updated.description, Some("Build a calm operating system".to_string()));
     assert_eq!(updated.position, 3);
     assert!(updated.updated_at >= created.updated_at);
+}
+
+#[tokio::test]
+async fn update_records_revisions_for_changed_fields_only() {
+    let repository = MockVvkikRepository::arc();
+    let created = CreateItemUseCase::new(repository.clone())
+        .execute(draft(ItemKind::Value, None, "Freedom"))
+        .await
+        .expect("item should be created");
+
+    let update = UpdateItemUseCase::new(repository.clone());
+    update
+        .execute(
+            created.id,
+            ItemPatch {
+                title: Some("Creative freedom".to_string()),
+                description: Some("Calm operating system".to_string()),
+                ..ItemPatch::default()
+            },
+        )
+        .await
+        .expect("item should be updated");
+
+    let revisions = ListItemRevisionsUseCase::new(repository.clone())
+        .execute(created.id)
+        .await
+        .expect("revisions should be listed");
+    let mut fields: Vec<&str> = revisions.iter().map(|revision| revision.field.as_str()).collect();
+    fields.sort_unstable();
+    assert_eq!(fields, vec!["description", "title"]);
+
+    // 아무것도 안 바뀐 수정은 이력을 남기지 않는다.
+    update
+        .execute(
+            created.id,
+            ItemPatch {
+                title: Some("Creative freedom".to_string()),
+                ..ItemPatch::default()
+            },
+        )
+        .await
+        .expect("no-op update should succeed");
+    assert_eq!(ListItemRevisionsUseCase::new(repository).execute(created.id).await.unwrap().len(), 2);
 }
 
 #[tokio::test]

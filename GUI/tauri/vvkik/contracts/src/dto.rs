@@ -69,3 +69,16 @@ pub struct RecordKpiMeasurementRequest {
     pub value: f64,
     pub note: Option<String>,
 }
+
+/// 항목 정의 변경 이력 한 건. `field`는 와이어 필드 이름(kind, parent,
+/// title, description, target_value, unit, status, aggregation)이고,
+/// 화면 레이블은 프런트엔드가 매긴다.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct ItemRevisionDto {
+    pub id: String,
+    pub item_id: String,
+    pub field: String,
+    pub old_value: Option<String>,
+    pub new_value: Option<String>,
+    pub changed_at: String,
+}

@@ -1,17 +1,17 @@
 #![allow(non_snake_case)]
 
-use super::kpi_measurements::KpiMeasurementPanel;
-use crate::models::{CreateItemRequest,
-                    ItemKind,
-                    ItemStatus,
-                    KpiAggregation,
-                    UpdateItemRequest,
-                    VvkikItem,
-                    aggregation_description,
-                    aggregation_label,
-                    kind_description,
-                    status_label,
-                    tree::parent_chain};
+use crate::{models::{CreateItemRequest,
+                     ItemKind,
+                     ItemStatus,
+                     KpiAggregation,
+                     UpdateItemRequest,
+                     VvkikItem,
+                     aggregation_description,
+                     aggregation_label,
+                     kind_description,
+                     status_label,
+                     tree::parent_chain},
+            services::VvkikService};
 use dioxus::prelude::*;
 
 /// 폼을 여는 시점의 문맥. `parent`가 `Some`이면 트리에서 "+ 하위 추가"로
@@ -31,13 +31,9 @@ pub struct ItemFormProps {
     pub preset: Option<AddPreset>,
     pub on_submit: EventHandler<ItemFormData>,
     pub on_cancel: EventHandler<()>,
-    /// 브레드크럼에서 조상을 클릭하면 그 항목의 수정 화면으로 이동한다.
+    /// 브레드크럼에서 조상을 클릭하면 그 항목의 상세 화면으로 이동한다.
     #[props(default)]
     pub on_navigate: EventHandler<VvkikItem>,
-    /// 폼 제출과 별개로 데이터가 바뀌었을 때(측정 기록 추가·삭제)
-    /// 호출된다.
-    #[props(default)]
-    pub on_data_change: EventHandler<()>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -136,8 +132,21 @@ pub fn ItemForm(props: ItemFormProps) -> Element {
     let mut status = use_signal(|| props.item.as_ref().map(|item| item.status).unwrap_or(ItemStatus::Active));
     let mut aggregation = use_signal(|| props.item.as_ref().map(|item| item.aggregation).unwrap_or_default());
     // 측정 기록이 있는 KPI는 현재값이 자동 집계되므로 입력을 잠근다.
-    let has_measurements = use_signal(|| false);
+    // 실적 기록 자체는 상세 화면이 담당하고, 폼은 잠금 여부만 조회한다.
+    let mut has_measurements = use_signal(|| false);
     let mut form_error = use_signal(|| None::<String>);
+
+    let measurement_kpi_id = props.item.as_ref().filter(|item| item.kind == ItemKind::Kpi).map(|item| item.id.clone());
+    use_effect(move || {
+        let Some(kpi_id) = measurement_kpi_id.clone() else {
+            return;
+        };
+        spawn(async move {
+            if let Ok(measurements) = VvkikService::list_kpi_measurements(kpi_id).await {
+                has_measurements.set(!measurements.is_empty());
+            }
+        });
+    });
 
     let is_edit = props.item.is_some();
     // 트리에서 하위 추가로 진입하면 단계와 상위 항목이 이미 결정되어 있다.
@@ -215,7 +224,7 @@ pub fn ItemForm(props: ItemFormProps) -> Element {
                                         button {
                                             r#type: "button",
                                             class: "breadcrumb-link",
-                                            title: "{ancestor_kind} 수정으로 이동",
+                                            title: "{ancestor_kind} 상세로 이동",
                                             onclick: move |_| props.on_navigate.call(ancestor.clone()),
                                             "{ancestor_title}"
                                         }
@@ -361,16 +370,6 @@ pub fn ItemForm(props: ItemFormProps) -> Element {
                         span { class: "field-hint", "{aggregation_description(*aggregation.read())}" }
                     }
 
-                    if let Some(item) = props.item.as_ref() {
-                        KpiMeasurementPanel {
-                            kpi_id: item.id.clone(),
-                            aggregation: item.aggregation,
-                            unit: item.unit.clone(),
-                            has_measurements,
-                            current_value,
-                            on_data_change: props.on_data_change
-                        }
-                    }
                 }
 
                 if is_edit {
