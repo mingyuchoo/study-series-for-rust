@@ -1,17 +1,16 @@
 #![allow(non_snake_case)]
 
-use crate::{models::{CreateItemRequest,
-                     ItemKind,
-                     ItemStatus,
-                     IvkikItem,
-                     KpiAggregation,
-                     UpdateItemRequest,
-                     aggregation_description,
-                     aggregation_label,
-                     kind_description,
-                     status_label,
-                     tree::parent_chain},
-            services::IvkikService};
+use crate::models::{CreateItemRequest,
+                    ItemKind,
+                    ItemStatus,
+                    IvkikItem,
+                    KpiAggregation,
+                    UpdateItemRequest,
+                    aggregation_description,
+                    aggregation_label,
+                    kind_description,
+                    status_label,
+                    tree::parent_chain};
 use dioxus::prelude::*;
 
 /// 폼을 여는 시점의 문맥. `parent`가 `Some`이면 트리에서 "+ 하위 추가"로
@@ -43,7 +42,6 @@ pub struct ItemFormData {
     pub title: String,
     pub description: String,
     pub target_value: String,
-    pub current_value: String,
     pub unit: String,
     pub status: ItemStatus,
     pub aggregation: KpiAggregation,
@@ -74,7 +72,8 @@ impl ItemFormData {
             title: self.title.trim().to_string(),
             description: blank_to_none(&self.description),
             target_value: parse_optional_f64(&self.target_value, "목표값")?,
-            current_value: parse_optional_f64(&self.current_value, "현재값")?,
+            // 현재값은 실적 기록으로만 집계되므로 폼에서 받지 않는다.
+            current_value: None,
             unit: blank_to_none(&self.unit),
             position: Some(position),
             aggregation: self.aggregation,
@@ -91,7 +90,8 @@ impl ItemFormData {
             title: Some(self.title.trim().to_string()),
             description: Some(self.description.trim().to_string()),
             target_value: Some(parse_optional_f64(&self.target_value, "목표값")?),
-            current_value: Some(parse_optional_f64(&self.current_value, "현재값")?),
+            // None이면 백엔드가 현재값을 건드리지 않는다(실적 기록 집계값 보존).
+            current_value: None,
             unit: Some(self.unit.trim().to_string()),
             position: None,
             status: Some(self.status),
@@ -127,26 +127,10 @@ pub fn ItemForm(props: ItemFormProps) -> Element {
     let mut title = use_signal(|| initial_title);
     let mut description = use_signal(|| props.item.as_ref().and_then(|item| item.description.clone()).unwrap_or_default());
     let mut target_value = use_signal(|| props.item.as_ref().map(|item| number_to_string(item.target_value)).unwrap_or_default());
-    let mut current_value = use_signal(|| props.item.as_ref().map(|item| number_to_string(item.current_value)).unwrap_or_default());
     let mut unit = use_signal(|| props.item.as_ref().and_then(|item| item.unit.clone()).unwrap_or_default());
     let mut status = use_signal(|| props.item.as_ref().map(|item| item.status).unwrap_or(ItemStatus::Active));
     let mut aggregation = use_signal(|| props.item.as_ref().map(|item| item.aggregation).unwrap_or_default());
-    // 측정 기록이 있는 KPI는 현재값이 자동 집계되므로 입력을 잠근다.
-    // 실적 기록 자체는 상세 화면이 담당하고, 폼은 잠금 여부만 조회한다.
-    let mut has_measurements = use_signal(|| false);
     let mut form_error = use_signal(|| None::<String>);
-
-    let measurement_kpi_id = props.item.as_ref().filter(|item| item.kind == ItemKind::Kpi).map(|item| item.id.clone());
-    use_effect(move || {
-        let Some(kpi_id) = measurement_kpi_id.clone() else {
-            return;
-        };
-        spawn(async move {
-            if let Ok(measurements) = IvkikService::list_kpi_measurements(kpi_id).await {
-                has_measurements.set(!measurements.is_empty());
-            }
-        });
-    });
 
     let is_edit = props.item.is_some();
     // 트리에서 하위 추가로 진입하면 단계와 상위 항목이 이미 결정되어 있다.
@@ -187,7 +171,6 @@ pub fn ItemForm(props: ItemFormProps) -> Element {
             title: title.read().clone(),
             description: description.read().clone(),
             target_value: target_value.read().clone(),
-            current_value: current_value.read().clone(),
             unit: unit.read().clone(),
             status: *status.read(),
             aggregation: *aggregation.read(),
@@ -317,20 +300,6 @@ pub fn ItemForm(props: ItemFormProps) -> Element {
                 if selected_kind == ItemKind::Kpi {
                     div { class: "form-grid compact",
                         div { class: "form-group",
-                            label { r#for: "current_value", "현재값" }
-                            input {
-                                id: "current_value",
-                                r#type: "number",
-                                step: "any",
-                                disabled: *has_measurements.read(),
-                                value: "{current_value}",
-                                oninput: move |evt| current_value.set(evt.value())
-                            }
-                            if *has_measurements.read() {
-                                span { class: "field-hint", "실적 기록에서 자동 집계됩니다." }
-                            }
-                        }
-                        div { class: "form-group",
                             label { r#for: "target_value", "목표값" }
                             input {
                                 id: "target_value",
@@ -351,6 +320,7 @@ pub fn ItemForm(props: ItemFormProps) -> Element {
                             }
                         }
                     }
+                    span { class: "field-hint", "현재값은 실적 기록을 추가하면 집계 방식에 따라 자동 계산됩니다." }
 
                     div { class: "form-group",
                         label { "집계 방식" }
