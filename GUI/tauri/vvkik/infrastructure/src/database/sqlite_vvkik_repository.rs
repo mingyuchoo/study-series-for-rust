@@ -344,6 +344,21 @@ impl VvkikRepository for SqliteVvkikRepository {
         rows.iter().map(row_to_measurement).collect()
     }
 
+    async fn list_all_kpi_measurements(&self) -> Result<Vec<KpiMeasurement>, DomainError> {
+        let rows = sqlx::query(
+            r#"
+            SELECT id, kpi_id, value, measured_at, note
+            FROM kpi_measurements
+            ORDER BY measured_at DESC
+            "#,
+        )
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| DomainError::DatabaseError(e.to_string()))?;
+
+        rows.iter().map(row_to_measurement).collect()
+    }
+
     async fn delete_kpi_measurement(&self, kpi_id: Uuid, measurement_id: Uuid) -> Result<(), DomainError> {
         sqlx::query("DELETE FROM kpi_measurements WHERE id = ? AND kpi_id = ?")
             .bind(measurement_id.to_string())
@@ -529,6 +544,10 @@ mod tests {
 
         let measurements = repository.list_kpi_measurements(kpi.id).await.expect("measurements should be listed");
         assert_eq!(measurements, vec![measurement.clone()]);
+
+        // 전체 조회는 KPI 구분 없이 모든 기록을 돌려준다.
+        let all = repository.list_all_kpi_measurements().await.expect("all measurements should be listed");
+        assert_eq!(all, vec![measurement.clone()]);
 
         // 다른 KPI의 id로는 지워지지 않아야 한다.
         repository

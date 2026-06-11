@@ -13,6 +13,7 @@ pub struct AppState {
     pub record_kpi_measurement_use_case: Arc<RecordKpiMeasurementUseCase>,
     pub list_kpi_measurements_use_case: Arc<ListKpiMeasurementsUseCase>,
     pub delete_kpi_measurement_use_case: Arc<DeleteKpiMeasurementUseCase>,
+    pub list_all_kpi_measurements_use_case: Arc<ListAllKpiMeasurementsUseCase>,
     pub list_item_revisions_use_case: Arc<ListItemRevisionsUseCase>,
 }
 
@@ -115,6 +116,16 @@ pub async fn list_kpi_measurements(state: State<'_, AppState>, kpi_id: String) -
     state
         .list_kpi_measurements_use_case
         .execute(kpi_id)
+        .await
+        .map(|measurements| measurements.into_iter().map(measurement_to_dto).collect())
+        .map_err(domain_error_to_api)
+}
+
+#[tauri::command]
+pub async fn list_all_kpi_measurements(state: State<'_, AppState>) -> Result<Vec<KpiMeasurementDto>, ApiError> {
+    state
+        .list_all_kpi_measurements_use_case
+        .execute()
         .await
         .map(|measurements| measurements.into_iter().map(measurement_to_dto).collect())
         .map_err(domain_error_to_api)

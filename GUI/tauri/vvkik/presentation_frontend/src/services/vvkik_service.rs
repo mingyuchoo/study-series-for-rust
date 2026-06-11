@@ -115,6 +115,15 @@ impl VvkikService {
         call("list_kpi_measurements", &serde_json::json!({ "kpiId": kpi_id })).await
     }
 
+    pub async fn list_all_kpi_measurements() -> Result<Vec<KpiMeasurement>, String> {
+        // 브라우저 단독 실행(개발 미리보기 등)에서는 빈 목록으로 동작한다.
+        if !is_tauri_runtime_available() {
+            return Ok(Vec::new());
+        }
+
+        call("list_all_kpi_measurements", &serde_json::json!({})).await
+    }
+
     pub async fn list_item_revisions(item_id: String) -> Result<Vec<ItemRevision>, String> {
         call("list_item_revisions", &serde_json::json!({ "itemId": item_id })).await
     }

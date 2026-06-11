@@ -47,6 +47,7 @@ fn build_app_state(pool: SqlitePool) -> AppState {
         record_kpi_measurement_use_case: Arc::new(RecordKpiMeasurementUseCase::new(repository.clone())),
         list_kpi_measurements_use_case: Arc::new(ListKpiMeasurementsUseCase::new(repository.clone())),
         delete_kpi_measurement_use_case: Arc::new(DeleteKpiMeasurementUseCase::new(repository.clone())),
+        list_all_kpi_measurements_use_case: Arc::new(ListAllKpiMeasurementsUseCase::new(repository.clone())),
         list_item_revisions_use_case: Arc::new(ListItemRevisionsUseCase::new(repository)),
     }
 }
@@ -82,6 +83,7 @@ pub fn run() {
             record_kpi_measurement,
             list_kpi_measurements,
             delete_kpi_measurement,
+            list_all_kpi_measurements,
             list_item_revisions
         ])
         .run(tauri::generate_context!())

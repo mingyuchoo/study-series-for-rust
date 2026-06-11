@@ -93,6 +93,12 @@ impl VvkikRepository for MockVvkikRepository {
         Ok(measurements)
     }
 
+    async fn list_all_kpi_measurements(&self) -> Result<Vec<KpiMeasurement>, DomainError> {
+        let mut all: Vec<KpiMeasurement> = self.measurements.lock().unwrap().values().flatten().cloned().collect();
+        all.sort_by(|a, b| b.measured_at.cmp(&a.measured_at));
+        Ok(all)
+    }
+
     async fn delete_kpi_measurement(&self, kpi_id: Uuid, measurement_id: Uuid) -> Result<(), DomainError> {
         if let Some(measurements) = self.measurements.lock().unwrap().get_mut(&kpi_id) {
             measurements.retain(|measurement| measurement.id != measurement_id);

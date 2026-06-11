@@ -1405,6 +1405,20 @@ textarea:focus {
   color: var(--color-on-primary);
 }
 
+/* 대시보드의 전체 KPI 기록 잔디. 구조 카드와 KPI 현재 수준 사이에서
+   "기록하는 행위"를 보여 준다. */
+.dash-grass {
+  margin-bottom: 24px;
+}
+
+.dash-grass .measurement-grass {
+  padding: 16px 18px;
+}
+
+.dash-grass .grass-grid {
+  justify-content: center;
+}
+
 .dash-kpi-section {
   border-top: 1px solid var(--color-hairline);
   padding-top: 20px;

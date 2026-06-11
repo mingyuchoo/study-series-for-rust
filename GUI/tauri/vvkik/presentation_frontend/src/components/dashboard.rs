@@ -1,13 +1,15 @@
 #![allow(non_snake_case)]
 
-use crate::models::{ItemKind,
-                    ItemStatus,
-                    VvkikItem,
-                    kind_description,
-                    status_label,
-                    tree::{kpi_percent,
-                           progress_text,
-                           short_parent_path}};
+use super::record_grass::RecordGrass;
+use crate::{models::{ItemKind,
+                     ItemStatus,
+                     VvkikItem,
+                     kind_description,
+                     status_label,
+                     tree::{kpi_percent,
+                            progress_text,
+                            short_parent_path}},
+            services::VvkikService};
 use dioxus::prelude::*;
 
 #[derive(Props, Clone, PartialEq)]
@@ -30,6 +32,17 @@ struct KpiRow {
 /// 달성률 낮은 순으로 나열한다.
 pub fn VvkikDashboard(props: VvkikDashboardProps) -> Element {
     let items = &props.items;
+
+    // 전체 KPI의 측정 시각. "오늘 이 시스템과 마주했는가"를 보여 주는
+    // 잔디의 재료라 KPI 구분 없이 한 번에 불러온다.
+    let mut grass_timestamps = use_signal(Vec::<String>::new);
+    use_effect(move || {
+        spawn(async move {
+            if let Ok(measurements) = VvkikService::list_all_kpi_measurements().await {
+                grass_timestamps.set(measurements.into_iter().map(|measurement| measurement.measured_at).collect());
+            }
+        });
+    });
 
     // 단계별 (총 수량, 상태별 수량). 상태 순서는 ItemStatus::ALL을 따른다.
     let kind_cards: Vec<(ItemKind, usize, [usize; 3])> = ItemKind::ALL
@@ -90,6 +103,10 @@ pub fn VvkikDashboard(props: VvkikDashboardProps) -> Element {
                         }
                     }
                 }
+            }
+
+            div { class: "dash-grass",
+                RecordGrass { timestamps: grass_timestamps.read().clone(), scope: Some("전체 KPI".to_string()) }
             }
 
             div { class: "dash-kpi-section",
