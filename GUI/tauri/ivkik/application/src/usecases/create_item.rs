@@ -2,17 +2,17 @@ use super::validation::{validate_kpi_values,
                         validate_parent,
                         validate_title};
 use domain::{DomainError,
+             ItemRepository,
              IvkikItem,
-             IvkikRepository,
              NewIvkikItem};
 use std::sync::Arc;
 
 pub struct CreateItemUseCase {
-    repository: Arc<dyn IvkikRepository>,
+    repository: Arc<dyn ItemRepository>,
 }
 
 impl CreateItemUseCase {
-    pub fn new(repository: Arc<dyn IvkikRepository>) -> Self {
+    pub fn new(repository: Arc<dyn ItemRepository>) -> Self {
         Self {
             repository,
         }

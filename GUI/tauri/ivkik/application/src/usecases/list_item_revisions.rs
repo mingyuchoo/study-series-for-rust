@@ -1,15 +1,15 @@
 use domain::{DomainError,
              ItemRevision,
-             IvkikRepository};
+             ItemRevisionRepository};
 use std::sync::Arc;
 use uuid::Uuid;
 
 pub struct ListItemRevisionsUseCase {
-    repository: Arc<dyn IvkikRepository>,
+    repository: Arc<dyn ItemRevisionRepository>,
 }
 
 impl ListItemRevisionsUseCase {
-    pub fn new(repository: Arc<dyn IvkikRepository>) -> Self {
+    pub fn new(repository: Arc<dyn ItemRevisionRepository>) -> Self {
         Self {
             repository,
         }

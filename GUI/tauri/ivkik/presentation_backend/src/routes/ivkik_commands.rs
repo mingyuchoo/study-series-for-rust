@@ -28,7 +28,7 @@ pub async fn create_item(state: State<'_, AppState>, request: CreateItemRequest)
     state
         .create_item_use_case
         .execute(domain::NewIvkikItem {
-            kind: request.kind,
+            kind: kind_to_domain(request.kind),
             parent_id,
             title: request.title,
             description: request.description,
@@ -36,7 +36,7 @@ pub async fn create_item(state: State<'_, AppState>, request: CreateItemRequest)
             current_value: request.current_value,
             unit: request.unit,
             position: request.position.unwrap_or_default(),
-            aggregation: request.aggregation,
+            aggregation: aggregation_to_domain(request.aggregation),
         })
         .await
         .map(item_to_dto)
@@ -63,7 +63,7 @@ pub async fn update_item(state: State<'_, AppState>, request: UpdateItemRequest)
         .execute(
             uuid,
             domain::ItemPatch {
-                kind: request.kind,
+                kind: request.kind.map(kind_to_domain),
                 parent_id,
                 title: request.title,
                 description: request.description,
@@ -71,8 +71,8 @@ pub async fn update_item(state: State<'_, AppState>, request: UpdateItemRequest)
                 current_value: request.current_value,
                 unit: request.unit,
                 position: request.position,
-                status: request.status,
-                aggregation: request.aggregation,
+                status: request.status.map(status_to_domain),
+                aggregation: request.aggregation.map(aggregation_to_domain),
             },
         )
         .await

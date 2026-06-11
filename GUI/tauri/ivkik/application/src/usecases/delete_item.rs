@@ -1,14 +1,14 @@
 use domain::{DomainError,
-             IvkikRepository};
+             ItemRepository};
 use std::sync::Arc;
 use uuid::Uuid;
 
 pub struct DeleteItemUseCase {
-    repository: Arc<dyn IvkikRepository>,
+    repository: Arc<dyn ItemRepository>,
 }
 
 impl DeleteItemUseCase {
-    pub fn new(repository: Arc<dyn IvkikRepository>) -> Self {
+    pub fn new(repository: Arc<dyn ItemRepository>) -> Self {
         Self {
             repository,
         }

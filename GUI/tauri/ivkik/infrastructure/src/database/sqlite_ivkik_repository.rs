@@ -1,84 +1,18 @@
-use async_trait::async_trait;
-use chrono::{DateTime,
-             Utc};
-use domain::{DomainError,
-             ItemKind,
-             ItemRevision,
-             ItemStatus,
-             IvkikItem,
-             IvkikRepository,
-             KpiAggregation,
-             KpiMeasurement};
-use sqlx::{Row,
-           SqlitePool,
-           sqlite::SqliteRow};
-use std::str::FromStr;
-use uuid::Uuid;
+#[path = "item_repository.rs"]
+mod item_repository;
+#[path = "mapper.rs"]
+mod mapper;
+#[path = "measurement_repository.rs"]
+mod measurement_repository;
+#[path = "revision_repository.rs"]
+mod revision_repository;
+#[path = "schema.rs"]
+mod schema;
+
+use sqlx::SqlitePool;
 
 pub struct SqliteIvkikRepository {
-    pool: SqlitePool,
-}
-
-fn parse_datetime(value: &str) -> Result<DateTime<Utc>, DomainError> {
-    DateTime::parse_from_rfc3339(value)
-        .map_err(|e| DomainError::DatabaseError(e.to_string()))
-        .map(|value| value.with_timezone(&Utc))
-}
-
-fn row_to_item(row: &SqliteRow) -> Result<IvkikItem, DomainError> {
-    Ok(IvkikItem {
-        id: Uuid::parse_str(row.get("id")).map_err(|e| DomainError::DatabaseError(e.to_string()))?,
-        kind: ItemKind::from_str(row.get("kind")).map_err(DomainError::DatabaseError)?,
-        parent_id: row
-            .get::<Option<String>, _>("parent_id")
-            .map(|id| Uuid::parse_str(&id).map_err(|e| DomainError::DatabaseError(e.to_string())))
-            .transpose()?,
-        title: row.get("title"),
-        description: row.get("description"),
-        target_value: row.get("target_value"),
-        current_value: row.get("current_value"),
-        unit: row.get("unit"),
-        position: row.get("position"),
-        status: ItemStatus::from_str(row.get("status")).map_err(DomainError::DatabaseError)?,
-        aggregation: KpiAggregation::from_str(row.get("aggregation")).map_err(DomainError::DatabaseError)?,
-        created_at: parse_datetime(row.get("created_at"))?,
-        updated_at: parse_datetime(row.get("updated_at"))?,
-    })
-}
-
-fn row_to_measurement(row: &SqliteRow) -> Result<KpiMeasurement, DomainError> {
-    Ok(KpiMeasurement {
-        id: Uuid::parse_str(row.get("id")).map_err(|e| DomainError::DatabaseError(e.to_string()))?,
-        kpi_id: Uuid::parse_str(row.get("kpi_id")).map_err(|e| DomainError::DatabaseError(e.to_string()))?,
-        value: row.get("value"),
-        measured_at: parse_datetime(row.get("measured_at"))?,
-        note: row.get("note"),
-    })
-}
-
-fn row_to_revision(row: &SqliteRow) -> Result<ItemRevision, DomainError> {
-    Ok(ItemRevision {
-        id: Uuid::parse_str(row.get("id")).map_err(|e| DomainError::DatabaseError(e.to_string()))?,
-        item_id: Uuid::parse_str(row.get("item_id")).map_err(|e| DomainError::DatabaseError(e.to_string()))?,
-        field: row.get("field"),
-        old_value: row.get("old_value"),
-        new_value: row.get("new_value"),
-        changed_at: parse_datetime(row.get("changed_at"))?,
-    })
-}
-
-fn escape_like_pattern(query: &str) -> String {
-    let mut escaped = String::with_capacity(query.len());
-    for ch in query.chars() {
-        match ch {
-            | '\\' | '%' | '_' => {
-                escaped.push('\\');
-                escaped.push(ch);
-            },
-            | _ => escaped.push(ch),
-        }
-    }
-    escaped
+    pub(crate) pool: SqlitePool,
 }
 
 impl SqliteIvkikRepository {
@@ -88,333 +22,23 @@ impl SqliteIvkikRepository {
         }
     }
 
-    pub async fn init(&self) -> Result<(), sqlx::Error> {
-        sqlx::query("PRAGMA foreign_keys = ON").execute(&self.pool).await?;
-
-        sqlx::query(
-            r#"
-            CREATE TABLE IF NOT EXISTS ivkik_items (
-                id TEXT PRIMARY KEY,
-                kind TEXT NOT NULL,
-                parent_id TEXT REFERENCES ivkik_items(id) ON DELETE CASCADE,
-                title TEXT NOT NULL,
-                description TEXT,
-                target_value REAL,
-                current_value REAL,
-                unit TEXT,
-                position INTEGER NOT NULL DEFAULT 0,
-                status TEXT NOT NULL,
-                aggregation TEXT NOT NULL DEFAULT 'latest',
-                created_at TEXT NOT NULL,
-                updated_at TEXT NOT NULL
-            )
-            "#,
-        )
-        .execute(&self.pool)
-        .await?;
-
-        // aggregation 컬럼이 없던 기존 데이터베이스를 위한 마이그레이션.
-        let has_aggregation = sqlx::query("SELECT 1 FROM pragma_table_info('ivkik_items') WHERE name = 'aggregation'")
-            .fetch_optional(&self.pool)
-            .await?
-            .is_some();
-        if !has_aggregation {
-            sqlx::query("ALTER TABLE ivkik_items ADD COLUMN aggregation TEXT NOT NULL DEFAULT 'latest'")
-                .execute(&self.pool)
-                .await?;
-        }
-
-        sqlx::query(
-            r#"
-            CREATE TABLE IF NOT EXISTS kpi_measurements (
-                id TEXT PRIMARY KEY,
-                kpi_id TEXT NOT NULL REFERENCES ivkik_items(id) ON DELETE CASCADE,
-                value REAL NOT NULL,
-                measured_at TEXT NOT NULL,
-                note TEXT
-            )
-            "#,
-        )
-        .execute(&self.pool)
-        .await?;
-
-        sqlx::query(
-            r#"
-            CREATE TABLE IF NOT EXISTS item_revisions (
-                id TEXT PRIMARY KEY,
-                item_id TEXT NOT NULL REFERENCES ivkik_items(id) ON DELETE CASCADE,
-                field TEXT NOT NULL,
-                old_value TEXT,
-                new_value TEXT,
-                changed_at TEXT NOT NULL
-            )
-            "#,
-        )
-        .execute(&self.pool)
-        .await?;
-
-        sqlx::query("CREATE INDEX IF NOT EXISTS idx_ivkik_items_parent ON ivkik_items(parent_id)")
-            .execute(&self.pool)
-            .await?;
-        sqlx::query("CREATE INDEX IF NOT EXISTS idx_ivkik_items_kind ON ivkik_items(kind)")
-            .execute(&self.pool)
-            .await?;
-        sqlx::query("CREATE INDEX IF NOT EXISTS idx_kpi_measurements_kpi ON kpi_measurements(kpi_id, measured_at)")
-            .execute(&self.pool)
-            .await?;
-        sqlx::query("CREATE INDEX IF NOT EXISTS idx_item_revisions_item ON item_revisions(item_id, changed_at)")
-            .execute(&self.pool)
-            .await?;
-
-        Ok(())
-    }
-}
-
-#[async_trait]
-impl IvkikRepository for SqliteIvkikRepository {
-    async fn create_item(&self, item: IvkikItem) -> Result<IvkikItem, DomainError> {
-        sqlx::query(
-            r#"
-            INSERT INTO ivkik_items (
-                id, kind, parent_id, title, description, target_value, current_value,
-                unit, position, status, aggregation, created_at, updated_at
-            )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            "#,
-        )
-        .bind(item.id.to_string())
-        .bind(item.kind.as_str())
-        .bind(item.parent_id.map(|id| id.to_string()))
-        .bind(&item.title)
-        .bind(&item.description)
-        .bind(item.target_value)
-        .bind(item.current_value)
-        .bind(&item.unit)
-        .bind(item.position)
-        .bind(item.status.as_str())
-        .bind(item.aggregation.as_str())
-        .bind(item.created_at.to_rfc3339())
-        .bind(item.updated_at.to_rfc3339())
-        .execute(&self.pool)
-        .await
-        .map_err(|e| DomainError::DatabaseError(e.to_string()))?;
-
-        Ok(item)
-    }
-
-    async fn get_item_by_id(&self, id: Uuid) -> Result<Option<IvkikItem>, DomainError> {
-        let row = sqlx::query(
-            r#"
-            SELECT id, kind, parent_id, title, description, target_value, current_value,
-                   unit, position, status, aggregation, created_at, updated_at
-            FROM ivkik_items
-            WHERE id = ?
-            "#,
-        )
-        .bind(id.to_string())
-        .fetch_optional(&self.pool)
-        .await
-        .map_err(|e| DomainError::DatabaseError(e.to_string()))?;
-
-        match row {
-            | Some(row) => Ok(Some(row_to_item(&row)?)),
-            | None => Ok(None),
-        }
-    }
-
-    async fn list_items(&self) -> Result<Vec<IvkikItem>, DomainError> {
-        let rows = sqlx::query(
-            r#"
-            SELECT id, kind, parent_id, title, description, target_value, current_value,
-                   unit, position, status, aggregation, created_at, updated_at
-            FROM ivkik_items
-            ORDER BY
-              CASE kind
-                WHEN 'value' THEN 1
-                WHEN 'vision' THEN 2
-                WHEN 'kra' THEN 3
-                WHEN 'igt' THEN 4
-                WHEN 'kpi' THEN 5
-                ELSE 99
-              END,
-              position,
-              title
-            "#,
-        )
-        .fetch_all(&self.pool)
-        .await
-        .map_err(|e| DomainError::DatabaseError(e.to_string()))?;
-
-        rows.iter().map(row_to_item).collect()
-    }
-
-    async fn update_item(&self, item: IvkikItem) -> Result<IvkikItem, DomainError> {
-        sqlx::query(
-            r#"
-            UPDATE ivkik_items
-            SET kind = ?, parent_id = ?, title = ?, description = ?, target_value = ?,
-                current_value = ?, unit = ?, position = ?, status = ?, aggregation = ?, updated_at = ?
-            WHERE id = ?
-            "#,
-        )
-        .bind(item.kind.as_str())
-        .bind(item.parent_id.map(|id| id.to_string()))
-        .bind(&item.title)
-        .bind(&item.description)
-        .bind(item.target_value)
-        .bind(item.current_value)
-        .bind(&item.unit)
-        .bind(item.position)
-        .bind(item.status.as_str())
-        .bind(item.aggregation.as_str())
-        .bind(item.updated_at.to_rfc3339())
-        .bind(item.id.to_string())
-        .execute(&self.pool)
-        .await
-        .map_err(|e| DomainError::DatabaseError(e.to_string()))?;
-
-        Ok(item)
-    }
-
-    async fn delete(&self, id: Uuid) -> Result<(), DomainError> {
-        sqlx::query("DELETE FROM ivkik_items WHERE id = ?")
-            .bind(id.to_string())
-            .execute(&self.pool)
-            .await
-            .map_err(|e| DomainError::DatabaseError(e.to_string()))?;
-
-        Ok(())
-    }
-
-    async fn search_items(&self, query: &str) -> Result<Vec<IvkikItem>, DomainError> {
-        let search_pattern = format!("%{}%", escape_like_pattern(query));
-        let rows = sqlx::query(
-            r#"
-            SELECT id, kind, parent_id, title, description, target_value, current_value,
-                   unit, position, status, aggregation, created_at, updated_at
-            FROM ivkik_items
-            WHERE title LIKE ?1 ESCAPE '\'
-               OR description LIKE ?1 ESCAPE '\'
-               OR unit LIKE ?1 ESCAPE '\'
-               OR kind LIKE ?1 ESCAPE '\'
-            ORDER BY position, title
-            "#,
-        )
-        .bind(&search_pattern)
-        .fetch_all(&self.pool)
-        .await
-        .map_err(|e| DomainError::DatabaseError(e.to_string()))?;
-
-        rows.iter().map(row_to_item).collect()
-    }
-
-    async fn record_kpi_measurement(&self, measurement: KpiMeasurement) -> Result<KpiMeasurement, DomainError> {
-        sqlx::query(
-            r#"
-            INSERT INTO kpi_measurements (id, kpi_id, value, measured_at, note)
-            VALUES (?, ?, ?, ?, ?)
-            "#,
-        )
-        .bind(measurement.id.to_string())
-        .bind(measurement.kpi_id.to_string())
-        .bind(measurement.value)
-        .bind(measurement.measured_at.to_rfc3339())
-        .bind(&measurement.note)
-        .execute(&self.pool)
-        .await
-        .map_err(|e| DomainError::DatabaseError(e.to_string()))?;
-
-        Ok(measurement)
-    }
-
-    async fn list_kpi_measurements(&self, kpi_id: Uuid) -> Result<Vec<KpiMeasurement>, DomainError> {
-        let rows = sqlx::query(
-            r#"
-            SELECT id, kpi_id, value, measured_at, note
-            FROM kpi_measurements
-            WHERE kpi_id = ?
-            ORDER BY measured_at DESC
-            "#,
-        )
-        .bind(kpi_id.to_string())
-        .fetch_all(&self.pool)
-        .await
-        .map_err(|e| DomainError::DatabaseError(e.to_string()))?;
-
-        rows.iter().map(row_to_measurement).collect()
-    }
-
-    async fn list_all_kpi_measurements(&self) -> Result<Vec<KpiMeasurement>, DomainError> {
-        let rows = sqlx::query(
-            r#"
-            SELECT id, kpi_id, value, measured_at, note
-            FROM kpi_measurements
-            ORDER BY measured_at DESC
-            "#,
-        )
-        .fetch_all(&self.pool)
-        .await
-        .map_err(|e| DomainError::DatabaseError(e.to_string()))?;
-
-        rows.iter().map(row_to_measurement).collect()
-    }
-
-    async fn delete_kpi_measurement(&self, kpi_id: Uuid, measurement_id: Uuid) -> Result<(), DomainError> {
-        sqlx::query("DELETE FROM kpi_measurements WHERE id = ? AND kpi_id = ?")
-            .bind(measurement_id.to_string())
-            .bind(kpi_id.to_string())
-            .execute(&self.pool)
-            .await
-            .map_err(|e| DomainError::DatabaseError(e.to_string()))?;
-
-        Ok(())
-    }
-
-    async fn record_item_revisions(&self, revisions: Vec<ItemRevision>) -> Result<(), DomainError> {
-        for revision in revisions {
-            sqlx::query(
-                r#"
-                INSERT INTO item_revisions (id, item_id, field, old_value, new_value, changed_at)
-                VALUES (?, ?, ?, ?, ?, ?)
-                "#,
-            )
-            .bind(revision.id.to_string())
-            .bind(revision.item_id.to_string())
-            .bind(&revision.field)
-            .bind(&revision.old_value)
-            .bind(&revision.new_value)
-            .bind(revision.changed_at.to_rfc3339())
-            .execute(&self.pool)
-            .await
-            .map_err(|e| DomainError::DatabaseError(e.to_string()))?;
-        }
-
-        Ok(())
-    }
-
-    async fn list_item_revisions(&self, item_id: Uuid) -> Result<Vec<ItemRevision>, DomainError> {
-        let rows = sqlx::query(
-            r#"
-            SELECT id, item_id, field, old_value, new_value, changed_at
-            FROM item_revisions
-            WHERE item_id = ?
-            ORDER BY changed_at DESC, field
-            "#,
-        )
-        .bind(item_id.to_string())
-        .fetch_all(&self.pool)
-        .await
-        .map_err(|e| DomainError::DatabaseError(e.to_string()))?;
-
-        rows.iter().map(row_to_revision).collect()
-    }
+    pub async fn init(&self) -> Result<(), sqlx::Error> { schema::init(&self.pool).await }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use domain::IvkikRepository;
+    use chrono::Utc;
+    use domain::{ItemKind,
+                 ItemRepository,
+                 ItemRevision,
+                 ItemRevisionRepository,
+                 IvkikItem,
+                 KpiAggregation,
+                 KpiMeasurement,
+                 KpiMeasurementRepository};
     use sqlx::sqlite::SqlitePoolOptions;
+    use uuid::Uuid;
 
     async fn repository() -> SqliteIvkikRepository {
         let pool = SqlitePoolOptions::new()
@@ -471,6 +95,37 @@ mod tests {
         repository.delete(id).await.expect("item should be deleted");
         let deleted = repository.get_item_by_id(id).await.expect("item lookup should succeed");
         assert_eq!(deleted, None);
+    }
+
+    #[tokio::test]
+    async fn lists_items_in_ivkik_kind_order() {
+        let repository = repository().await;
+        for (kind, title) in [
+            (ItemKind::Kpi, "KPI"),
+            (ItemKind::Igt, "IGT"),
+            (ItemKind::Kra, "KRA"),
+            (ItemKind::Vision, "Vision"),
+            (ItemKind::Identity, "Identity"),
+        ] {
+            repository
+                .create_item(IvkikItem::new(domain::NewIvkikItem {
+                    kind,
+                    parent_id: None,
+                    title: title.to_string(),
+                    description: None,
+                    target_value: None,
+                    current_value: None,
+                    unit: None,
+                    position: 0,
+                    aggregation: KpiAggregation::default(),
+                }))
+                .await
+                .expect("item should be created");
+        }
+
+        let kinds: Vec<ItemKind> = repository.list_items().await.unwrap().into_iter().map(|item| item.kind).collect();
+
+        assert_eq!(kinds, vec![ItemKind::Identity, ItemKind::Vision, ItemKind::Kra, ItemKind::Igt, ItemKind::Kpi]);
     }
 
     #[tokio::test]

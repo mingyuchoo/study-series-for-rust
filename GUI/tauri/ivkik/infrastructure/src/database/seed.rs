@@ -8,8 +8,8 @@
 
 use domain::{DomainError,
              ItemKind,
+             ItemRepository,
              IvkikItem,
-             IvkikRepository,
              KpiAggregation,
              NewIvkikItem};
 use uuid::Uuid;
@@ -313,7 +313,7 @@ async fn create<R>(
     position: i64,
 ) -> Result<Uuid, DomainError>
 where
-    R: IvkikRepository + ?Sized,
+    R: ItemRepository + ?Sized,
 {
     let item = IvkikItem::new(NewIvkikItem {
         kind,
@@ -337,7 +337,7 @@ where
 /// 돌려준다.
 pub async fn seed_if_empty<R>(repository: &R) -> Result<bool, DomainError>
 where
-    R: IvkikRepository + ?Sized,
+    R: ItemRepository + ?Sized,
 {
     if !repository.list_items().await?.is_empty() {
         return Ok(false);

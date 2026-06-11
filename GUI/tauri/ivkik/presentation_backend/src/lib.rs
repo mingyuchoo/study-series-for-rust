@@ -94,8 +94,8 @@ pub fn run() {
 mod tests {
     use super::*;
     use domain::{ItemKind,
-                 IvkikItem,
-                 IvkikRepository};
+                 ItemRepository,
+                 IvkikItem};
     use uuid::Uuid;
 
     #[tokio::test]

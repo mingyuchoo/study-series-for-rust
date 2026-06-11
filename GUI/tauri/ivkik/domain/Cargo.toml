@@ -5,10 +5,8 @@
   version.workspace = true
 
 [dependencies]
-  # Domain layer depends only on the shared wire contract and basic types
   async-trait.workspace = true
   chrono.workspace      = true
-  contracts             = {path = "../contracts"}
   serde.workspace       = true
   thiserror.workspace   = true
   uuid.workspace        = true

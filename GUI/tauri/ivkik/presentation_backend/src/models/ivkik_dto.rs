@@ -14,10 +14,62 @@ use domain::{ItemRevision,
              IvkikItem,
              KpiMeasurement};
 
+pub fn kind_to_domain(kind: contracts::ItemKind) -> domain::ItemKind {
+    match kind {
+        | contracts::ItemKind::Identity => domain::ItemKind::Identity,
+        | contracts::ItemKind::Vision => domain::ItemKind::Vision,
+        | contracts::ItemKind::Kra => domain::ItemKind::Kra,
+        | contracts::ItemKind::Igt => domain::ItemKind::Igt,
+        | contracts::ItemKind::Kpi => domain::ItemKind::Kpi,
+    }
+}
+
+pub fn status_to_domain(status: contracts::ItemStatus) -> domain::ItemStatus {
+    match status {
+        | contracts::ItemStatus::Active => domain::ItemStatus::Active,
+        | contracts::ItemStatus::Paused => domain::ItemStatus::Paused,
+        | contracts::ItemStatus::Completed => domain::ItemStatus::Completed,
+    }
+}
+
+pub fn aggregation_to_domain(aggregation: contracts::KpiAggregation) -> domain::KpiAggregation {
+    match aggregation {
+        | contracts::KpiAggregation::Latest => domain::KpiAggregation::Latest,
+        | contracts::KpiAggregation::Sum => domain::KpiAggregation::Sum,
+        | contracts::KpiAggregation::Average => domain::KpiAggregation::Average,
+    }
+}
+
+fn kind_to_dto(kind: domain::ItemKind) -> contracts::ItemKind {
+    match kind {
+        | domain::ItemKind::Identity => contracts::ItemKind::Identity,
+        | domain::ItemKind::Vision => contracts::ItemKind::Vision,
+        | domain::ItemKind::Kra => contracts::ItemKind::Kra,
+        | domain::ItemKind::Igt => contracts::ItemKind::Igt,
+        | domain::ItemKind::Kpi => contracts::ItemKind::Kpi,
+    }
+}
+
+fn status_to_dto(status: domain::ItemStatus) -> contracts::ItemStatus {
+    match status {
+        | domain::ItemStatus::Active => contracts::ItemStatus::Active,
+        | domain::ItemStatus::Paused => contracts::ItemStatus::Paused,
+        | domain::ItemStatus::Completed => contracts::ItemStatus::Completed,
+    }
+}
+
+fn aggregation_to_dto(aggregation: domain::KpiAggregation) -> contracts::KpiAggregation {
+    match aggregation {
+        | domain::KpiAggregation::Latest => contracts::KpiAggregation::Latest,
+        | domain::KpiAggregation::Sum => contracts::KpiAggregation::Sum,
+        | domain::KpiAggregation::Average => contracts::KpiAggregation::Average,
+    }
+}
+
 pub fn item_to_dto(item: IvkikItem) -> IvkikItemDto {
     IvkikItemDto {
         id: item.id.to_string(),
-        kind: item.kind,
+        kind: kind_to_dto(item.kind),
         parent_id: item.parent_id.map(|id| id.to_string()),
         title: item.title,
         description: item.description,
@@ -25,8 +77,8 @@ pub fn item_to_dto(item: IvkikItem) -> IvkikItemDto {
         current_value: item.current_value,
         unit: item.unit,
         position: item.position,
-        status: item.status,
-        aggregation: item.aggregation,
+        status: status_to_dto(item.status),
+        aggregation: aggregation_to_dto(item.aggregation),
         created_at: item.created_at.to_rfc3339(),
         updated_at: item.updated_at.to_rfc3339(),
     }

@@ -1,4 +1,4 @@
-//! Use case unit tests driven by an in-memory mock `IvkikRepository`.
+//! Use case unit tests driven by in-memory mock repository ports.
 
 use application::{CreateItemUseCase,
                   DeleteItemUseCase,
@@ -13,11 +13,13 @@ use async_trait::async_trait;
 use domain::{DomainError,
              ItemKind,
              ItemPatch,
+             ItemRepository,
              ItemRevision,
+             ItemRevisionRepository,
              IvkikItem,
-             IvkikRepository,
              KpiAggregation,
              KpiMeasurement,
+             KpiMeasurementRepository,
              NewIvkikItem};
 use std::{collections::HashMap,
           sync::{Arc,
@@ -38,7 +40,7 @@ impl MockIvkikRepository {
 }
 
 #[async_trait]
-impl IvkikRepository for MockIvkikRepository {
+impl ItemRepository for MockIvkikRepository {
     async fn create_item(&self, item: IvkikItem) -> Result<IvkikItem, DomainError> {
         self.items.lock().unwrap().insert(item.id, item.clone());
         Ok(item)
@@ -75,7 +77,10 @@ impl IvkikRepository for MockIvkikRepository {
             .collect();
         Ok(items)
     }
+}
 
+#[async_trait]
+impl KpiMeasurementRepository for MockIvkikRepository {
     async fn record_kpi_measurement(&self, measurement: KpiMeasurement) -> Result<KpiMeasurement, DomainError> {
         self.measurements
             .lock()
@@ -105,7 +110,10 @@ impl IvkikRepository for MockIvkikRepository {
         }
         Ok(())
     }
+}
 
+#[async_trait]
+impl ItemRevisionRepository for MockIvkikRepository {
     async fn record_item_revisions(&self, revisions: Vec<ItemRevision>) -> Result<(), DomainError> {
         self.revisions.lock().unwrap().extend(revisions);
         Ok(())

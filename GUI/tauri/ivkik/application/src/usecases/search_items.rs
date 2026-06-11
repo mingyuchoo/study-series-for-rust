@@ -1,14 +1,14 @@
 use domain::{DomainError,
-             IvkikItem,
-             IvkikRepository};
+             ItemRepository,
+             IvkikItem};
 use std::sync::Arc;
 
 pub struct SearchItemsUseCase {
-    repository: Arc<dyn IvkikRepository>,
+    repository: Arc<dyn ItemRepository>,
 }
 
 impl SearchItemsUseCase {
-    pub fn new(repository: Arc<dyn IvkikRepository>) -> Self {
+    pub fn new(repository: Arc<dyn ItemRepository>) -> Self {
         Self {
             repository,
         }
