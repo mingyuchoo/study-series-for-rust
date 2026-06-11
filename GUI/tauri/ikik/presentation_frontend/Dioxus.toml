@@ -1,0 +1,14 @@
+[application]
+  default_platform = "web"
+  name             = "presentation_frontend"
+
+[web.app]
+  title = "IKIK"
+
+[web.watcher]
+
+[bundle]
+  icon       = ["assets/dioxus.png"]
+  identifier = "com.mingyuchoo.ikik"
+  publisher  = "IKIK"
+  resources  = ["assets/*"]

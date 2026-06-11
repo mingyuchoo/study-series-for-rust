@@ -1,0 +1,17 @@
+[package]
+  authors.workspace = true
+  edition.workspace = true
+  name              = "application"
+  version.workspace = true
+
+[dependencies]
+  # Application layer depends ONLY on domain layer
+  domain = {path = "../domain"}
+
+  # External dependencies
+  async-trait.workspace = true
+  chrono.workspace      = true
+  uuid.workspace        = true
+
+[dev-dependencies]
+  tokio.workspace = true
