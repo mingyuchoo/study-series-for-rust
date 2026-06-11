@@ -798,23 +798,19 @@ textarea:focus {
 }
 
 .col-title {
-  width: 22%;
-}
-
-.col-path {
   width: 30%;
 }
 
 .col-mid {
-  width: 26%;
+  width: 40%;
 }
 
 .col-status {
-  width: 10%;
+  width: 12%;
 }
 
 .col-actions {
-  width: 12%;
+  width: 18%;
 }
 
 .cell-title {
@@ -822,7 +818,36 @@ textarea:focus {
   font-weight: 600;
 }
 
-.cell-path,
+/* 그룹 헤더가 있는 표에서는 제목을 살짝 들여 써서 소속이 보이게 한다. */
+.cell-title.grouped {
+  padding-left: 28px;
+}
+
+/* 같은 상위 경로의 항목들을 묶는 그룹 헤더 행. 경로 전체를 줄임 없이
+   보여 주고, 직계 부모만 진하게 강조한다. */
+.group-row {
+  cursor: default;
+}
+
+.kind-table tbody tr.group-row:hover {
+  background: none;
+}
+
+.group-row td {
+  padding: 18px 12px 6px;
+  border-bottom: 1px solid var(--color-hairline-strong);
+  font-size: 12px;
+}
+
+.group-path-prefix {
+  color: var(--color-body);
+}
+
+.group-path-leaf {
+  color: var(--color-ink);
+  font-weight: 600;
+}
+
 .cell-desc {
   color: var(--color-body);
   font-size: 13px;
@@ -894,16 +919,12 @@ textarea:focus {
 }
 
 /* KPI 탭은 동작 컬럼에 버튼이 둘이라 폭을 넓힌다. */
-.kind-table th.col-path-kpi {
-  width: 26%;
-}
-
 .kind-table th.col-mid-kpi {
-  width: 24%;
+  width: 34%;
 }
 
 .kind-table th.col-actions-kpi {
-  width: 18%;
+  width: 24%;
 }
 
 /* 행 바로 아래에 펼쳐지는 측정값 입력 팝오버. */

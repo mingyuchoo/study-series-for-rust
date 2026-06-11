@@ -8,9 +8,9 @@ use crate::{models::{ItemKind,
                      kind_description,
                      status_label,
                      tree::{kpi_percent,
+                            parent_chain,
                             parent_path,
-                            progress_text,
-                            short_parent_path}},
+                            progress_text}},
             services::VvkikService};
 use dioxus::prelude::*;
 
@@ -35,6 +35,14 @@ struct RecordToast {
     undo: Option<(String, String)>,
 }
 
+/// 상위 경로 그룹 헤더 한 줄. 직계 부모(leaf)만 진하게 보여 준다.
+#[derive(Clone, PartialEq)]
+struct GroupHeader {
+    prefix: String,
+    leaf: String,
+    tooltip: String,
+}
+
 fn format_value(value: f64) -> String {
     if value.fract() == 0.0 {
         format!("{}", value as i64)
@@ -53,10 +61,11 @@ async fn sleep_ms(ms: i32) {
     let _ = wasm_bindgen_futures::JsFuture::from(promise).await;
 }
 
-/// 한 단계의 항목들을 표로 보여 주는 탭 화면. 상위 경로를 컬럼으로
-/// 노출해 모든 행에서 위상이 보이고, KPI 탭은 설명 대신 진행률을
-/// 보여 준다. KPI 행은 수정 화면에 들어가지 않고도 실적을 기록할 수
-/// 있도록 집계 방식에 맞는 퀵 기록 버튼을 항상 노출한다.
+/// 한 단계의 항목들을 표로 보여 주는 탭 화면. 같은 상위 경로의 항목을
+/// 묶고 경로를 그룹 헤더로 한 번만 보여 주어, 어떤 가치·목표 아래의
+/// 항목인지 줄임 없이 드러낸다. KPI 탭은 설명 대신 진행률을 보여 주고,
+/// 수정 화면에 들어가지 않고도 실적을 기록할 수 있도록 집계 방식에
+/// 맞는 퀵 기록 버튼을 항상 노출한다.
 pub fn VvkikKindView(props: VvkikKindViewProps) -> Element {
     let is_kpi = props.kind == ItemKind::Kpi;
     let on_data_change = props.on_data_change;
@@ -142,15 +151,41 @@ pub fn VvkikKindView(props: VvkikKindViewProps) -> Element {
         });
     };
 
-    // (항목, 짧은 경로, 전체 경로 툴팁) — 경로 → 정렬값 → 제목 순으로
-    // 정렬해 같은 가지의 항목이 모이게 한다.
-    let mut rows: Vec<(VvkikItem, Option<String>, Option<String>)> = props
+    // (항목, 조상 제목들, 전체 경로) — 경로 → 정렬값 → 제목 순으로
+    // 정렬해 같은 가지(같은 Value·Vision·KRA·IGT)의 항목이 모이게 한다.
+    let mut rows: Vec<(VvkikItem, Vec<String>, Option<String>)> = props
         .items
         .iter()
         .filter(|item| item.kind == props.kind)
-        .map(|item| (item.clone(), short_parent_path(item, &props.items), parent_path(item, &props.items)))
+        .map(|item| {
+            let chain: Vec<String> = parent_chain(item, &props.items).iter().map(|parent| parent.title.clone()).collect();
+            (item.clone(), chain, parent_path(item, &props.items))
+        })
         .collect();
     rows.sort_by(|a, b| a.2.cmp(&b.2).then(a.0.position.cmp(&b.0.position)).then(a.0.title.cmp(&b.0.title)));
+
+    // 최상위뿐인 탭(Value 등)은 그룹 헤더 없이 평평한 표로 보여 준다.
+    let any_grouped = rows.iter().any(|(_, _, full)| full.is_some());
+    let row_count = rows.len();
+
+    // 경로가 바뀌는 행 앞에만 그룹 헤더를 끼워 넣는다.
+    let mut display: Vec<(Option<GroupHeader>, VvkikItem)> = Vec::with_capacity(row_count);
+    let mut previous_path: Option<Option<String>> = None;
+    for (item, chain, full_path) in rows {
+        let header = if any_grouped && previous_path.as_ref() != Some(&full_path) {
+            let (prefix, leaf) = match chain.split_last() {
+                | Some((leaf, ancestors)) => (ancestors.join(" › "), leaf.clone()),
+                | None if item.parent_id.is_some() => (String::new(), "(연결된 상위 항목 없음)".to_string()),
+                | None => (String::new(), "최상위".to_string()),
+            };
+            let tooltip = full_path.clone().unwrap_or_else(|| "최상위".to_string());
+            Some(GroupHeader { prefix, leaf, tooltip })
+        } else {
+            None
+        };
+        previous_path = Some(full_path);
+        display.push((header, item));
+    }
 
     rsx! {
         section { class: "vvkik-lane",
@@ -159,16 +194,15 @@ pub fn VvkikKindView(props: VvkikKindViewProps) -> Element {
                     h2 { "{props.kind.label()}" }
                     p { "{kind_description(props.kind)}" }
                 }
-                span { class: "lane-count", "{rows.len()}" }
+                span { class: "lane-count", "{row_count}" }
             }
-            if rows.is_empty() {
+            if display.is_empty() {
                 div { class: "lane-empty", "비어 있음" }
             } else {
                 table { class: "kind-table",
                     thead {
                         tr {
                             th { class: "col-title", "제목" }
-                            th { class: if is_kpi { "col-path col-path-kpi" } else { "col-path" }, "상위 경로" }
                             if is_kpi {
                                 th { class: "col-mid col-mid-kpi", "진행률" }
                             } else {
@@ -179,28 +213,36 @@ pub fn VvkikKindView(props: VvkikKindViewProps) -> Element {
                         }
                     }
                     tbody {
-                        for (item, short_path, full_path) in rows {
+                        for (header, item) in display {
                             {
-                                let path_display = short_path.unwrap_or_else(|| "최상위".to_string());
-                                let path_tooltip = full_path.unwrap_or_else(|| "최상위".to_string());
                                 let description = item.description.clone().filter(|text| !text.is_empty()).unwrap_or_else(|| "—".to_string());
                                 let progress = progress_text(&item);
                                 let percent = kpi_percent(&item);
                                 let unit = item.unit.clone().unwrap_or_default();
                                 let is_sum = item.aggregation == KpiAggregation::Sum;
                                 let record_open = is_kpi && *open_record.read() == Some(item.id.clone());
+                                let title_class = if any_grouped { "cell-title grouped" } else { "cell-title" };
                                 let row_item = item.clone();
                                 let delete_item = item.clone();
                                 let quick_item = item.clone();
                                 let submit_item = item.clone();
                                 let save_item = item.clone();
                                 rsx! {
+                                    if let Some(header) = header {
+                                        tr { class: "group-row",
+                                            td { colspan: "4", title: "{header.tooltip}",
+                                                if !header.prefix.is_empty() {
+                                                    span { class: "group-path-prefix", "{header.prefix} › " }
+                                                }
+                                                span { class: "group-path-leaf", "{header.leaf}" }
+                                            }
+                                        }
+                                    }
                                     tr {
                                         // 행 전체가 수정 진입점이다. 행 안의 버튼들만
                                         // 전파를 차단해 행 클릭과 분리한다.
                                         onclick: move |_| props.on_edit.call(row_item.clone()),
-                                        td { class: "cell-title", title: "{item.title}", "{item.title}" }
-                                        td { class: "cell-path", title: "{path_tooltip}", "{path_display}" }
+                                        td { class: title_class, title: "{item.title}", "{item.title}" }
                                         if is_kpi {
                                             td { class: "cell-kpi",
                                                 if let Some(progress) = progress {
@@ -271,7 +313,7 @@ pub fn VvkikKindView(props: VvkikKindViewProps) -> Element {
                                     }
                                     if record_open {
                                         tr { class: "record-row",
-                                            td { colspan: "5",
+                                            td { colspan: "4",
                                                 div { class: "record-popover",
                                                     span { class: "record-popover-hint",
                                                         "측정값을 입력하면 {aggregation_label(item.aggregation)}(으)로 현재값에 바로 반영됩니다."
