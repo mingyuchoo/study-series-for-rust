@@ -4,6 +4,7 @@ use chrono::{DateTime,
 use domain::{DomainError,
              ItemKind,
              ItemStatus,
+             KpiAggregation,
              KpiMeasurement,
              VvkikItem,
              VvkikRepository};
@@ -38,6 +39,7 @@ fn row_to_item(row: &SqliteRow) -> Result<VvkikItem, DomainError> {
         unit: row.get("unit"),
         position: row.get("position"),
         status: ItemStatus::from_str(row.get("status")).map_err(DomainError::DatabaseError)?,
+        aggregation: KpiAggregation::from_str(row.get("aggregation")).map_err(DomainError::DatabaseError)?,
         created_at: parse_datetime(row.get("created_at"))?,
         updated_at: parse_datetime(row.get("updated_at"))?,
     })
@@ -90,6 +92,7 @@ impl SqliteVvkikRepository {
                 unit TEXT,
                 position INTEGER NOT NULL DEFAULT 0,
                 status TEXT NOT NULL,
+                aggregation TEXT NOT NULL DEFAULT 'latest',
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL
             )
@@ -97,6 +100,17 @@ impl SqliteVvkikRepository {
         )
         .execute(&self.pool)
         .await?;
+
+        // aggregation 컬럼이 없던 기존 데이터베이스를 위한 마이그레이션.
+        let has_aggregation = sqlx::query("SELECT 1 FROM pragma_table_info('vvkik_items') WHERE name = 'aggregation'")
+            .fetch_optional(&self.pool)
+            .await?
+            .is_some();
+        if !has_aggregation {
+            sqlx::query("ALTER TABLE vvkik_items ADD COLUMN aggregation TEXT NOT NULL DEFAULT 'latest'")
+                .execute(&self.pool)
+                .await?;
+        }
 
         sqlx::query(
             r#"
@@ -133,9 +147,9 @@ impl VvkikRepository for SqliteVvkikRepository {
             r#"
             INSERT INTO vvkik_items (
                 id, kind, parent_id, title, description, target_value, current_value,
-                unit, position, status, created_at, updated_at
+                unit, position, status, aggregation, created_at, updated_at
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             "#,
         )
         .bind(item.id.to_string())
@@ -148,6 +162,7 @@ impl VvkikRepository for SqliteVvkikRepository {
         .bind(&item.unit)
         .bind(item.position)
         .bind(item.status.as_str())
+        .bind(item.aggregation.as_str())
         .bind(item.created_at.to_rfc3339())
         .bind(item.updated_at.to_rfc3339())
         .execute(&self.pool)
@@ -161,7 +176,7 @@ impl VvkikRepository for SqliteVvkikRepository {
         let row = sqlx::query(
             r#"
             SELECT id, kind, parent_id, title, description, target_value, current_value,
-                   unit, position, status, created_at, updated_at
+                   unit, position, status, aggregation, created_at, updated_at
             FROM vvkik_items
             WHERE id = ?
             "#,
@@ -181,7 +196,7 @@ impl VvkikRepository for SqliteVvkikRepository {
         let rows = sqlx::query(
             r#"
             SELECT id, kind, parent_id, title, description, target_value, current_value,
-                   unit, position, status, created_at, updated_at
+                   unit, position, status, aggregation, created_at, updated_at
             FROM vvkik_items
             ORDER BY
               CASE kind
@@ -208,7 +223,7 @@ impl VvkikRepository for SqliteVvkikRepository {
             r#"
             UPDATE vvkik_items
             SET kind = ?, parent_id = ?, title = ?, description = ?, target_value = ?,
-                current_value = ?, unit = ?, position = ?, status = ?, updated_at = ?
+                current_value = ?, unit = ?, position = ?, status = ?, aggregation = ?, updated_at = ?
             WHERE id = ?
             "#,
         )
@@ -221,6 +236,7 @@ impl VvkikRepository for SqliteVvkikRepository {
         .bind(&item.unit)
         .bind(item.position)
         .bind(item.status.as_str())
+        .bind(item.aggregation.as_str())
         .bind(item.updated_at.to_rfc3339())
         .bind(item.id.to_string())
         .execute(&self.pool)
@@ -245,7 +261,7 @@ impl VvkikRepository for SqliteVvkikRepository {
         let rows = sqlx::query(
             r#"
             SELECT id, kind, parent_id, title, description, target_value, current_value,
-                   unit, position, status, created_at, updated_at
+                   unit, position, status, aggregation, created_at, updated_at
             FROM vvkik_items
             WHERE title LIKE ?1 ESCAPE '\'
                OR description LIKE ?1 ESCAPE '\'
@@ -297,6 +313,17 @@ impl VvkikRepository for SqliteVvkikRepository {
 
         rows.iter().map(row_to_measurement).collect()
     }
+
+    async fn delete_kpi_measurement(&self, kpi_id: Uuid, measurement_id: Uuid) -> Result<(), DomainError> {
+        sqlx::query("DELETE FROM kpi_measurements WHERE id = ? AND kpi_id = ?")
+            .bind(measurement_id.to_string())
+            .bind(kpi_id.to_string())
+            .execute(&self.pool)
+            .await
+            .map_err(|e| DomainError::DatabaseError(e.to_string()))?;
+
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -328,6 +355,7 @@ mod tests {
             current_value: None,
             unit: None,
             position: 0,
+            aggregation: KpiAggregation::default(),
         });
         let id = item.id;
 
@@ -374,6 +402,7 @@ mod tests {
                 current_value: None,
                 unit: None,
                 position: 0,
+                aggregation: KpiAggregation::default(),
             }))
             .await
             .expect("item should be created");
@@ -387,6 +416,7 @@ mod tests {
                 current_value: None,
                 unit: None,
                 position: 1,
+                aggregation: KpiAggregation::default(),
             }))
             .await
             .expect("item should be created");
@@ -410,9 +440,18 @@ mod tests {
                 current_value: Some(0.0),
                 unit: Some("USD".to_string()),
                 position: 0,
+                aggregation: KpiAggregation::Sum,
             }))
             .await
             .expect("kpi should be created");
+
+        // aggregation 컬럼도 저장·복원되는지 함께 확인한다.
+        let stored = repository
+            .get_item_by_id(kpi.id)
+            .await
+            .expect("kpi lookup should succeed")
+            .expect("kpi should exist");
+        assert_eq!(stored.aggregation, KpiAggregation::Sum);
 
         let measurement = repository
             .record_kpi_measurement(KpiMeasurement::new(kpi.id, 1200.0, Some("First month".to_string())))
@@ -420,6 +459,58 @@ mod tests {
             .expect("measurement should be recorded");
 
         let measurements = repository.list_kpi_measurements(kpi.id).await.expect("measurements should be listed");
-        assert_eq!(measurements, vec![measurement]);
+        assert_eq!(measurements, vec![measurement.clone()]);
+
+        // 다른 KPI의 id로는 지워지지 않아야 한다.
+        repository
+            .delete_kpi_measurement(Uuid::new_v4(), measurement.id)
+            .await
+            .expect("delete with wrong kpi id should succeed silently");
+        assert_eq!(repository.list_kpi_measurements(kpi.id).await.unwrap().len(), 1);
+
+        repository
+            .delete_kpi_measurement(kpi.id, measurement.id)
+            .await
+            .expect("measurement should be deleted");
+        assert!(repository.list_kpi_measurements(kpi.id).await.unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn init_is_idempotent_and_migrates_missing_aggregation_column() {
+        let pool = SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect("sqlite::memory:")
+            .await
+            .expect("in-memory sqlite pool should be created");
+
+        // aggregation 컬럼이 없던 구버전 스키마를 흉내 낸다.
+        sqlx::query(
+            r#"
+            CREATE TABLE vvkik_items (
+                id TEXT PRIMARY KEY,
+                kind TEXT NOT NULL,
+                parent_id TEXT REFERENCES vvkik_items(id) ON DELETE CASCADE,
+                title TEXT NOT NULL,
+                description TEXT,
+                target_value REAL,
+                current_value REAL,
+                unit TEXT,
+                position INTEGER NOT NULL DEFAULT 0,
+                status TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            )
+            "#,
+        )
+        .execute(&pool)
+        .await
+        .expect("legacy table should be created");
+
+        let repository = SqliteVvkikRepository::new(pool);
+        repository.init().await.expect("init should migrate the legacy schema");
+        repository.init().await.expect("init should stay idempotent");
+
+        let items = repository.list_items().await.expect("legacy rows should be readable");
+        assert!(items.is_empty());
     }
 }

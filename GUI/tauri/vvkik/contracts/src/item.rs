@@ -38,9 +38,7 @@ impl ItemKind {
     }
 
     /// 계층에서 이 단계가 차지하는 순위(0 = 최상위).
-    pub fn rank(self) -> usize {
-        Self::ALL.iter().position(|kind| *kind == self).expect("ALL covers every kind")
-    }
+    pub fn rank(self) -> usize { Self::ALL.iter().position(|kind| *kind == self).expect("ALL covers every kind") }
 
     /// 부모는 항상 정확히 1단계 위의 단계만 허용한다.
     pub fn allowed_parent_kinds(self) -> &'static [ItemKind] {
@@ -122,6 +120,64 @@ impl FromStr for ItemStatus {
     }
 }
 
+/// KPI 측정 기록들을 현재값으로 취합하는 방식.
+///
+/// 체지방률처럼 "지금 수준"이 의미 있는 지표는 `Latest`, 월 커밋 수처럼
+/// 기록이 쌓여 성과가 되는 지표는 `Sum`, 평균 수면 시간처럼 기록의
+/// 평균이 수준을 나타내는 지표는 `Average`를 쓴다.
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum KpiAggregation {
+    #[default]
+    Latest,
+    Sum,
+    Average,
+}
+
+impl KpiAggregation {
+    pub const ALL: [KpiAggregation; 3] = [Self::Latest, Self::Sum, Self::Average];
+
+    pub fn as_str(self) -> &'static str {
+        match self {
+            | Self::Latest => "latest",
+            | Self::Sum => "sum",
+            | Self::Average => "average",
+        }
+    }
+
+    /// 측정값들로부터 현재값을 계산한다. `values`는 최신 기록이 앞에
+    /// 오도록(측정 시각 내림차순) 정렬되어 있어야 한다. 기록이 없으면
+    /// `None`을 돌려준다.
+    pub fn aggregate(self, values: &[f64]) -> Option<f64> {
+        if values.is_empty() {
+            return None;
+        }
+
+        match self {
+            | Self::Latest => values.first().copied(),
+            | Self::Sum => Some(values.iter().sum()),
+            | Self::Average => Some(values.iter().sum::<f64>() / values.len() as f64),
+        }
+    }
+}
+
+impl fmt::Display for KpiAggregation {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result { f.write_str(self.as_str()) }
+}
+
+impl FromStr for KpiAggregation {
+    type Err = String;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        match value.trim().to_ascii_lowercase().as_str() {
+            | "latest" => Ok(Self::Latest),
+            | "sum" => Ok(Self::Sum),
+            | "average" => Ok(Self::Average),
+            | _ => Err(format!("Unsupported KPI aggregation: {value}")),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -166,5 +222,24 @@ mod tests {
     fn rank_follows_all_order() {
         assert_eq!(ItemKind::Value.rank(), 0);
         assert_eq!(ItemKind::Kpi.rank(), 4);
+    }
+
+    #[test]
+    fn aggregation_serializes_to_snake_case_wire_format() {
+        assert_eq!(serde_json::to_string(&KpiAggregation::Latest).unwrap(), "\"latest\"");
+        assert_eq!(serde_json::from_str::<KpiAggregation>("\"sum\"").unwrap(), KpiAggregation::Sum);
+        assert_eq!("average".parse::<KpiAggregation>().unwrap(), KpiAggregation::Average);
+        assert!("unknown".parse::<KpiAggregation>().is_err());
+    }
+
+    #[test]
+    fn aggregation_computes_current_value_from_newest_first_values() {
+        // 최신 기록(40.0)이 맨 앞에 오는 내림차순 입력.
+        let values = [40.0, 30.0, 20.0];
+
+        assert_eq!(KpiAggregation::Latest.aggregate(&values), Some(40.0));
+        assert_eq!(KpiAggregation::Sum.aggregate(&values), Some(90.0));
+        assert_eq!(KpiAggregation::Average.aggregate(&values), Some(30.0));
+        assert_eq!(KpiAggregation::Sum.aggregate(&[]), None);
     }
 }

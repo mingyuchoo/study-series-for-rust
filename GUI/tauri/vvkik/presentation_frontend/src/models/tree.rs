@@ -191,6 +191,7 @@ mod tests {
             unit: None,
             position,
             status: ItemStatus::Active,
+            aggregation: contracts::KpiAggregation::default(),
             created_at: String::new(),
             updated_at: String::new(),
         }

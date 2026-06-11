@@ -61,6 +61,7 @@ mod tests {
             current_value: None,
             unit: None,
             position: 0,
+            aggregation: domain::KpiAggregation::default(),
         });
         assert!(validate_parent(ItemKind::Vision, Some(&value)).is_ok());
         assert!(validate_parent(ItemKind::Kra, Some(&value)).is_err());

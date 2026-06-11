@@ -24,6 +24,7 @@ pub fn item_to_dto(item: VvkikItem) -> VvkikItemDto {
         unit: item.unit,
         position: item.position,
         status: item.status,
+        aggregation: item.aggregation,
         created_at: item.created_at.to_rfc3339(),
         updated_at: item.updated_at.to_rfc3339(),
     }

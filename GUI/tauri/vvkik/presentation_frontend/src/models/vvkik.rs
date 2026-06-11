@@ -5,6 +5,7 @@ pub use contracts::{ApiError,
                     CreateItemRequest,
                     ItemKind,
                     ItemStatus,
+                    KpiAggregation,
                     KpiMeasurementDto as KpiMeasurement,
                     RecordKpiMeasurementRequest,
                     UpdateItemRequest,
@@ -16,6 +17,24 @@ pub fn status_label(status: ItemStatus) -> &'static str {
         | ItemStatus::Active => "Active",
         | ItemStatus::Paused => "Paused",
         | ItemStatus::Completed => "Completed",
+    }
+}
+
+/// 집계 방식의 화면용 레이블.
+pub fn aggregation_label(aggregation: KpiAggregation) -> &'static str {
+    match aggregation {
+        | KpiAggregation::Latest => "최신값",
+        | KpiAggregation::Sum => "합계",
+        | KpiAggregation::Average => "평균",
+    }
+}
+
+/// 집계 방식의 화면용 설명 문구.
+pub fn aggregation_description(aggregation: KpiAggregation) -> &'static str {
+    match aggregation {
+        | KpiAggregation::Latest => "가장 최근 기록값을 현재값으로 사용 (체지방률, 중량 등 수준 지표)",
+        | KpiAggregation::Sum => "기록값을 모두 더해 현재값으로 사용 (커밋 수, 거리 등 누적 지표)",
+        | KpiAggregation::Average => "기록값의 평균을 현재값으로 사용 (수면 시간 등 평균 지표)",
     }
 }
 

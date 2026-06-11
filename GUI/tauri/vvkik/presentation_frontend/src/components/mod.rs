@@ -2,6 +2,7 @@ pub mod board;
 pub mod dashboard;
 pub mod item_form;
 pub mod kind_view;
+pub mod kpi_measurements;
 pub mod quick_add;
 pub mod tree;
 

@@ -13,5 +13,9 @@ pub trait VvkikRepository: Send + Sync {
     async fn delete(&self, id: Uuid) -> Result<(), DomainError>;
     async fn search_items(&self, query: &str) -> Result<Vec<VvkikItem>, DomainError>;
     async fn record_kpi_measurement(&self, measurement: KpiMeasurement) -> Result<KpiMeasurement, DomainError>;
+    /// 측정 기록을 최신순(측정 시각 내림차순)으로 돌려준다.
     async fn list_kpi_measurements(&self, kpi_id: Uuid) -> Result<Vec<KpiMeasurement>, DomainError>;
+    /// `kpi_id`에 속한 측정 기록 하나를 지운다. 다른 KPI의 기록 id를
+    /// 넘기면 아무것도 지우지 않는다.
+    async fn delete_kpi_measurement(&self, kpi_id: Uuid, measurement_id: Uuid) -> Result<(), DomainError>;
 }

@@ -1,10 +1,14 @@
 #![allow(non_snake_case)]
 
+use super::kpi_measurements::KpiMeasurementPanel;
 use crate::models::{CreateItemRequest,
                     ItemKind,
                     ItemStatus,
+                    KpiAggregation,
                     UpdateItemRequest,
                     VvkikItem,
+                    aggregation_description,
+                    aggregation_label,
                     kind_description,
                     status_label,
                     tree::parent_chain};
@@ -30,6 +34,10 @@ pub struct ItemFormProps {
     /// 브레드크럼에서 조상을 클릭하면 그 항목의 수정 화면으로 이동한다.
     #[props(default)]
     pub on_navigate: EventHandler<VvkikItem>,
+    /// 폼 제출과 별개로 데이터가 바뀌었을 때(측정 기록 추가·삭제)
+    /// 호출된다.
+    #[props(default)]
+    pub on_data_change: EventHandler<()>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -42,6 +50,7 @@ pub struct ItemFormData {
     pub current_value: String,
     pub unit: String,
     pub status: ItemStatus,
+    pub aggregation: KpiAggregation,
 }
 
 fn blank_to_none(value: &str) -> Option<String> {
@@ -72,6 +81,7 @@ impl ItemFormData {
             current_value: parse_optional_f64(&self.current_value, "현재값")?,
             unit: blank_to_none(&self.unit),
             position: Some(position),
+            aggregation: self.aggregation,
         })
     }
 
@@ -89,6 +99,7 @@ impl ItemFormData {
             unit: Some(self.unit.trim().to_string()),
             position: None,
             status: Some(self.status),
+            aggregation: Some(self.aggregation),
         })
     }
 }
@@ -123,6 +134,9 @@ pub fn ItemForm(props: ItemFormProps) -> Element {
     let mut current_value = use_signal(|| props.item.as_ref().map(|item| number_to_string(item.current_value)).unwrap_or_default());
     let mut unit = use_signal(|| props.item.as_ref().and_then(|item| item.unit.clone()).unwrap_or_default());
     let mut status = use_signal(|| props.item.as_ref().map(|item| item.status).unwrap_or(ItemStatus::Active));
+    let mut aggregation = use_signal(|| props.item.as_ref().map(|item| item.aggregation).unwrap_or_default());
+    // 측정 기록이 있는 KPI는 현재값이 자동 집계되므로 입력을 잠근다.
+    let has_measurements = use_signal(|| false);
     let mut form_error = use_signal(|| None::<String>);
 
     let is_edit = props.item.is_some();
@@ -167,6 +181,7 @@ pub fn ItemForm(props: ItemFormProps) -> Element {
             current_value: current_value.read().clone(),
             unit: unit.read().clone(),
             status: *status.read(),
+            aggregation: *aggregation.read(),
         });
     };
 
@@ -298,8 +313,12 @@ pub fn ItemForm(props: ItemFormProps) -> Element {
                                 id: "current_value",
                                 r#type: "number",
                                 step: "any",
+                                disabled: *has_measurements.read(),
                                 value: "{current_value}",
                                 oninput: move |evt| current_value.set(evt.value())
+                            }
+                            if *has_measurements.read() {
+                                span { class: "field-hint", "실적 기록에서 자동 집계됩니다." }
                             }
                         }
                         div { class: "form-group",
@@ -321,6 +340,35 @@ pub fn ItemForm(props: ItemFormProps) -> Element {
                                 value: "{unit}",
                                 oninput: move |evt| unit.set(evt.value())
                             }
+                        }
+                    }
+
+                    div { class: "form-group",
+                        label { "집계 방식" }
+                        div { class: "kind-segment", role: "radiogroup", aria_label: "집계 방식 선택",
+                            for aggregation_option in KpiAggregation::ALL {
+                                button {
+                                    r#type: "button",
+                                    role: "radio",
+                                    aria_checked: *aggregation.read() == aggregation_option,
+                                    title: "{aggregation_description(aggregation_option)}",
+                                    class: if *aggregation.read() == aggregation_option { "segment-btn active" } else { "segment-btn" },
+                                    onclick: move |_| aggregation.set(aggregation_option),
+                                    "{aggregation_label(aggregation_option)}"
+                                }
+                            }
+                        }
+                        span { class: "field-hint", "{aggregation_description(*aggregation.read())}" }
+                    }
+
+                    if let Some(item) = props.item.as_ref() {
+                        KpiMeasurementPanel {
+                            kpi_id: item.id.clone(),
+                            aggregation: item.aggregation,
+                            unit: item.unit.clone(),
+                            has_measurements,
+                            current_value,
+                            on_data_change: props.on_data_change
                         }
                     }
                 }

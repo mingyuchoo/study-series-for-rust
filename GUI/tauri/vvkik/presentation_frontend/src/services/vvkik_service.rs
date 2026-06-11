@@ -106,8 +106,25 @@ impl VvkikService {
         call("search_items", &serde_json::json!({ "query": query })).await
     }
 
-    #[allow(dead_code)]
     pub async fn record_kpi_measurement(request: RecordKpiMeasurementRequest) -> Result<KpiMeasurement, String> {
         call("record_kpi_measurement", &serde_json::json!({ "request": request })).await
+    }
+
+    pub async fn list_kpi_measurements(kpi_id: String) -> Result<Vec<KpiMeasurement>, String> {
+        call("list_kpi_measurements", &serde_json::json!({ "kpiId": kpi_id })).await
+    }
+
+    pub async fn delete_kpi_measurement(kpi_id: String, measurement_id: String) -> Result<(), String> {
+        let result = call_raw(
+            "delete_kpi_measurement",
+            &serde_json::json!({ "kpiId": kpi_id, "measurementId": measurement_id }),
+        )
+        .await?;
+
+        if result.is_null() || result.is_undefined() {
+            Ok(())
+        } else {
+            serde_wasm_bindgen::from_value(result).map_err(|e| format!("Deserialization error: {}", e))
+        }
     }
 }

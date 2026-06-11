@@ -66,6 +66,7 @@ pub fn App() -> Element {
             current_value: None,
             unit: None,
             position: Some(position),
+            aggregation: Default::default(),
         };
         spawn(async move {
             store.create(request).await;
@@ -116,6 +117,7 @@ pub fn App() -> Element {
             unit: None,
             position: Some(position),
             status: None,
+            aggregation: None,
         };
         spawn(async move {
             store.update(request).await;
@@ -218,6 +220,11 @@ pub fn App() -> Element {
                         item: Some((*item).clone()),
                         items: items.read().clone(),
                         on_submit: handle_edit_item,
+                        // 측정 기록이 추가·삭제되면 목록의 현재값·진행률을
+                        // 새로 불러온다.
+                        on_data_change: move |_| {
+                            spawn(async move { store.refresh().await });
+                        },
                         on_navigate: move |target: VvkikItem| {
                             store.clear_error();
                             current_view.set(AppView::Edit(Box::new(target)));

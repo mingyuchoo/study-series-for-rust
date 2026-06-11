@@ -2,7 +2,9 @@
 
 use application::{CreateItemUseCase,
                   DeleteItemUseCase,
+                  DeleteKpiMeasurementUseCase,
                   ListItemsUseCase,
+                  ListKpiMeasurementsUseCase,
                   RecordKpiMeasurementUseCase,
                   SearchItemsUseCase,
                   UpdateItemUseCase};
@@ -10,6 +12,7 @@ use async_trait::async_trait;
 use domain::{DomainError,
              ItemKind,
              ItemPatch,
+             KpiAggregation,
              KpiMeasurement,
              NewVvkikItem,
              VvkikItem,
@@ -81,7 +84,17 @@ impl VvkikRepository for MockVvkikRepository {
     }
 
     async fn list_kpi_measurements(&self, kpi_id: Uuid) -> Result<Vec<KpiMeasurement>, DomainError> {
-        Ok(self.measurements.lock().unwrap().get(&kpi_id).cloned().unwrap_or_default())
+        // 실제 리포지토리처럼 최신 기록이 앞에 오도록 돌려준다.
+        let mut measurements = self.measurements.lock().unwrap().get(&kpi_id).cloned().unwrap_or_default();
+        measurements.reverse();
+        Ok(measurements)
+    }
+
+    async fn delete_kpi_measurement(&self, kpi_id: Uuid, measurement_id: Uuid) -> Result<(), DomainError> {
+        if let Some(measurements) = self.measurements.lock().unwrap().get_mut(&kpi_id) {
+            measurements.retain(|measurement| measurement.id != measurement_id);
+        }
+        Ok(())
     }
 }
 
@@ -95,6 +108,7 @@ fn draft(kind: ItemKind, parent_id: Option<Uuid>, title: &str) -> NewVvkikItem {
         current_value: None,
         unit: None,
         position: 0,
+        aggregation: KpiAggregation::default(),
     }
 }
 
@@ -122,10 +136,7 @@ async fn create_rejects_blank_title() {
 async fn create_rejects_invalid_parent_hierarchy() {
     let repository = MockVvkikRepository::arc();
     let create = CreateItemUseCase::new(repository.clone());
-    let value = create
-        .execute(draft(ItemKind::Value, None, "Freedom"))
-        .await
-        .expect("value should be created");
+    let value = create.execute(draft(ItemKind::Value, None, "Freedom")).await.expect("value should be created");
 
     let result = create.execute(draft(ItemKind::Kra, Some(value.id), "Sales engine")).await;
 
@@ -138,10 +149,7 @@ async fn create_persists_valid_hierarchy() {
     let repository = MockVvkikRepository::arc();
     let create = CreateItemUseCase::new(repository.clone());
 
-    let value = create
-        .execute(draft(ItemKind::Value, None, "Freedom"))
-        .await
-        .expect("value should be created");
+    let value = create.execute(draft(ItemKind::Value, None, "Freedom")).await.expect("value should be created");
     let vision = create
         .execute(draft(ItemKind::Vision, Some(value.id), "Independent studio"))
         .await
@@ -154,10 +162,7 @@ async fn create_persists_valid_hierarchy() {
         .execute(draft(ItemKind::Igt, Some(kra.id), "Publish offer"))
         .await
         .expect("igt should be created");
-    let kpi = create
-        .execute(kpi_draft(Some(igt.id), "Monthly revenue"))
-        .await
-        .expect("kpi should be created");
+    let kpi = create.execute(kpi_draft(Some(igt.id), "Monthly revenue")).await.expect("kpi should be created");
 
     assert_eq!(kpi.parent_id, Some(igt.id));
     assert_eq!(repository.count(), 5);
@@ -168,10 +173,13 @@ async fn update_returns_not_found_for_missing_item() {
     let repository = MockVvkikRepository::arc();
 
     let update_result = UpdateItemUseCase::new(repository)
-        .execute(Uuid::new_v4(), ItemPatch {
-            title: Some("New title".to_string()),
-            ..ItemPatch::default()
-        })
+        .execute(
+            Uuid::new_v4(),
+            ItemPatch {
+                title: Some("New title".to_string()),
+                ..ItemPatch::default()
+            },
+        )
         .await;
     assert!(matches!(update_result, Err(DomainError::ItemNotFound)));
 }
@@ -185,12 +193,15 @@ async fn update_mutates_existing_item() {
         .expect("item should be created");
 
     let updated = UpdateItemUseCase::new(repository.clone())
-        .execute(created.id, ItemPatch {
-            title: Some("Creative freedom".to_string()),
-            description: Some("Build a calm operating system".to_string()),
-            position: Some(3),
-            ..ItemPatch::default()
-        })
+        .execute(
+            created.id,
+            ItemPatch {
+                title: Some("Creative freedom".to_string()),
+                description: Some("Build a calm operating system".to_string()),
+                position: Some(3),
+                ..ItemPatch::default()
+            },
+        )
         .await
         .expect("item should be updated");
 
@@ -282,4 +293,123 @@ async fn record_kpi_measurement_updates_current_value() {
     let measurements = repository.list_kpi_measurements(kpi.id).await.unwrap();
     assert_eq!(updated.current_value, Some(1200.0));
     assert_eq!(measurements, vec![measurement]);
+}
+
+/// Value → … → KPI 계층을 만들어 측정 기록 테스트가 쓸 KPI를 돌려준다.
+async fn seeded_kpi(repository: &Arc<MockVvkikRepository>, aggregation: KpiAggregation) -> VvkikItem {
+    let create = CreateItemUseCase::new(repository.clone());
+    let value = create.execute(draft(ItemKind::Value, None, "Freedom")).await.unwrap();
+    let vision = create.execute(draft(ItemKind::Vision, Some(value.id), "Independent studio")).await.unwrap();
+    let kra = create.execute(draft(ItemKind::Kra, Some(vision.id), "Revenue")).await.unwrap();
+    let igt = create.execute(draft(ItemKind::Igt, Some(kra.id), "Publish offer")).await.unwrap();
+    create
+        .execute(NewVvkikItem {
+            aggregation,
+            ..kpi_draft(Some(igt.id), "Monthly revenue")
+        })
+        .await
+        .unwrap()
+}
+
+#[tokio::test]
+async fn sum_aggregation_accumulates_measurements_into_current_value() {
+    let repository = MockVvkikRepository::arc();
+    let kpi = seeded_kpi(&repository, KpiAggregation::Sum).await;
+    let record = RecordKpiMeasurementUseCase::new(repository.clone());
+
+    record.execute(kpi.id, 3.0, Some("Week 1".to_string())).await.unwrap();
+    record.execute(kpi.id, 4.0, None).await.unwrap();
+
+    let updated = repository.get_item_by_id(kpi.id).await.unwrap().unwrap();
+    assert_eq!(updated.current_value, Some(7.0));
+}
+
+#[tokio::test]
+async fn average_aggregation_averages_measurements() {
+    let repository = MockVvkikRepository::arc();
+    let kpi = seeded_kpi(&repository, KpiAggregation::Average).await;
+    let record = RecordKpiMeasurementUseCase::new(repository.clone());
+
+    record.execute(kpi.id, 6.0, None).await.unwrap();
+    record.execute(kpi.id, 8.0, None).await.unwrap();
+
+    let updated = repository.get_item_by_id(kpi.id).await.unwrap().unwrap();
+    assert_eq!(updated.current_value, Some(7.0));
+}
+
+#[tokio::test]
+async fn deleting_a_measurement_recomputes_and_clears_when_empty() {
+    let repository = MockVvkikRepository::arc();
+    let kpi = seeded_kpi(&repository, KpiAggregation::Sum).await;
+    let record = RecordKpiMeasurementUseCase::new(repository.clone());
+
+    let first = record.execute(kpi.id, 3.0, None).await.unwrap();
+    let second = record.execute(kpi.id, 4.0, None).await.unwrap();
+
+    let delete = DeleteKpiMeasurementUseCase::new(repository.clone());
+    delete.execute(kpi.id, first.id).await.expect("measurement should be deleted");
+    assert_eq!(repository.get_item_by_id(kpi.id).await.unwrap().unwrap().current_value, Some(4.0));
+
+    // 마지막 기록을 지우면 현재값도 비워진다.
+    delete.execute(kpi.id, second.id).await.expect("measurement should be deleted");
+    assert_eq!(repository.get_item_by_id(kpi.id).await.unwrap().unwrap().current_value, None);
+}
+
+#[tokio::test]
+async fn switching_aggregation_recomputes_current_value() {
+    let repository = MockVvkikRepository::arc();
+    let kpi = seeded_kpi(&repository, KpiAggregation::Sum).await;
+    let record = RecordKpiMeasurementUseCase::new(repository.clone());
+
+    record.execute(kpi.id, 3.0, None).await.unwrap();
+    record.execute(kpi.id, 4.0, None).await.unwrap();
+
+    let updated = UpdateItemUseCase::new(repository.clone())
+        .execute(
+            kpi.id,
+            ItemPatch {
+                aggregation: Some(KpiAggregation::Latest),
+                ..ItemPatch::default()
+            },
+        )
+        .await
+        .expect("aggregation switch should succeed");
+
+    // 합계(7.0)가 아니라 마지막 기록(4.0)으로 다시 집계된다.
+    assert_eq!(updated.aggregation, KpiAggregation::Latest);
+    assert_eq!(updated.current_value, Some(4.0));
+}
+
+#[tokio::test]
+async fn manual_current_value_survives_update_when_no_measurements_exist() {
+    let repository = MockVvkikRepository::arc();
+    let kpi = seeded_kpi(&repository, KpiAggregation::Sum).await;
+
+    let updated = UpdateItemUseCase::new(repository.clone())
+        .execute(
+            kpi.id,
+            ItemPatch {
+                current_value: Some(Some(42.0)),
+                ..ItemPatch::default()
+            },
+        )
+        .await
+        .expect("manual update should succeed");
+
+    assert_eq!(updated.current_value, Some(42.0));
+}
+
+#[tokio::test]
+async fn list_kpi_measurements_rejects_non_kpi_items() {
+    let repository = MockVvkikRepository::arc();
+    let value = CreateItemUseCase::new(repository.clone())
+        .execute(draft(ItemKind::Value, None, "Freedom"))
+        .await
+        .unwrap();
+
+    let result = ListKpiMeasurementsUseCase::new(repository.clone()).execute(value.id).await;
+    assert!(matches!(result, Err(DomainError::InvalidVvkikData(_))));
+
+    let missing = ListKpiMeasurementsUseCase::new(repository).execute(Uuid::new_v4()).await;
+    assert!(matches!(missing, Err(DomainError::ItemNotFound)));
 }

@@ -11,6 +11,8 @@ pub struct AppState {
     pub delete_item_use_case: Arc<DeleteItemUseCase>,
     pub search_items_use_case: Arc<SearchItemsUseCase>,
     pub record_kpi_measurement_use_case: Arc<RecordKpiMeasurementUseCase>,
+    pub list_kpi_measurements_use_case: Arc<ListKpiMeasurementsUseCase>,
+    pub delete_kpi_measurement_use_case: Arc<DeleteKpiMeasurementUseCase>,
 }
 
 fn parse_id(id: &str) -> Result<Uuid, ApiError> { Uuid::parse_str(id).map_err(|e| ApiError::invalid_id(format!("Invalid VVKIK item id: {e}"))) }
@@ -32,6 +34,7 @@ pub async fn create_item(state: State<'_, AppState>, request: CreateItemRequest)
             current_value: request.current_value,
             unit: request.unit,
             position: request.position.unwrap_or_default(),
+            aggregation: request.aggregation,
         })
         .await
         .map(item_to_dto)
@@ -67,6 +70,7 @@ pub async fn update_item(state: State<'_, AppState>, request: UpdateItemRequest)
                 unit: request.unit,
                 position: request.position,
                 status: request.status,
+                aggregation: request.aggregation,
             },
         )
         .await
@@ -100,5 +104,29 @@ pub async fn record_kpi_measurement(state: State<'_, AppState>, request: RecordK
         .execute(kpi_id, request.value, request.note)
         .await
         .map(measurement_to_dto)
+        .map_err(domain_error_to_api)
+}
+
+#[tauri::command]
+pub async fn list_kpi_measurements(state: State<'_, AppState>, kpi_id: String) -> Result<Vec<KpiMeasurementDto>, ApiError> {
+    let kpi_id = parse_id(&kpi_id)?;
+
+    state
+        .list_kpi_measurements_use_case
+        .execute(kpi_id)
+        .await
+        .map(|measurements| measurements.into_iter().map(measurement_to_dto).collect())
+        .map_err(domain_error_to_api)
+}
+
+#[tauri::command]
+pub async fn delete_kpi_measurement(state: State<'_, AppState>, kpi_id: String, measurement_id: String) -> Result<(), ApiError> {
+    let kpi_id = parse_id(&kpi_id)?;
+    let measurement_id = parse_id(&measurement_id)?;
+
+    state
+        .delete_kpi_measurement_use_case
+        .execute(kpi_id, measurement_id)
+        .await
         .map_err(domain_error_to_api)
 }

@@ -87,6 +87,10 @@ impl VvkikStore {
 
     pub async fn search(self) { self.reload("검색에 실패했습니다").await; }
 
+    /// 폼 바깥에서 데이터가 바뀌었을 때(측정 기록 추가·삭제 등) 목록을
+    /// 현재 검색어 기준으로 다시 불러온다.
+    pub async fn refresh(self) { self.reload("VVKIK 항목을 불러오지 못했습니다").await; }
+
     pub async fn clear_search(mut self) {
         self.search_query.set(String::new());
         self.reload("VVKIK 항목을 불러오지 못했습니다").await;

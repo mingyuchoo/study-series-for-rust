@@ -1227,3 +1227,120 @@ textarea:focus {
     justify-content: space-between;
   }
 }
+
+/* ── KPI 실적 기록 ────────────────────────────────────────── */
+
+.field-hint {
+  display: block;
+  margin-top: 4px;
+  color: var(--color-mute);
+  font-size: 12px;
+}
+
+.measurement-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  border: 1px solid var(--color-hairline);
+  border-radius: var(--radius-lg);
+  padding: 16px;
+  margin-bottom: 20px;
+  background: var(--color-surface-soft);
+}
+
+.measurement-heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.measurement-heading label {
+  margin: 0;
+  font-weight: 600;
+}
+
+.measurement-hint {
+  color: var(--color-mute);
+  font-size: 12px;
+}
+
+.measurement-add {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.measurement-value-input {
+  width: 120px;
+  flex: none;
+}
+
+.measurement-unit {
+  flex: none;
+  color: var(--color-body);
+  font-size: 13px;
+}
+
+.measurement-note-input {
+  flex: 1;
+  min-width: 0;
+}
+
+.measurement-empty {
+  margin: 0;
+  color: var(--color-mute);
+  font-size: 13px;
+}
+
+.measurement-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.measurement-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border-radius: var(--radius-sm);
+  padding: 8px 10px;
+  background: var(--color-canvas);
+}
+
+.measurement-value {
+  flex: none;
+  min-width: 90px;
+  color: var(--color-ink);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.measurement-note {
+  flex: 1;
+  overflow: hidden;
+  color: var(--color-body);
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.measurement-date {
+  flex: none;
+  color: var(--color-mute);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+@media (max-width: 900px) {
+  .measurement-add {
+    flex-wrap: wrap;
+  }
+
+  .measurement-note-input {
+    flex-basis: 100%;
+  }
+}

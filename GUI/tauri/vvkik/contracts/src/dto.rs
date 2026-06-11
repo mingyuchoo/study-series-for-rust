@@ -1,5 +1,6 @@
 use crate::{ItemKind,
-            ItemStatus};
+            ItemStatus,
+            KpiAggregation};
 use serde::{Deserialize,
             Serialize};
 
@@ -17,6 +18,8 @@ pub struct VvkikItemDto {
     pub unit: Option<String>,
     pub position: i64,
     pub status: ItemStatus,
+    #[serde(default)]
+    pub aggregation: KpiAggregation,
     pub created_at: String,
     pub updated_at: String,
 }
@@ -31,6 +34,8 @@ pub struct CreateItemRequest {
     pub current_value: Option<f64>,
     pub unit: Option<String>,
     pub position: Option<i64>,
+    #[serde(default)]
+    pub aggregation: KpiAggregation,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -45,6 +50,8 @@ pub struct UpdateItemRequest {
     pub unit: Option<String>,
     pub position: Option<i64>,
     pub status: Option<ItemStatus>,
+    #[serde(default)]
+    pub aggregation: Option<KpiAggregation>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]

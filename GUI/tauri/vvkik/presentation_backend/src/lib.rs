@@ -44,7 +44,9 @@ fn build_app_state(pool: SqlitePool) -> AppState {
         update_item_use_case: Arc::new(UpdateItemUseCase::new(repository.clone())),
         delete_item_use_case: Arc::new(DeleteItemUseCase::new(repository.clone())),
         search_items_use_case: Arc::new(SearchItemsUseCase::new(repository.clone())),
-        record_kpi_measurement_use_case: Arc::new(RecordKpiMeasurementUseCase::new(repository)),
+        record_kpi_measurement_use_case: Arc::new(RecordKpiMeasurementUseCase::new(repository.clone())),
+        list_kpi_measurements_use_case: Arc::new(ListKpiMeasurementsUseCase::new(repository.clone())),
+        delete_kpi_measurement_use_case: Arc::new(DeleteKpiMeasurementUseCase::new(repository)),
     }
 }
 
@@ -76,7 +78,9 @@ pub fn run() {
             update_item,
             delete_item,
             search_items,
-            record_kpi_measurement
+            record_kpi_measurement,
+            list_kpi_measurements,
+            delete_kpi_measurement
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
@@ -112,6 +116,7 @@ mod tests {
                 current_value: None,
                 unit: None,
                 position: 2,
+                aggregation: domain::KpiAggregation::default(),
             }))
             .await
             .expect("item should be created");

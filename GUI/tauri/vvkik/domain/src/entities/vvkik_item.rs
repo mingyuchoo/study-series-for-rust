@@ -3,7 +3,8 @@ use chrono::{DateTime,
 // 단계/상태 enum은 공유 와이어 계약(contracts)이 단일 정의를 갖고,
 // 도메인은 이를 재노출한다.
 pub use contracts::{ItemKind,
-                    ItemStatus};
+                    ItemStatus,
+                    KpiAggregation};
 use serde::{Deserialize,
             Serialize};
 use uuid::Uuid;
@@ -20,6 +21,7 @@ pub struct VvkikItem {
     pub unit: Option<String>,
     pub position: i64,
     pub status: ItemStatus,
+    pub aggregation: KpiAggregation,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -36,6 +38,7 @@ pub struct NewVvkikItem {
     pub current_value: Option<f64>,
     pub unit: Option<String>,
     pub position: i64,
+    pub aggregation: KpiAggregation,
 }
 
 /// 부분 수정. `None`은 "변경하지 않음", `Some(None)`은 "값을 비움"이다.
@@ -50,6 +53,7 @@ pub struct ItemPatch {
     pub unit: Option<String>,
     pub position: Option<i64>,
     pub status: Option<ItemStatus>,
+    pub aggregation: Option<KpiAggregation>,
 }
 
 impl VvkikItem {
@@ -66,6 +70,7 @@ impl VvkikItem {
             unit: Self::normalize_optional_field(draft.unit),
             position: draft.position,
             status: ItemStatus::Active,
+            aggregation: draft.aggregation,
             created_at: now,
             updated_at: now,
         }
@@ -98,6 +103,9 @@ impl VvkikItem {
         }
         if let Some(status) = patch.status {
             self.status = status;
+        }
+        if let Some(aggregation) = patch.aggregation {
+            self.aggregation = aggregation;
         }
         self.updated_at = Utc::now();
     }
@@ -143,6 +151,7 @@ mod tests {
             current_value: None,
             unit: Some("  sessions  ".to_string()),
             position: 0,
+            aggregation: KpiAggregation::default(),
         });
 
         assert_eq!(item.title, "Build a focused practice");
@@ -162,6 +171,7 @@ mod tests {
             current_value: None,
             unit: None,
             position: 0,
+            aggregation: KpiAggregation::default(),
         });
 
         item.update(ItemPatch {

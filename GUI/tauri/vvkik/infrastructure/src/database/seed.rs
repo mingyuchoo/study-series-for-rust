@@ -8,6 +8,7 @@
 
 use domain::{DomainError,
              ItemKind,
+             KpiAggregation,
              NewVvkikItem,
              VvkikItem,
              VvkikRepository};
@@ -17,6 +18,7 @@ struct KpiSeed {
     title: &'static str,
     target_value: f64,
     unit: &'static str,
+    aggregation: KpiAggregation,
 }
 
 struct IgtSeed {
@@ -41,336 +43,195 @@ struct ValueSeed {
     visions: [VisionSeed; 2],
 }
 
+fn kpi(title: &'static str, target_value: f64, unit: &'static str, aggregation: KpiAggregation) -> KpiSeed {
+    KpiSeed {
+        title,
+        target_value,
+        unit,
+        aggregation,
+    }
+}
+
+fn igt(title: &'static str, kpis: [KpiSeed; 2]) -> IgtSeed {
+    IgtSeed {
+        title,
+        kpis,
+    }
+}
+
+fn kra(title: &'static str, igts: [IgtSeed; 2]) -> KraSeed {
+    KraSeed {
+        title,
+        igts,
+    }
+}
+
+fn vision(title: &'static str, description: &'static str, kras: [KraSeed; 2]) -> VisionSeed {
+    VisionSeed {
+        title,
+        description,
+        kras,
+    }
+}
+
 fn seed_tree() -> [ValueSeed; 2] {
+    use KpiAggregation::{Average,
+                         Latest,
+                         Sum};
+
     [
         ValueSeed {
             title: "경제적 자유",
             description: "돈이 아니라 시간을 기준으로 선택할 수 있는 삶",
             visions: [
-                VisionSeed {
-                    title: "3년 내 월 패시브 인컴 500만원 달성",
-                    description: "노동 시간과 분리된 수입원을 구축한다",
-                    kras: [
-                        KraSeed {
-                            title: "온라인 강의 사업",
-                            igts: [
-                                IgtSeed {
-                                    title: "신규 강의 콘텐츠 제작",
-                                    kpis: [
-                                        KpiSeed {
-                                            title: "월 신규 강의 수",
-                                            target_value: 2.0,
-                                            unit: "개",
-                                        },
-                                        KpiSeed {
-                                            title: "강의 완강률",
-                                            target_value: 60.0,
-                                            unit: "%",
-                                        },
-                                    ],
-                                },
-                                IgtSeed {
-                                    title: "강의 런칭 마케팅",
-                                    kpis: [
-                                        KpiSeed {
-                                            title: "월 신규 수강생 수",
-                                            target_value: 100.0,
-                                            unit: "명",
-                                        },
-                                        KpiSeed {
-                                            title: "랜딩 페이지 전환율",
-                                            target_value: 5.0,
-                                            unit: "%",
-                                        },
-                                    ],
-                                },
+                vision(
+                    "3년 내 월 패시브 인컴 500만원 달성",
+                    "노동 시간과 분리된 수입원을 구축한다",
+                    [
+                        kra(
+                            "온라인 강의 사업",
+                            [
+                                igt(
+                                    "신규 강의 콘텐츠 제작",
+                                    [kpi("월 신규 강의 수", 2.0, "개", Sum), kpi("강의 완강률", 60.0, "%", Latest)],
+                                ),
+                                igt(
+                                    "강의 런칭 마케팅",
+                                    [kpi("월 신규 수강생 수", 100.0, "명", Sum), kpi("랜딩 페이지 전환율", 5.0, "%", Latest)],
+                                ),
                             ],
-                        },
-                        KraSeed {
-                            title: "투자 포트폴리오 운용",
-                            igts: [
-                                IgtSeed {
-                                    title: "배당주 포트폴리오 리밸런싱",
-                                    kpis: [
-                                        KpiSeed {
-                                            title: "연 배당 수익률",
-                                            target_value: 5.0,
-                                            unit: "%",
-                                        },
-                                        KpiSeed {
-                                            title: "월 평균 배당금",
-                                            target_value: 50.0,
-                                            unit: "만원",
-                                        },
-                                    ],
-                                },
-                                IgtSeed {
-                                    title: "부동산 임대 수익 관리",
-                                    kpis: [
-                                        KpiSeed {
-                                            title: "월 임대 순수익",
-                                            target_value: 200.0,
-                                            unit: "만원",
-                                        },
-                                        KpiSeed {
-                                            title: "연 공실률",
-                                            target_value: 5.0,
-                                            unit: "%",
-                                        },
-                                    ],
-                                },
+                        ),
+                        kra(
+                            "투자 포트폴리오 운용",
+                            [
+                                igt(
+                                    "배당주 포트폴리오 리밸런싱",
+                                    [kpi("연 배당 수익률", 5.0, "%", Latest), kpi("월 평균 배당금", 50.0, "만원", Average)],
+                                ),
+                                igt(
+                                    "부동산 임대 수익 관리",
+                                    [kpi("월 임대 순수익", 200.0, "만원", Average), kpi("연 공실률", 5.0, "%", Latest)],
+                                ),
                             ],
-                        },
+                        ),
                     ],
-                },
-                VisionSeed {
-                    title: "5년 내 순자산 10억 달성",
-                    description: "수입 극대화와 지출 최적화를 병행한다",
-                    kras: [
-                        KraSeed {
-                            title: "수입 극대화",
-                            igts: [
-                                IgtSeed {
-                                    title: "고단가 컨설팅 계약 수주",
-                                    kpis: [
-                                        KpiSeed {
-                                            title: "분기 신규 계약 건수",
-                                            target_value: 2.0,
-                                            unit: "건",
-                                        },
-                                        KpiSeed {
-                                            title: "평균 계약 단가",
-                                            target_value: 1000.0,
-                                            unit: "만원",
-                                        },
-                                    ],
-                                },
-                                IgtSeed {
-                                    title: "연봉 협상 및 이직 준비",
-                                    kpis: [
-                                        KpiSeed {
-                                            title: "기술 면접 통과율",
-                                            target_value: 70.0,
-                                            unit: "%",
-                                        },
-                                        KpiSeed {
-                                            title: "포트폴리오 완성도",
-                                            target_value: 100.0,
-                                            unit: "%",
-                                        },
-                                    ],
-                                },
+                ),
+                vision(
+                    "5년 내 순자산 10억 달성",
+                    "수입 극대화와 지출 최적화를 병행한다",
+                    [
+                        kra(
+                            "수입 극대화",
+                            [
+                                igt(
+                                    "고단가 컨설팅 계약 수주",
+                                    [kpi("분기 신규 계약 건수", 2.0, "건", Sum), kpi("평균 계약 단가", 1000.0, "만원", Average)],
+                                ),
+                                igt(
+                                    "연봉 협상 및 이직 준비",
+                                    [kpi("기술 면접 통과율", 70.0, "%", Latest), kpi("포트폴리오 완성도", 100.0, "%", Latest)],
+                                ),
                             ],
-                        },
-                        KraSeed {
-                            title: "지출 최적화",
-                            igts: [
-                                IgtSeed {
-                                    title: "고정비 절감 실행",
-                                    kpis: [
-                                        KpiSeed {
-                                            title: "월 고정비 상한",
-                                            target_value: 150.0,
-                                            unit: "만원",
-                                        },
-                                        KpiSeed {
-                                            title: "유지 구독 서비스 수",
-                                            target_value: 5.0,
-                                            unit: "개",
-                                        },
-                                    ],
-                                },
-                                IgtSeed {
-                                    title: "예산 관리 시스템 구축",
-                                    kpis: [
-                                        KpiSeed {
-                                            title: "월 예산 준수율",
-                                            target_value: 90.0,
-                                            unit: "%",
-                                        },
-                                        KpiSeed {
-                                            title: "월 저축률",
-                                            target_value: 40.0,
-                                            unit: "%",
-                                        },
-                                    ],
-                                },
+                        ),
+                        kra(
+                            "지출 최적화",
+                            [
+                                igt(
+                                    "고정비 절감 실행",
+                                    [kpi("월 고정비 상한", 150.0, "만원", Latest), kpi("유지 구독 서비스 수", 5.0, "개", Latest)],
+                                ),
+                                igt(
+                                    "예산 관리 시스템 구축",
+                                    [kpi("월 예산 준수율", 90.0, "%", Average), kpi("월 저축률", 40.0, "%", Average)],
+                                ),
                             ],
-                        },
+                        ),
                     ],
-                },
+                ),
             ],
         },
         ValueSeed {
             title: "건강과 성장",
             description: "오래 일하고 오래 배울 수 있는 몸과 머리를 유지한다",
             visions: [
-                VisionSeed {
-                    title: "활력 있는 몸 만들기",
-                    description: "운동과 회복 루틴을 생활에 고정한다",
-                    kras: [
-                        KraSeed {
-                            title: "근력 운동 루틴",
-                            igts: [
-                                IgtSeed {
-                                    title: "주 3회 웨이트 트레이닝",
-                                    kpis: [
-                                        KpiSeed {
-                                            title: "주간 운동 횟수",
-                                            target_value: 3.0,
-                                            unit: "회",
-                                        },
-                                        KpiSeed {
-                                            title: "3대 운동 합계 중량",
-                                            target_value: 300.0,
-                                            unit: "kg",
-                                        },
-                                    ],
-                                },
-                                IgtSeed {
-                                    title: "식단 단백질 관리",
-                                    kpis: [
-                                        KpiSeed {
-                                            title: "일일 단백질 섭취량",
-                                            target_value: 120.0,
-                                            unit: "g",
-                                        },
-                                        KpiSeed {
-                                            title: "체지방률",
-                                            target_value: 15.0,
-                                            unit: "%",
-                                        },
-                                    ],
-                                },
+                vision(
+                    "활력 있는 몸 만들기",
+                    "운동과 회복 루틴을 생활에 고정한다",
+                    [
+                        kra(
+                            "근력 운동 루틴",
+                            [
+                                igt(
+                                    "주 3회 웨이트 트레이닝",
+                                    [kpi("주간 운동 횟수", 3.0, "회", Sum), kpi("3대 운동 합계 중량", 300.0, "kg", Latest)],
+                                ),
+                                igt(
+                                    "식단 단백질 관리",
+                                    [kpi("일일 단백질 섭취량", 120.0, "g", Average), kpi("체지방률", 15.0, "%", Latest)],
+                                ),
                             ],
-                        },
-                        KraSeed {
-                            title: "유산소·회복 관리",
-                            igts: [
-                                IgtSeed {
-                                    title: "주 2회 러닝",
-                                    kpis: [
-                                        KpiSeed {
-                                            title: "주간 러닝 거리",
-                                            target_value: 10.0,
-                                            unit: "km",
-                                        },
-                                        KpiSeed {
-                                            title: "5km 완주 기록",
-                                            target_value: 25.0,
-                                            unit: "분",
-                                        },
-                                    ],
-                                },
-                                IgtSeed {
-                                    title: "수면 루틴 개선",
-                                    kpis: [
-                                        KpiSeed {
-                                            title: "평균 수면 시간",
-                                            target_value: 7.0,
-                                            unit: "시간",
-                                        },
-                                        KpiSeed {
-                                            title: "취침 시간 준수율",
-                                            target_value: 80.0,
-                                            unit: "%",
-                                        },
-                                    ],
-                                },
+                        ),
+                        kra(
+                            "유산소·회복 관리",
+                            [
+                                igt(
+                                    "주 2회 러닝",
+                                    [kpi("주간 러닝 거리", 10.0, "km", Sum), kpi("5km 완주 기록", 25.0, "분", Latest)],
+                                ),
+                                igt(
+                                    "수면 루틴 개선",
+                                    [kpi("평균 수면 시간", 7.0, "시간", Average), kpi("취침 시간 준수율", 80.0, "%", Average)],
+                                ),
                             ],
-                        },
+                        ),
                     ],
-                },
-                VisionSeed {
-                    title: "업계가 인정하는 전문가 되기",
-                    description: "기술 역량과 영향력을 함께 키운다",
-                    kras: [
-                        KraSeed {
-                            title: "기술 역량 강화",
-                            igts: [
-                                IgtSeed {
-                                    title: "Rust 사이드 프로젝트 완성",
-                                    kpis: [
-                                        KpiSeed {
-                                            title: "월 커밋 수",
-                                            target_value: 60.0,
-                                            unit: "회",
-                                        },
-                                        KpiSeed {
-                                            title: "프로젝트 완성률",
-                                            target_value: 100.0,
-                                            unit: "%",
-                                        },
-                                    ],
-                                },
-                                IgtSeed {
-                                    title: "기술 블로그 운영",
-                                    kpis: [
-                                        KpiSeed {
-                                            title: "월 포스팅 수",
-                                            target_value: 4.0,
-                                            unit: "건",
-                                        },
-                                        KpiSeed {
-                                            title: "월 방문자 수",
-                                            target_value: 1000.0,
-                                            unit: "명",
-                                        },
-                                    ],
-                                },
+                ),
+                vision(
+                    "업계가 인정하는 전문가 되기",
+                    "기술 역량과 영향력을 함께 키운다",
+                    [
+                        kra(
+                            "기술 역량 강화",
+                            [
+                                igt(
+                                    "Rust 사이드 프로젝트 완성",
+                                    [kpi("월 커밋 수", 60.0, "회", Sum), kpi("프로젝트 완성률", 100.0, "%", Latest)],
+                                ),
+                                igt(
+                                    "기술 블로그 운영",
+                                    [kpi("월 포스팅 수", 4.0, "건", Sum), kpi("월 방문자 수", 1000.0, "명", Latest)],
+                                ),
                             ],
-                        },
-                        KraSeed {
-                            title: "네트워크·영향력 확대",
-                            igts: [
-                                IgtSeed {
-                                    title: "컨퍼런스 발표",
-                                    kpis: [
-                                        KpiSeed {
-                                            title: "연간 발표 횟수",
-                                            target_value: 2.0,
-                                            unit: "회",
-                                        },
-                                        KpiSeed {
-                                            title: "발표 자료 완성도",
-                                            target_value: 100.0,
-                                            unit: "%",
-                                        },
-                                    ],
-                                },
-                                IgtSeed {
-                                    title: "커뮤니티 스터디 리딩",
-                                    kpis: [
-                                        KpiSeed {
-                                            title: "월 스터디 진행 횟수",
-                                            target_value: 4.0,
-                                            unit: "회",
-                                        },
-                                        KpiSeed {
-                                            title: "스터디 참여 인원",
-                                            target_value: 10.0,
-                                            unit: "명",
-                                        },
-                                    ],
-                                },
+                        ),
+                        kra(
+                            "네트워크·영향력 확대",
+                            [
+                                igt(
+                                    "컨퍼런스 발표",
+                                    [kpi("연간 발표 횟수", 2.0, "회", Sum), kpi("발표 자료 완성도", 100.0, "%", Latest)],
+                                ),
+                                igt(
+                                    "커뮤니티 스터디 리딩",
+                                    [kpi("월 스터디 진행 횟수", 4.0, "회", Sum), kpi("스터디 참여 인원", 10.0, "명", Latest)],
+                                ),
                             ],
-                        },
+                        ),
                     ],
-                },
+                ),
             ],
         },
     ]
 }
 
-/// `metric`은 KPI 전용으로, (목표값, 단위) 쌍이다. 현재값은 0에서
-/// 시작한다.
+/// `metric`은 KPI 전용으로, (목표값, 단위, 집계 방식)이다. 현재값은
+/// 0에서 시작한다.
 async fn create<R>(
     repository: &R,
     kind: ItemKind,
     parent_id: Option<Uuid>,
     title: &str,
     description: Option<&str>,
-    metric: Option<(f64, &str)>,
+    metric: Option<(f64, &str, KpiAggregation)>,
     position: i64,
 ) -> Result<Uuid, DomainError>
 where
@@ -381,10 +242,11 @@ where
         parent_id,
         title: title.to_string(),
         description: description.map(str::to_string),
-        target_value: metric.map(|(target, _)| target),
+        target_value: metric.map(|(target, _, _)| target),
         current_value: metric.map(|_| 0.0),
-        unit: metric.map(|(_, unit)| unit.to_string()),
+        unit: metric.map(|(_, unit, _)| unit.to_string()),
         position,
+        aggregation: metric.map(|(_, _, aggregation)| aggregation).unwrap_or_default(),
     });
     let id = item.id;
     repository.create_item(item).await?;
@@ -440,7 +302,7 @@ where
                             Some(igt_id),
                             kpi.title,
                             None,
-                            Some((kpi.target_value, kpi.unit)),
+                            Some((kpi.target_value, kpi.unit, kpi.aggregation)),
                             kpi_position as i64,
                         )
                         .await?;
@@ -498,6 +360,12 @@ mod tests {
                 },
             }
         }
+
+        // 누적형 KPI에는 합계 집계가 지정되어 있어야 한다.
+        let commits = items.iter().find(|item| item.title == "월 커밋 수").expect("seeded kpi should exist");
+        assert_eq!(commits.aggregation, KpiAggregation::Sum);
+        let body_fat = items.iter().find(|item| item.title == "체지방률").expect("seeded kpi should exist");
+        assert_eq!(body_fat.aggregation, KpiAggregation::Latest);
     }
 
     #[tokio::test]
@@ -524,6 +392,7 @@ mod tests {
                 current_value: None,
                 unit: None,
                 position: 0,
+                aggregation: KpiAggregation::default(),
             }))
             .await
             .expect("user item should be created");
