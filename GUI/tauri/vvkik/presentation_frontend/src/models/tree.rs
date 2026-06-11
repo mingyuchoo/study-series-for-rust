@@ -1,8 +1,9 @@
 //! 트리 화면이 쓰는 순수 로직. 컴포넌트와 분리되어 있어 단위 테스트가
 //! 가능하다.
 
-use super::vvkik::{ItemKind,
-                   VvkikItem};
+use super::{format::format_value,
+            vvkik::{ItemKind,
+                    VvkikItem}};
 use std::collections::HashSet;
 
 /// 순환 참조에 대비한 안전 깊이. 정상 데이터는 5단계를 넘지 않는다.
@@ -119,24 +120,61 @@ pub fn short_parent_path(item: &VvkikItem, items: &[VvkikItem]) -> Option<String
     }
 }
 
+/// 단계 탭 표의 그룹 헤더 한 줄. 직계 부모(leaf)만 진하게 강조한다.
+#[derive(Debug, Clone, PartialEq)]
+pub struct GroupHeader {
+    pub prefix: String,
+    pub leaf: String,
+    pub tooltip: String,
+}
+
+/// 단계 탭 표시용 행 목록. 경로 → 정렬값 → 제목 순으로 정렬해 같은
+/// 가지(같은 Value·Vision·KRA·IGT)의 항목이 모이게 하고, 경로가 바뀌는
+/// 행 앞에만 그룹 헤더를 끼워 넣는다. 최상위뿐인 단계(Value 등)는
+/// 헤더 없이 평평한 목록으로 돌려준다.
+pub fn grouped_rows(kind: ItemKind, items: &[VvkikItem]) -> Vec<(Option<GroupHeader>, VvkikItem)> {
+    let mut rows: Vec<(VvkikItem, Vec<String>, Option<String>)> = items
+        .iter()
+        .filter(|item| item.kind == kind)
+        .map(|item| {
+            let chain: Vec<String> = parent_chain(item, items).iter().map(|parent| parent.title.clone()).collect();
+            (item.clone(), chain, parent_path(item, items))
+        })
+        .collect();
+    rows.sort_by(|a, b| a.2.cmp(&b.2).then(a.0.position.cmp(&b.0.position)).then(a.0.title.cmp(&b.0.title)));
+
+    let any_grouped = rows.iter().any(|(_, _, full_path)| full_path.is_some());
+
+    let mut display = Vec::with_capacity(rows.len());
+    let mut previous_path: Option<Option<String>> = None;
+    for (item, chain, full_path) in rows {
+        let header = if any_grouped && previous_path.as_ref() != Some(&full_path) {
+            let (prefix, leaf) = match chain.split_last() {
+                | Some((leaf, ancestors)) => (ancestors.join(" › "), leaf.clone()),
+                | None if item.parent_id.is_some() => (String::new(), "(연결된 상위 항목 없음)".to_string()),
+                | None => (String::new(), "최상위".to_string()),
+            };
+            let tooltip = full_path.clone().unwrap_or_else(|| "최상위".to_string());
+            Some(GroupHeader { prefix, leaf, tooltip })
+        } else {
+            None
+        };
+        previous_path = Some(full_path);
+        display.push((header, item));
+    }
+    display
+}
+
 pub fn progress_text(item: &VvkikItem) -> Option<String> {
     if item.kind != ItemKind::Kpi {
         return None;
     }
 
-    let format_number = |value: f64| {
-        if value.fract() == 0.0 {
-            format!("{}", value as i64)
-        } else {
-            value.to_string()
-        }
-    };
-
     match (item.current_value, item.target_value, item.unit.as_deref()) {
-        | (Some(current), Some(target), Some(unit)) => Some(format!("{} / {} {unit}", format_number(current), format_number(target))),
-        | (Some(current), Some(target), None) => Some(format!("{} / {}", format_number(current), format_number(target))),
-        | (Some(current), None, Some(unit)) => Some(format!("{} {unit}", format_number(current))),
-        | (Some(current), None, None) => Some(format_number(current)),
+        | (Some(current), Some(target), Some(unit)) => Some(format!("{} / {} {unit}", format_value(current), format_value(target))),
+        | (Some(current), Some(target), None) => Some(format!("{} / {}", format_value(current), format_value(target))),
+        | (Some(current), None, Some(unit)) => Some(format!("{} {unit}", format_value(current))),
+        | (Some(current), None, None) => Some(format_value(current)),
         | _ => None,
     }
 }
@@ -290,6 +328,53 @@ mod tests {
         assert_eq!(count_descendants("p1", &items), 0);
         assert!(has_children("v1", &items));
         assert!(!has_children("p1", &items));
+    }
+
+    #[test]
+    fn grouped_rows_insert_headers_only_where_the_path_changes() {
+        let mut items = sample();
+        items.push(item("p2", ItemKind::Kpi, Some("i1"), 1, "월 수강생"));
+        items.push(item("p3", ItemKind::Kpi, Some("i2"), 0, "월 영업 건수"));
+
+        let rows = grouped_rows(ItemKind::Kpi, &items);
+        let ids: Vec<&str> = rows.iter().map(|(_, item)| item.id.as_str()).collect();
+        assert_eq!(ids, vec!["p1", "p2", "p3"]);
+
+        // 같은 IGT(i1)의 두 KPI는 한 헤더 아래 묶인다.
+        let first = rows[0].0.as_ref().expect("first row should open a group");
+        assert_eq!(first.prefix, "경제적 자유 › 지식기업 › 온라인 강의");
+        assert_eq!(first.leaf, "강의 제작");
+        assert!(rows[1].0.is_none(), "same path should not repeat the header");
+
+        // 경로가 바뀌면(i2) 새 헤더가 열린다.
+        let third = rows[2].0.as_ref().expect("path change should open a group");
+        assert_eq!(third.leaf, "출강 영업");
+    }
+
+    #[test]
+    fn grouped_rows_stay_flat_for_top_level_kinds() {
+        let items = vec![
+            item("v1", ItemKind::Value, None, 0, "경제적 자유"),
+            item("v2", ItemKind::Value, None, 1, "건강과 성장"),
+        ];
+
+        let rows = grouped_rows(ItemKind::Value, &items);
+        assert_eq!(rows.len(), 2);
+        assert!(rows.iter().all(|(header, _)| header.is_none()), "value tab has no parent paths to group by");
+    }
+
+    #[test]
+    fn grouped_rows_label_orphans() {
+        let items = sample();
+        let rows = grouped_rows(ItemKind::Kra, &items);
+
+        let orphan_header = rows
+            .iter()
+            .find(|(_, item)| item.id == "orphan")
+            .and_then(|(header, _)| header.as_ref())
+            .expect("orphan should open its own group");
+        assert_eq!(orphan_header.leaf, "(연결된 상위 항목 없음)");
+        assert!(orphan_header.prefix.is_empty());
     }
 
     #[test]

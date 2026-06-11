@@ -203,12 +203,7 @@ pub fn App() -> Element {
                             store.clear_error();
                             current_view.set(AppView::Add(Box::new(preset)));
                         },
-                        on_reparent: handle_reparent,
-                        // KPI 목록의 퀵 기록이 측정값을 추가·삭제하면
-                        // 현재값·진행률을 새로 불러온다.
-                        on_data_change: move |_| {
-                            spawn(async move { store.refresh().await });
-                        }
+                        on_reparent: handle_reparent
                     }
                 },
                 AppView::Add(preset) => rsx! {
@@ -244,9 +239,6 @@ pub fn App() -> Element {
                                 on_back: move |_| {
                                     store.clear_error();
                                     current_view.set(AppView::Board);
-                                },
-                                on_data_change: move |_| {
-                                    spawn(async move { store.refresh().await });
                                 }
                             }
                         },

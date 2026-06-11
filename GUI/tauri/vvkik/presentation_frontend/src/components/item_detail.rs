@@ -5,6 +5,7 @@ use crate::{models::{ItemKind,
                      ItemRevision,
                      VvkikItem,
                      aggregation_label,
+                     format_timestamp,
                      revision_field_label,
                      revision_value_label,
                      status_label,
@@ -26,13 +27,7 @@ pub struct ItemDetailProps {
     pub on_navigate: EventHandler<VvkikItem>,
     /// 「목록으로」: 보드로 돌아간다.
     pub on_back: EventHandler<()>,
-    /// 측정 기록 추가·삭제로 데이터가 바뀌면 호출된다.
-    #[props(default)]
-    pub on_data_change: EventHandler<()>,
 }
-
-/// RFC3339 시각(UTC)에서 분 단위까지만 잘라 보여 준다.
-fn format_timestamp(timestamp: &str) -> String { timestamp.chars().take(16).map(|ch| if ch == 'T' { ' ' } else { ch }).collect() }
 
 /// 항목 상세 보기. 등록된 내용은 기준 문서이므로 읽기 전용으로 보여
 /// 주고, 수정은 별도 버튼으로만 진입한다. KPI는 실적 기록을 여기서
@@ -151,8 +146,7 @@ pub fn ItemDetail(props: ItemDetailProps) -> Element {
                     aggregation: item.aggregation,
                     unit: item.unit.clone(),
                     has_measurements,
-                    current_value: panel_current_value,
-                    on_data_change: props.on_data_change
+                    current_value: panel_current_value
                 }
             }
 

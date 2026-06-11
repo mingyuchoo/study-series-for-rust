@@ -19,9 +19,6 @@ pub struct VvkikBoardProps {
     pub on_quick_add: EventHandler<QuickAddData>,
     pub on_add_child: EventHandler<AddPreset>,
     pub on_reparent: EventHandler<(VvkikItem, VvkikItem)>,
-    /// KPI 퀵 기록 등으로 폼 바깥에서 데이터가 바뀌면 호출된다.
-    #[props(default)]
-    pub on_data_change: EventHandler<()>,
 }
 
 /// 탭 바와 탭별 화면(전체 구조 트리 / 단계별 카드)을 배선한다.
@@ -88,8 +85,7 @@ pub fn VvkikBoard(props: VvkikBoardProps) -> Element {
                                 kind,
                                 items: props.items.clone(),
                                 on_open: props.on_open,
-                                on_delete: props.on_delete,
-                                on_data_change: props.on_data_change
+                                on_delete: props.on_delete
                             }
                         },
                         None => rsx! {

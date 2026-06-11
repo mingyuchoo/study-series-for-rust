@@ -6,6 +6,8 @@
 
 use crate::{models::{CreateItemRequest,
                      ItemKind,
+                     KpiMeasurement,
+                     RecordKpiMeasurementRequest,
                      UpdateItemRequest,
                      VvkikItem},
             services::VvkikService};
@@ -20,6 +22,8 @@ pub struct VvkikStore {
 }
 
 /// 스토어를 만들고 첫 목록을 불러온다. `App` 최상단에서 한 번 호출한다.
+/// 컨텍스트로도 제공하므로 하위 컴포넌트는 prop 없이
+/// `use_context::<VvkikStore>()`로 데이터 갱신을 요청할 수 있다.
 pub fn use_vvkik_store() -> VvkikStore {
     let store = VvkikStore {
         items: use_signal(Vec::new),
@@ -27,6 +31,7 @@ pub fn use_vvkik_store() -> VvkikStore {
         error: use_signal(|| None),
         search_query: use_signal(String::new),
     };
+    use_context_provider(|| store);
 
     use_effect(move || {
         spawn(async move {
@@ -138,6 +143,21 @@ impl VvkikStore {
                 false
             },
         }
+    }
+
+    /// 측정값을 기록하고 목록(현재값·진행률)을 새로고침한다. 오류
+    /// 표시는 호출한 화면이 맡으므로 스토어 오류를 건드리지 않는다.
+    pub async fn record_measurement(self, request: RecordKpiMeasurementRequest) -> Result<KpiMeasurement, String> {
+        let measurement = VvkikService::record_kpi_measurement(request).await?;
+        self.refresh().await;
+        Ok(measurement)
+    }
+
+    /// 측정값 하나를 지우고 목록을 새로고침한다.
+    pub async fn delete_measurement(self, kpi_id: String, measurement_id: String) -> Result<(), String> {
+        VvkikService::delete_kpi_measurement(kpi_id, measurement_id).await?;
+        self.refresh().await;
+        Ok(())
     }
 
     pub async fn delete(mut self, id: String) {

@@ -1540,7 +1540,15 @@ textarea:focus {
   font-size: 12px;
 }
 
+/* 입력은 일기처럼: 측정값 줄 → 메모 텍스트 영역 → 기록 버튼. */
 .measurement-add {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+}
+
+.measurement-add-value {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -1558,8 +1566,113 @@ textarea:focus {
 }
 
 .measurement-note-input {
-  flex: 1;
-  min-width: 0;
+  width: 100%;
+  min-height: 56px;
+  font-size: 13px;
+  line-height: 1.5;
+  resize: vertical;
+}
+
+.measurement-add-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.measurement-submit-hint {
+  color: var(--color-mute);
+  font-size: 11px;
+}
+
+/* 기록의 꾸준함을 보여 주는 잔디 그래프. */
+.measurement-grass {
+  padding: 12px 14px;
+  border: 1px solid var(--color-hairline);
+  border-radius: var(--radius-sm);
+  background: var(--color-canvas);
+}
+
+.grass-heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.grass-title {
+  color: var(--color-ink);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.grass-range {
+  color: var(--color-mute);
+  font-size: 12px;
+  font-weight: 400;
+}
+
+.grass-stats {
+  color: var(--color-charcoal);
+  font-size: 12px;
+}
+
+.grass-grid {
+  display: flex;
+  gap: 3px;
+}
+
+.grass-col {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.grass-cell {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+}
+
+.grass-cell.l0 {
+  border: 1px solid var(--color-hairline);
+  background: var(--color-surface-soft);
+}
+
+.grass-cell.l1 {
+  background: var(--color-ink);
+  opacity: 0.18;
+}
+
+.grass-cell.l2 {
+  background: var(--color-ink);
+  opacity: 0.42;
+}
+
+.grass-cell.l3 {
+  background: var(--color-ink);
+  opacity: 0.68;
+}
+
+.grass-cell.l4 {
+  background: var(--color-ink);
+  opacity: 0.95;
+}
+
+.grass-cell.future {
+  visibility: hidden;
+}
+
+.grass-legend {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+  margin-top: 8px;
+  color: var(--color-mute);
+  font-size: 11px;
 }
 
 .measurement-empty {
@@ -1568,6 +1681,7 @@ textarea:focus {
   font-size: 13px;
 }
 
+/* 기록 목록은 저널 형태: 값·날짜 머리줄 아래 메모 본문이 붙는다. */
 .measurement-list {
   display: flex;
   flex-direction: column;
@@ -1579,28 +1693,41 @@ textarea:focus {
 
 .measurement-row {
   display: flex;
-  align-items: center;
-  gap: 12px;
+  flex-direction: column;
+  gap: 4px;
   border-radius: var(--radius-sm);
   padding: 8px 10px;
   background: var(--color-canvas);
 }
 
+.measurement-row-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.measurement-meta {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 8px;
+}
+
 .measurement-value {
   flex: none;
-  min-width: 90px;
   color: var(--color-ink);
   font-size: 14px;
   font-weight: 600;
 }
 
 .measurement-note {
-  flex: 1;
-  overflow: hidden;
+  margin: 0;
   color: var(--color-body);
   font-size: 13px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 
 .measurement-date {
@@ -1611,11 +1738,8 @@ textarea:focus {
 }
 
 @media (max-width: 900px) {
-  .measurement-add {
-    flex-wrap: wrap;
-  }
-
-  .measurement-note-input {
-    flex-basis: 100%;
+  .grass-grid {
+    overflow-x: auto;
+    padding-bottom: 4px;
   }
 }
