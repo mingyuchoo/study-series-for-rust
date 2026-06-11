@@ -11,7 +11,9 @@ use crate::{components::{AddPreset,
                      IvkikItem,
                      UpdateItemRequest},
             store::{IvkikStore,
-                    use_ivkik_store}};
+                    use_ivkik_store},
+            theme::{self,
+                    Theme}};
 use dioxus::prelude::*;
 
 static CSS: Asset = asset!("/assets/styles.css");
@@ -28,6 +30,9 @@ enum AppView {
 
 pub fn App() -> Element {
     let store: IvkikStore = use_ivkik_store();
+    let mut theme = use_signal(theme::initial_theme);
+    // 시그널이 바뀔 때마다 <html data-theme>와 localStorage에 반영한다.
+    use_effect(move || theme::apply_theme(*theme.read()));
     let mut current_view = use_signal(|| AppView::Board);
     let mut pending_delete = use_signal(|| None::<IvkikItem>);
     let active_tab = use_signal(|| "dashboard".to_string());
@@ -133,6 +138,42 @@ pub fn App() -> Element {
         link { rel: "stylesheet", href: CSS }
         main { class: "app",
             header { class: "app-header",
+                button {
+                    r#type: "button",
+                    class: "theme-toggle",
+                    aria_label: if *theme.read() == Theme::Dark { "라이트 테마로 전환" } else { "다크 테마로 전환" },
+                    title: if *theme.read() == Theme::Dark { "라이트 테마로 전환" } else { "다크 테마로 전환" },
+                    onclick: move |_| {
+                        let next = theme.read().toggled();
+                        theme.set(next);
+                    },
+                    if *theme.read() == Theme::Dark {
+                        svg {
+                            width: "18",
+                            height: "18",
+                            view_box: "0 0 24 24",
+                            fill: "none",
+                            stroke: "currentColor",
+                            stroke_width: "1.8",
+                            stroke_linecap: "round",
+                            stroke_linejoin: "round",
+                            circle { cx: "12", cy: "12", r: "5" }
+                            path { d: "M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42" }
+                        }
+                    } else {
+                        svg {
+                            width: "18",
+                            height: "18",
+                            view_box: "0 0 24 24",
+                            fill: "none",
+                            stroke: "currentColor",
+                            stroke_width: "1.8",
+                            stroke_linecap: "round",
+                            stroke_linejoin: "round",
+                            path { d: "M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" }
+                        }
+                    }
+                }
                 div { class: "brand-block",
                     h1 { "IVKIK" }
                     p { "Identity에서 KPI까지, 큰 그림을 실행과 피드백으로 연결합니다." }

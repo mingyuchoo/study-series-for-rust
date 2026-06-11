@@ -3,6 +3,7 @@ mod components;
 mod models;
 mod services;
 mod store;
+mod theme;
 
 use app::App;
 use dioxus::prelude::*;
