@@ -89,10 +89,16 @@ body {
 }
 
 /* 어느 화면에서나 보이도록 헤더 우상단에 고정한다. */
-.theme-toggle {
+.header-controls {
   position: absolute;
   top: 0;
   right: 0;
+  display: flex;
+  gap: 8px;
+}
+
+.theme-toggle,
+.lang-toggle {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -106,12 +112,22 @@ body {
   transition: border-color 0.15s ease, color 0.15s ease;
 }
 
-.theme-toggle:hover {
+.lang-toggle {
+  width: auto;
+  min-width: 36px;
+  padding: 0 12px;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.theme-toggle:hover,
+.lang-toggle:hover {
   border-color: var(--color-charcoal);
   color: var(--color-ink);
 }
 
-.theme-toggle:focus-visible {
+.theme-toggle:focus-visible,
+.lang-toggle:focus-visible {
   outline: none;
   box-shadow: 0 0 0 3px var(--color-focus-ring);
 }
@@ -1198,18 +1214,6 @@ textarea:focus {
   gap: 4px;
 }
 
-/* 삭제처럼 평소에 숨겨 둘 버튼만 호버 시 노출한다. 퀵 기록 버튼은
-   가장 자주 쓰는 동작이라 항상 보인다. */
-.row-hover-btn {
-  opacity: 0;
-  transition: opacity 0.12s ease;
-}
-
-.kind-table tbody tr:hover .row-hover-btn,
-.kind-table tbody tr:focus-within .row-hover-btn {
-  opacity: 1;
-}
-
 .quick-record-btn {
   border-color: var(--color-hairline-strong);
   color: var(--color-ink);
@@ -1221,13 +1225,9 @@ textarea:focus {
   border-color: var(--color-ink);
 }
 
-/* KPI 탭은 동작 컬럼에 버튼이 둘이라 폭을 넓힌다. */
+/* Key Performance Indicator 탭은 진행률 막대가 들어가는 가운데 컬럼을 넓힌다. */
 .kind-table th.col-mid-kpi {
   width: 34%;
-}
-
-.kind-table th.col-actions-kpi {
-  width: 24%;
 }
 
 /* 행 바로 아래에 펼쳐지는 측정값 입력 팝오버. */
@@ -1403,10 +1403,6 @@ textarea:focus {
     display: none;
   }
 
-  .row-hover-btn {
-    opacity: 1;
-  }
-
   .tree-row {
     flex-wrap: wrap;
   }
@@ -1551,7 +1547,7 @@ textarea:focus {
   color: var(--color-on-primary);
 }
 
-/* 대시보드의 전체 KPI 기록 잔디. 구조 카드와 KPI 현재 수준 사이에서
+/* 대시보드의 전체 Key Performance Indicator 기록 잔디. 구조 카드와 Key Performance Indicator 현재 수준 사이에서
    "기록하는 행위"를 보여 준다. */
 .dash-grass {
   margin-bottom: 24px;
@@ -1663,7 +1659,7 @@ textarea:focus {
   }
 }
 
-/* ── KPI 실적 기록 ────────────────────────────────────────── */
+/* ── Key Performance Indicator 실적 기록 ────────────────────────────────────────── */
 
 .field-hint {
   display: block;

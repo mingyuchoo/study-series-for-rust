@@ -5,7 +5,7 @@ use domain::{DomainError,
              IvkikRepository};
 use uuid::Uuid;
 
-/// KPI의 측정 기록 전체를 집계 방식대로 취합해 현재값을 다시 쓴다.
+/// Key Performance Indicator의 측정 기록 전체를 집계 방식대로 취합해 현재값을 다시 쓴다.
 ///
 /// 기록이 하나도 없으면 `reset_when_empty`가 참일 때만 현재값을
 /// 비운다 — 기록 없이 수동으로 입력해 둔 현재값을 망가뜨리지 않기

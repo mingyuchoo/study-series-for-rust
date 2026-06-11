@@ -22,12 +22,12 @@ IVKIK
 │     └─ Income Generating Task 소득 창출 업무를 선별함
 │
 ├─ Income Generating Task, IGT 소득 창출 업무
-│  └─ KRA 안에서 실제로 돈/성과를 만드는 고가치 실행 업무
+│  └─ Key Result Area 안에서 실제로 돈/성과를 만드는 고가치 실행 업무
 │     └─ 가장 우선적으로 시간과 에너지를 써야 함
 │
 └─ Key Performance Indicator, KPI 핵심 성과 지표
-   └─ KRA와 IGT가 제대로 작동하는지 측정하는 피드백 지표
-      └─ 결과를 보고 KRA/IGT를 조정하게 함
+   └─ Key Result Area와 Income Generating Task가 제대로 작동하는지 측정하는 피드백 지표
+      └─ 결과를 보고 Key Result Area/Income Generating Task를 조정하게 함
 ```
 또한 5가지 사항에 대한 관계는 아래와 같다.
 ```

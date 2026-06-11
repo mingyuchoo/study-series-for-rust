@@ -133,7 +133,7 @@ mod tests {
         let before = IvkikItem::new(NewIvkikItem {
             kind: ItemKind::Kpi,
             parent_id: Some(Uuid::new_v4()),
-            title: "KPI".to_string(),
+            title: "Key Performance Indicator".to_string(),
             description: None,
             target_value: None,
             current_value: None,

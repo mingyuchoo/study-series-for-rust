@@ -26,7 +26,7 @@ pub fn validate_parent(kind: ItemKind, parent: Option<&IvkikItem>) -> Result<(),
 
 pub fn validate_kpi_values(kind: ItemKind, target_value: Option<f64>, current_value: Option<f64>, unit: Option<&str>) -> Result<(), DomainError> {
     if kind != ItemKind::Kpi && (target_value.is_some() || current_value.is_some() || unit.is_some_and(|unit| !unit.trim().is_empty())) {
-        return Err(DomainError::InvalidIvkikData("목표값, 현재값, 단위는 KPI 항목에서만 사용합니다.".to_string()));
+        return Err(DomainError::InvalidIvkikData("목표값, 현재값, 단위는 Key Performance Indicator 항목에서만 사용합니다.".to_string()));
     }
 
     Ok(())
@@ -34,7 +34,7 @@ pub fn validate_kpi_values(kind: ItemKind, target_value: Option<f64>, current_va
 
 pub fn validate_measurement_value(value: f64) -> Result<(), DomainError> {
     if !value.is_finite() {
-        return Err(DomainError::InvalidIvkikData("KPI 측정값은 유효한 숫자여야 합니다.".to_string()));
+        return Err(DomainError::InvalidIvkikData("Key Performance Indicator 측정값은 유효한 숫자여야 합니다.".to_string()));
     }
 
     Ok(())

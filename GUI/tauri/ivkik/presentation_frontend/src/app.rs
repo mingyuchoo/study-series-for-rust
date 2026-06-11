@@ -6,6 +6,7 @@ use crate::{components::{AddPreset,
                          ItemFormData,
                          IvkikBoard,
                          QuickAddData},
+            i18n,
             models::{CreateItemRequest,
                      ItemKind,
                      IvkikItem,
@@ -29,6 +30,12 @@ enum AppView {
 }
 
 pub fn App() -> Element {
+    // 언어 컨텍스트는 스토어(오류 메시지)보다 먼저 제공해야 한다.
+    let mut lang = use_signal(i18n::initial_lang);
+    use_context_provider(|| lang);
+    use_effect(move || i18n::apply_lang(*lang.read()));
+    let t = *lang.read();
+
     let store: IvkikStore = use_ivkik_store();
     let mut theme = use_signal(theme::initial_theme);
     // 시그널이 바뀔 때마다 <html data-theme>와 localStorage에 반영한다.
@@ -48,7 +55,7 @@ pub fn App() -> Element {
         }
 
         let position = store.next_position(form_data.kind, form_data.parent_id_opt().as_deref());
-        match form_data.to_create_request(position) {
+        match form_data.to_create_request(position, *lang.peek()) {
             | Ok(request) => {
                 spawn(async move {
                     if store.create(request).await {
@@ -90,7 +97,7 @@ pub fn App() -> Element {
         let AppView::Edit(item) = current_view.read().clone() else {
             return;
         };
-        match form_data.to_update_request(item.id.clone()) {
+        match form_data.to_update_request(item.id.clone(), *lang.peek()) {
             | Ok(request) => {
                 spawn(async move {
                     if store.update(request).await {
@@ -138,11 +145,23 @@ pub fn App() -> Element {
         link { rel: "stylesheet", href: CSS }
         main { class: "app",
             header { class: "app-header",
+                div { class: "header-controls",
+                button {
+                    r#type: "button",
+                    class: "lang-toggle",
+                    aria_label: t.to_other_lang(),
+                    title: t.to_other_lang(),
+                    onclick: move |_| {
+                        let next = lang.read().toggled();
+                        lang.set(next);
+                    },
+                    {t.lang_button()}
+                }
                 button {
                     r#type: "button",
                     class: "theme-toggle",
-                    aria_label: if *theme.read() == Theme::Dark { "라이트 테마로 전환" } else { "다크 테마로 전환" },
-                    title: if *theme.read() == Theme::Dark { "라이트 테마로 전환" } else { "다크 테마로 전환" },
+                    aria_label: if *theme.read() == Theme::Dark { t.to_light_theme() } else { t.to_dark_theme() },
+                    title: if *theme.read() == Theme::Dark { t.to_light_theme() } else { t.to_dark_theme() },
                     onclick: move |_| {
                         let next = theme.read().toggled();
                         theme.set(next);
@@ -174,9 +193,10 @@ pub fn App() -> Element {
                         }
                     }
                 }
+                }
                 div { class: "brand-block",
                     h1 { "IVKIK" }
-                    p { "Identity에서 KPI까지, 큰 그림을 실행과 피드백으로 연결합니다." }
+                    p { {t.tagline()} }
                 }
 
                 if let AppView::Board = current_view.read().clone() {
@@ -189,11 +209,11 @@ pub fn App() -> Element {
                             },
                             input {
                                 r#type: "text",
-                                placeholder: "Identity, Vision, KRA, IGT, KPI 검색...",
+                                placeholder: t.search_placeholder(),
                                 value: "{search_query}",
                                 oninput: move |evt| search_query.set(evt.value())
                             }
-                            button { r#type: "submit", class: "btn btn-secondary", "검색" }
+                            button { r#type: "submit", class: "btn btn-secondary", {t.search()} }
                             if !search_query.read().trim().is_empty() {
                                 button {
                                     r#type: "button",
@@ -201,7 +221,7 @@ pub fn App() -> Element {
                                     onclick: move |_| {
                                         spawn(async move { store.clear_search().await });
                                     },
-                                    "초기화"
+                                    {t.reset()}
                                 }
                             }
                         }
@@ -213,14 +233,14 @@ pub fn App() -> Element {
                                 let kind = active_tab.read().parse::<ItemKind>().unwrap_or(ItemKind::Identity);
                                 current_view.set(AppView::Add(Box::new(AddPreset { kind, parent: None, title: String::new() })));
                             },
-                            "새 항목"
+                            {t.new_item()}
                         }
                     }
                 }
             }
 
             if *loading.read() {
-                div { class: "loading", "로딩 중..." }
+                div { class: "loading", {t.loading()} }
             }
 
             if let Some(error) = error_message.read().clone() {
@@ -286,12 +306,12 @@ pub fn App() -> Element {
                         // 삭제 등으로 사라진 항목이면 보드로 안내한다.
                         None => rsx! {
                             div { class: "empty-state",
-                                p { "항목을 찾을 수 없습니다." }
+                                p { {t.item_not_found()} }
                                 button {
                                     r#type: "button",
                                     class: "btn btn-secondary",
                                     onclick: move |_| current_view.set(AppView::Board),
-                                    "목록으로"
+                                    {t.back_to_list()}
                                 }
                             }
                         },
@@ -322,15 +342,15 @@ pub fn App() -> Element {
 
             if let Some(item) = pending_delete.read().clone() {
                 div { class: "confirm-backdrop",
-                    div { class: "confirm-dialog", role: "dialog", aria_label: "IVKIK 항목 삭제 확인",
-                        h2 { "항목 삭제" }
-                        p { "\"{item.title}\" 항목을 삭제할까요? 하위 항목도 함께 삭제됩니다." }
+                    div { class: "confirm-dialog", role: "dialog", aria_label: t.confirm_delete_aria(),
+                        h2 { {t.confirm_delete_title()} }
+                        p { {t.confirm_delete_body(&item.title)} }
                         div { class: "confirm-actions",
                             button {
                                 r#type: "button",
                                 class: "btn btn-secondary",
                                 onclick: move |_| pending_delete.set(None),
-                                "취소"
+                                {t.cancel()}
                             }
                             button {
                                 r#type: "button",
@@ -346,7 +366,7 @@ pub fn App() -> Element {
                                         handle_delete_item(item_id.clone());
                                     }
                                 },
-                                "삭제"
+                                {t.delete()}
                             }
                         }
                     }

@@ -1,7 +1,8 @@
 #![allow(non_snake_case)]
 
 use super::kpi_measurements::KpiMeasurementPanel;
-use crate::{models::{ItemKind,
+use crate::{i18n::use_lang,
+            models::{ItemKind,
                      ItemRevision,
                      IvkikItem,
                      aggregation_label,
@@ -33,9 +34,11 @@ pub struct ItemDetailProps {
 }
 
 /// 항목 상세 보기. 등록된 내용은 기준 문서이므로 읽기 전용으로 보여
-/// 주고, 수정은 별도 버튼으로만 진입한다. KPI는 실적 기록을 여기서
+/// 주고, 수정은 별도 버튼으로만 진입한다. Key Performance Indicator는 실적 기록을 여기서
 /// 바로 남길 수 있고, 하단에 정의 변경 이력이 쌓인다.
 pub fn ItemDetail(props: ItemDetailProps) -> Element {
+    let lang = use_lang();
+    let t = *lang.read();
     let item = props.item.clone();
     let is_kpi = item.kind == ItemKind::Kpi;
 
@@ -51,7 +54,7 @@ pub fn ItemDetail(props: ItemDetailProps) -> Element {
         spawn(async move {
             match IvkikService::list_item_revisions(revision_item_id.read().clone()).await {
                 | Ok(list) => revisions.set(list),
-                | Err(e) => revisions_error.set(Some(format!("변경 이력을 불러오지 못했습니다: {e}"))),
+                | Err(e) => revisions_error.set(Some(lang.peek().err_load_revisions(&e))),
             }
         });
     });
@@ -66,7 +69,7 @@ pub fn ItemDetail(props: ItemDetailProps) -> Element {
 
     rsx! {
         div { class: "item-detail",
-            nav { class: "edit-breadcrumb", aria_label: "상위 항목 경로",
+            nav { class: "edit-breadcrumb", aria_label: t.breadcrumb_aria(),
                 for ancestor in chain.iter() {
                     {
                         let ancestor = ancestor.clone();
@@ -78,7 +81,7 @@ pub fn ItemDetail(props: ItemDetailProps) -> Element {
                                 button {
                                     r#type: "button",
                                     class: "breadcrumb-link",
-                                    title: "{ancestor_kind} 상세로 이동",
+                                    title: t.goto_detail(ancestor_kind),
                                     onclick: move |_| props.on_navigate.call(ancestor.clone()),
                                     "{ancestor_title}"
                                 }
@@ -103,19 +106,19 @@ pub fn ItemDetail(props: ItemDetailProps) -> Element {
                         r#type: "button",
                         class: "btn btn-primary",
                         onclick: move |_| props.on_edit.call(edit_item.clone()),
-                        "수정"
+                        {t.edit()}
                     }
                     button {
                         r#type: "button",
                         class: "btn btn-secondary",
                         onclick: move |_| props.on_delete.call(delete_item.clone()),
-                        "삭제"
+                        {t.delete()}
                     }
                     button {
                         r#type: "button",
                         class: "btn btn-secondary",
                         onclick: move |_| props.on_back.call(()),
-                        "목록으로"
+                        {t.back_to_list()}
                     }
                 }
             }
@@ -123,7 +126,7 @@ pub fn ItemDetail(props: ItemDetailProps) -> Element {
             if let Some(description) = description {
                 p { class: "detail-description", "{description}" }
             } else {
-                p { class: "detail-description empty", "설명 없음" }
+                p { class: "detail-description empty", {t.no_description()} }
             }
 
             if is_kpi {
@@ -134,13 +137,13 @@ pub fn ItemDetail(props: ItemDetailProps) -> Element {
                                 span { class: "kpi-fill", style: "width: {percent}%;" }
                             }
                             span { class: "detail-progress-text", "{progress}" }
-                            span { class: "detail-progress-hint", "{aggregation_label(item.aggregation)} 집계 · {percent}% 달성" }
+                            span { class: "detail-progress-hint", {t.agg_hint_percent(aggregation_label(item.aggregation, t), percent)} }
                         } else {
                             span { class: "detail-progress-text", "{progress}" }
-                            span { class: "detail-progress-hint", "{aggregation_label(item.aggregation)} 집계" }
+                            span { class: "detail-progress-hint", {t.agg_hint(aggregation_label(item.aggregation, t))} }
                         }
                     } else {
-                        span { class: "detail-progress-hint", "아직 기록이 없습니다. 아래에서 첫 실적을 기록해 보세요." }
+                        span { class: "detail-progress-hint", {t.no_records_yet_detail()} }
                     }
                 }
 
@@ -155,7 +158,7 @@ pub fn ItemDetail(props: ItemDetailProps) -> Element {
 
             if !is_kpi {
                 div { class: "detail-descendants",
-                    h3 { "하위 항목" }
+                    h3 { {t.sub_items()} }
                     if has_children(&item.id, &props.items) {
                         DescendantList {
                             parent_id: item.id.clone(),
@@ -164,22 +167,22 @@ pub fn ItemDetail(props: ItemDetailProps) -> Element {
                             on_navigate: props.on_navigate
                         }
                     } else {
-                        p { class: "detail-descendants-empty", "하위 항목이 없습니다" }
+                        p { class: "detail-descendants-empty", {t.no_sub_items()} }
                     }
                 }
             }
 
             div { class: "detail-revisions",
-                h3 { "변경 이력" }
+                h3 { {t.change_history()} }
                 if let Some(error) = revisions_error.read().clone() {
                     div { class: "form-error", "{error}" }
                 }
                 ul { class: "revision-list",
                     for revision in revisions.read().iter() {
                         {
-                            let field_label = revision_field_label(&revision.field);
-                            let old_value = revision_value_label(&revision.field, revision.old_value.as_deref());
-                            let new_value = revision_value_label(&revision.field, revision.new_value.as_deref());
+                            let field_label = revision_field_label(&revision.field, t);
+                            let old_value = revision_value_label(&revision.field, revision.old_value.as_deref(), t);
+                            let new_value = revision_value_label(&revision.field, revision.new_value.as_deref(), t);
                             let changed_at = format_timestamp(&revision.changed_at);
                             rsx! {
                                 li { class: "revision-row",
@@ -196,7 +199,7 @@ pub fn ItemDetail(props: ItemDetailProps) -> Element {
                     }
                     li { class: "revision-row",
                         span { class: "revision-change",
-                            span { class: "revision-field", "항목 생성" }
+                            span { class: "revision-field", {t.item_created()} }
                         }
                         span { class: "revision-date", title: "{item.created_at}", "{created_at}" }
                     }
@@ -218,6 +221,7 @@ struct DescendantListProps {
 /// 이 트리는 자손으로 내려가는 길로, 노드를 누르면 그 항목의 상세로
 /// 이동한다. 깊이 제한은 순환 참조 방어용.
 fn DescendantList(props: DescendantListProps) -> Element {
+    let t = *use_lang().read();
     if props.depth >= MAX_TREE_DEPTH {
         return rsx! {};
     }
@@ -241,7 +245,7 @@ fn DescendantList(props: DescendantListProps) -> Element {
                                 button {
                                     r#type: "button",
                                     class: "descendant-link",
-                                    title: "{child_kind} 상세로 이동",
+                                    title: t.goto_detail(child_kind),
                                     onclick: move |_| props.on_navigate.call(nav_child.clone()),
                                     "{child_title}"
                                 }

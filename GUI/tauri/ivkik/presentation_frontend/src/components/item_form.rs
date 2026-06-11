@@ -1,16 +1,18 @@
 #![allow(non_snake_case)]
 
-use crate::models::{CreateItemRequest,
-                    ItemKind,
-                    ItemStatus,
-                    IvkikItem,
-                    KpiAggregation,
-                    UpdateItemRequest,
-                    aggregation_description,
-                    aggregation_label,
-                    kind_description,
-                    status_label,
-                    tree::parent_chain};
+use crate::{i18n::{Lang,
+                   use_lang},
+            models::{CreateItemRequest,
+                     ItemKind,
+                     ItemStatus,
+                     IvkikItem,
+                     KpiAggregation,
+                     UpdateItemRequest,
+                     aggregation_description,
+                     aggregation_label,
+                     kind_description,
+                     status_label,
+                     tree::parent_chain}};
 use dioxus::prelude::*;
 
 /// 폼을 여는 시점의 문맥. `parent`가 `Some`이면 트리에서 "+ 하위 추가"로
@@ -52,12 +54,12 @@ fn blank_to_none(value: &str) -> Option<String> {
     (!value.is_empty()).then(|| value.to_string())
 }
 
-fn parse_optional_f64(value: &str, label: &str) -> Result<Option<f64>, String> {
+fn parse_optional_f64(value: &str, label: &str, lang: Lang) -> Result<Option<f64>, String> {
     let Some(value) = blank_to_none(value) else {
         return Ok(None);
     };
 
-    value.parse::<f64>().map(Some).map_err(|_| format!("{label}은 숫자로 입력하세요."))
+    value.parse::<f64>().map(Some).map_err(|_| lang.err_must_be_number(label))
 }
 
 impl ItemFormData {
@@ -65,13 +67,13 @@ impl ItemFormData {
 
     /// 폼 입력을 생성 요청으로 변환한다. 숫자 파싱 실패 시 사용자에게
     /// 보여줄 메시지를 돌려준다.
-    pub fn to_create_request(&self, position: i64) -> Result<CreateItemRequest, String> {
+    pub fn to_create_request(&self, position: i64, lang: Lang) -> Result<CreateItemRequest, String> {
         Ok(CreateItemRequest {
             kind: self.kind,
             parent_id: self.parent_id_opt(),
             title: self.title.trim().to_string(),
             description: blank_to_none(&self.description),
-            target_value: parse_optional_f64(&self.target_value, "목표값")?,
+            target_value: parse_optional_f64(&self.target_value, lang.target_label(), lang)?,
             // 현재값은 실적 기록으로만 집계되므로 폼에서 받지 않는다.
             current_value: None,
             unit: blank_to_none(&self.unit),
@@ -82,14 +84,14 @@ impl ItemFormData {
 
     /// 폼 입력을 수정 요청으로 변환한다. 구조(단계·상위·정렬)는 전체
     /// 구조 탭에서만 바꾸므로 여기서는 건드리지 않는다.
-    pub fn to_update_request(&self, id: String) -> Result<UpdateItemRequest, String> {
+    pub fn to_update_request(&self, id: String, lang: Lang) -> Result<UpdateItemRequest, String> {
         Ok(UpdateItemRequest {
             id,
             kind: None,
             parent_id: None,
             title: Some(self.title.trim().to_string()),
             description: Some(self.description.trim().to_string()),
-            target_value: Some(parse_optional_f64(&self.target_value, "목표값")?),
+            target_value: Some(parse_optional_f64(&self.target_value, lang.target_label(), lang)?),
             // None이면 백엔드가 현재값을 건드리지 않는다(실적 기록 집계값 보존).
             current_value: None,
             unit: Some(self.unit.trim().to_string()),
@@ -103,6 +105,8 @@ impl ItemFormData {
 fn number_to_string(value: Option<f64>) -> String { value.map(|value| value.to_string()).unwrap_or_default() }
 
 pub fn ItemForm(props: ItemFormProps) -> Element {
+    let lang = use_lang();
+    let t = *lang.read();
     let initial_kind = props
         .item
         .as_ref()
@@ -156,11 +160,11 @@ pub fn ItemForm(props: ItemFormProps) -> Element {
     let handle_submit = move |evt: FormEvent| {
         evt.prevent_default();
         if title.read().trim().is_empty() {
-            form_error.set(Some("제목을 입력하세요.".to_string()));
+            form_error.set(Some(lang.peek().err_title_required().to_string()));
             return;
         }
         if !is_edit && *kind.read() != ItemKind::Identity && parent_id.read().trim().is_empty() {
-            form_error.set(Some("상위 항목을 선택하세요.".to_string()));
+            form_error.set(Some(lang.peek().err_parent_required().to_string()));
             return;
         }
 
@@ -181,11 +185,11 @@ pub fn ItemForm(props: ItemFormProps) -> Element {
         div { class: "item-form",
             h2 {
                 if is_edit {
-                    "항목 수정"
+                    {t.form_edit_title()}
                 } else if locked_parent.is_some() {
-                    "새 {selected_kind.label()} 항목"
+                    {t.form_new_kind_title(selected_kind.label())}
                 } else {
-                    "새 IVKIK 항목"
+                    {t.form_new_title()}
                 }
             }
             if let Some(error) = form_error.read().clone() {
@@ -195,7 +199,7 @@ pub fn ItemForm(props: ItemFormProps) -> Element {
                 // 수정 모드: 어떤 항목을 고치는지 브레드크럼으로 보여 주고,
                 // 조상을 누르면 그 항목의 수정 화면으로 이동한다.
                 if let Some((chain, current_title)) = edit_context.as_ref() {
-                    nav { class: "edit-breadcrumb", aria_label: "상위 항목 경로",
+                    nav { class: "edit-breadcrumb", aria_label: t.breadcrumb_aria(),
                         for ancestor in chain.iter() {
                             {
                                 let ancestor = ancestor.clone();
@@ -207,7 +211,7 @@ pub fn ItemForm(props: ItemFormProps) -> Element {
                                         button {
                                             r#type: "button",
                                             class: "breadcrumb-link",
-                                            title: "{ancestor_kind} 상세로 이동",
+                                            title: t.goto_detail(ancestor_kind),
                                             onclick: move |_| props.on_navigate.call(ancestor.clone()),
                                             "{ancestor_title}"
                                         }
@@ -227,24 +231,24 @@ pub fn ItemForm(props: ItemFormProps) -> Element {
                     if let Some(parent) = locked_parent.as_ref() {
                         div { class: "form-grid",
                             div { class: "form-group",
-                                label { "단계" }
+                                label { {t.stage_label()} }
                                 div { class: "locked-field", "{selected_kind.label()}" }
                             }
                             div { class: "form-group",
-                                label { "상위 항목" }
+                                label { {t.parent_label()} }
                                 div { class: "locked-field", "{parent.kind.label()} · {parent.title}" }
                             }
                         }
                     } else {
                         div { class: "form-group",
-                            label { "단계" }
-                            div { class: "kind-segment", role: "radiogroup", aria_label: "단계 선택",
+                            label { {t.stage_label()} }
+                            div { class: "kind-segment", role: "radiogroup", aria_label: t.stage_select_aria(),
                                 for kind_option in ItemKind::ALL {
                                     button {
                                         r#type: "button",
                                         role: "radio",
                                         aria_checked: selected_kind == kind_option,
-                                        title: "{kind_description(kind_option)}",
+                                        title: kind_description(kind_option, t),
                                         class: if selected_kind == kind_option { "segment-btn active" } else { "segment-btn" },
                                         onclick: move |_| {
                                             if *kind.read() != kind_option {
@@ -260,12 +264,12 @@ pub fn ItemForm(props: ItemFormProps) -> Element {
 
                         if selected_kind != ItemKind::Identity {
                             div { class: "form-group",
-                                label { r#for: "parent", "상위 항목" }
+                                label { r#for: "parent", {t.parent_label()} }
                                 select {
                                     id: "parent",
                                     value: "{parent_id}",
                                     onchange: move |evt| parent_id.set(evt.value()),
-                                    option { value: "", "상위 항목 선택" }
+                                    option { value: "", {t.parent_select_placeholder()} }
                                     for parent in parent_options.iter() {
                                         option { value: "{parent.id}", "{parent.kind.label()} · {parent.title}" }
                                     }
@@ -276,7 +280,7 @@ pub fn ItemForm(props: ItemFormProps) -> Element {
                 }
 
                 div { class: "form-group",
-                    label { r#for: "title", "제목 *" }
+                    label { r#for: "title", "{t.title_label()} *" }
                     input {
                         id: "title",
                         r#type: "text",
@@ -288,7 +292,7 @@ pub fn ItemForm(props: ItemFormProps) -> Element {
                 }
 
                 div { class: "form-group",
-                    label { r#for: "description", "설명" }
+                    label { r#for: "description", {t.description_label()} }
                     textarea {
                         id: "description",
                         rows: "4",
@@ -300,7 +304,7 @@ pub fn ItemForm(props: ItemFormProps) -> Element {
                 if selected_kind == ItemKind::Kpi {
                     div { class: "form-grid compact",
                         div { class: "form-group",
-                            label { r#for: "target_value", "목표값" }
+                            label { r#for: "target_value", {t.target_label()} }
                             input {
                                 id: "target_value",
                                 r#type: "number",
@@ -310,42 +314,42 @@ pub fn ItemForm(props: ItemFormProps) -> Element {
                             }
                         }
                         div { class: "form-group",
-                            label { r#for: "unit", "단위" }
+                            label { r#for: "unit", {t.unit_label()} }
                             input {
                                 id: "unit",
                                 r#type: "text",
-                                placeholder: "원, %, 건...",
+                                placeholder: t.unit_placeholder(),
                                 value: "{unit}",
                                 oninput: move |evt| unit.set(evt.value())
                             }
                         }
                     }
-                    span { class: "field-hint", "현재값은 실적 기록을 추가하면 집계 방식에 따라 자동 계산됩니다." }
+                    span { class: "field-hint", {t.current_value_hint()} }
 
                     div { class: "form-group",
-                        label { "집계 방식" }
-                        div { class: "kind-segment", role: "radiogroup", aria_label: "집계 방식 선택",
+                        label { {t.aggregation_field()} }
+                        div { class: "kind-segment", role: "radiogroup", aria_label: t.aggregation_select_aria(),
                             for aggregation_option in KpiAggregation::ALL {
                                 button {
                                     r#type: "button",
                                     role: "radio",
                                     aria_checked: *aggregation.read() == aggregation_option,
-                                    title: "{aggregation_description(aggregation_option)}",
+                                    title: aggregation_description(aggregation_option, t),
                                     class: if *aggregation.read() == aggregation_option { "segment-btn active" } else { "segment-btn" },
                                     onclick: move |_| aggregation.set(aggregation_option),
-                                    "{aggregation_label(aggregation_option)}"
+                                    {aggregation_label(aggregation_option, t)}
                                 }
                             }
                         }
-                        span { class: "field-hint", "{aggregation_description(*aggregation.read())}" }
+                        span { class: "field-hint", {aggregation_description(*aggregation.read(), t)} }
                     }
 
                 }
 
                 if is_edit {
                     div { class: "form-group",
-                        label { "상태" }
-                        div { class: "kind-segment", role: "radiogroup", aria_label: "상태 선택",
+                        label { {t.status_field()} }
+                        div { class: "kind-segment", role: "radiogroup", aria_label: t.status_select_aria(),
                             for status_option in ItemStatus::ALL {
                                 button {
                                     r#type: "button",
@@ -362,13 +366,13 @@ pub fn ItemForm(props: ItemFormProps) -> Element {
 
                 div { class: "form-actions",
                     button { r#type: "submit", class: "btn btn-primary",
-                        if is_edit { "수정" } else { "추가" }
+                        if is_edit { {t.save()} } else { {t.add()} }
                     }
                     button {
                         r#type: "button",
                         class: "btn btn-secondary",
                         onclick: move |_| props.on_cancel.call(()),
-                        "취소"
+                        {t.cancel()}
                     }
                 }
             }

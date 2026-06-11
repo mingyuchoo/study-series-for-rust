@@ -67,7 +67,7 @@ impl UpdateItemUseCase {
             self.repository.record_item_revisions(revisions).await?;
         }
 
-        // 측정 기록이 있는 KPI는 현재값이 기록의 집계 결과여야 한다.
+        // 측정 기록이 있는 Key Performance Indicator는 현재값이 기록의 집계 결과여야 한다.
         // 집계 방식이 바뀐 경우에도 여기서 따라잡는다.
         if updated.kind == ItemKind::Kpi
             && let Some(rewritten) = recompute_kpi_current_value(self.repository.as_ref(), id, false).await?

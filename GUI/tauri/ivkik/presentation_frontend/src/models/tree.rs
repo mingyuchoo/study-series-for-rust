@@ -4,6 +4,7 @@
 use super::{format::format_value,
             ivkik::{ItemKind,
                     IvkikItem}};
+use crate::i18n::Lang;
 use std::collections::HashSet;
 
 /// 순환 참조에 대비한 안전 깊이. 정상 데이터는 5단계를 넘지 않는다.
@@ -37,7 +38,7 @@ pub fn root_items(items: &[IvkikItem]) -> Vec<IvkikItem> {
 }
 
 /// 상위 항목 경로를 "Identity · 제목 › Vision · 제목" 형태로 만든다.
-pub fn parent_path(item: &IvkikItem, items: &[IvkikItem]) -> Option<String> {
+pub fn parent_path(item: &IvkikItem, items: &[IvkikItem], lang: Lang) -> Option<String> {
     let mut segments = Vec::new();
     let mut current = item.parent_id.clone();
 
@@ -48,7 +49,7 @@ pub fn parent_path(item: &IvkikItem, items: &[IvkikItem]) -> Option<String> {
                 current = parent.parent_id.clone();
             },
             | None => {
-                segments.push("(연결된 상위 항목 없음)".to_string());
+                segments.push(lang.missing_parent().to_string());
                 break;
             },
         }
@@ -88,7 +89,7 @@ pub fn parent_chain(item: &IvkikItem, items: &[IvkikItem]) -> Vec<IvkikItem> {
 
 /// 표 표시용 짧은 경로: 부모 제목만 모으고, 3단계 이상이면 가운데를
 /// 줄여 "최상위 › … › 직계 부모" 형태로 만든다.
-pub fn short_parent_path(item: &IvkikItem, items: &[IvkikItem]) -> Option<String> {
+pub fn short_parent_path(item: &IvkikItem, items: &[IvkikItem], lang: Lang) -> Option<String> {
     let mut titles = Vec::new();
     let mut current = item.parent_id.clone();
 
@@ -99,7 +100,7 @@ pub fn short_parent_path(item: &IvkikItem, items: &[IvkikItem]) -> Option<String
                 current = parent.parent_id.clone();
             },
             | None => {
-                titles.push("(연결된 상위 항목 없음)".to_string());
+                titles.push(lang.missing_parent().to_string());
                 break;
             },
         }
@@ -129,16 +130,16 @@ pub struct GroupHeader {
 }
 
 /// 단계 탭 표시용 행 목록. 경로 → 정렬값 → 제목 순으로 정렬해 같은
-/// 가지(같은 Identity·Vision·KRA·IGT)의 항목이 모이게 하고, 경로가 바뀌는
+/// 가지(같은 Identity·Vision·Key Result Area·Income Generating Task)의 항목이 모이게 하고, 경로가 바뀌는
 /// 행 앞에만 그룹 헤더를 끼워 넣는다. 최상위뿐인 단계(Identity 등)는
 /// 헤더 없이 평평한 목록으로 돌려준다.
-pub fn grouped_rows(kind: ItemKind, items: &[IvkikItem]) -> Vec<(Option<GroupHeader>, IvkikItem)> {
+pub fn grouped_rows(kind: ItemKind, items: &[IvkikItem], lang: Lang) -> Vec<(Option<GroupHeader>, IvkikItem)> {
     let mut rows: Vec<(IvkikItem, Vec<String>, Option<String>)> = items
         .iter()
         .filter(|item| item.kind == kind)
         .map(|item| {
             let chain: Vec<String> = parent_chain(item, items).iter().map(|parent| parent.title.clone()).collect();
-            (item.clone(), chain, parent_path(item, items))
+            (item.clone(), chain, parent_path(item, items, lang))
         })
         .collect();
     rows.sort_by(|a, b| a.2.cmp(&b.2).then(a.0.position.cmp(&b.0.position)).then(a.0.title.cmp(&b.0.title)));
@@ -151,10 +152,10 @@ pub fn grouped_rows(kind: ItemKind, items: &[IvkikItem]) -> Vec<(Option<GroupHea
         let header = if any_grouped && previous_path.as_ref() != Some(&full_path) {
             let (prefix, leaf) = match chain.split_last() {
                 | Some((leaf, ancestors)) => (ancestors.join(" › "), leaf.clone()),
-                | None if item.parent_id.is_some() => (String::new(), "(연결된 상위 항목 없음)".to_string()),
-                | None => (String::new(), "최상위".to_string()),
+                | None if item.parent_id.is_some() => (String::new(), lang.missing_parent().to_string()),
+                | None => (String::new(), lang.top_level().to_string()),
             };
-            let tooltip = full_path.clone().unwrap_or_else(|| "최상위".to_string());
+            let tooltip = full_path.clone().unwrap_or_else(|| lang.top_level().to_string());
             Some(GroupHeader {
                 prefix,
                 leaf,
@@ -183,7 +184,7 @@ pub fn progress_text(item: &IvkikItem) -> Option<String> {
     }
 }
 
-/// KPI 달성률(0~100). 목표값이 있을 때만 의미가 있다.
+/// Key Performance Indicator 달성률(0~100). 목표값이 있을 때만 의미가 있다.
 pub fn kpi_percent(item: &IvkikItem) -> Option<i64> {
     if item.kind != ItemKind::Kpi {
         return None;
@@ -196,7 +197,7 @@ pub fn kpi_percent(item: &IvkikItem) -> Option<i64> {
 }
 
 /// 기본 펼침 규칙: Identity와 Vision까지는 펼쳐서 뼈대를 보여 주고,
-/// 그 아래(KRA·IGT)는 접어 둔다.
+/// 그 아래(Key Result Area·Income Generating Task)는 접어 둔다.
 pub fn default_open(kind: ItemKind) -> bool { matches!(kind, ItemKind::Identity | ItemKind::Vision) }
 
 pub fn count_descendants(id: &str, items: &[IvkikItem]) -> usize {
@@ -269,7 +270,7 @@ mod tests {
         ];
         let children = sorted_children("vi1", &items);
         let ids: Vec<&str> = children.iter().map(|item| item.id.as_str()).collect();
-        // KRA(rank 2)가 IGT(rank 3)보다 먼저, KRA끼리는 position 순.
+        // Key Result Area(rank 2)가 Income Generating Task(rank 3)보다 먼저, Key Result Area끼리는 position 순.
         assert_eq!(ids, vec!["k2", "k1", "i1"]);
     }
 
@@ -278,8 +279,8 @@ mod tests {
         let items = sample();
         let kpi = items.iter().find(|item| item.id == "p1").unwrap();
         assert_eq!(
-            parent_path(kpi, &items).unwrap(),
-            "Identity · 경제적 자유 › Vision · 지식기업 › KRA · 온라인 강의 › IGT · 강의 제작"
+            parent_path(kpi, &items, Lang::Ko).unwrap(),
+            "Identity · 경제적 자유 › Vision · 지식기업 › Key Result Area · 온라인 강의 › Income Generating Task · 강의 제작"
         );
     }
 
@@ -287,7 +288,7 @@ mod tests {
     fn parent_path_marks_missing_parent() {
         let items = sample();
         let orphan = items.iter().find(|item| item.id == "orphan").unwrap();
-        assert_eq!(parent_path(orphan, &items).unwrap(), "(연결된 상위 항목 없음)");
+        assert_eq!(parent_path(orphan, &items, Lang::Ko).unwrap(), "(연결된 상위 항목 없음)");
     }
 
     #[test]
@@ -308,20 +309,20 @@ mod tests {
         let find = |id: &str| items.iter().find(|item| item.id == id).unwrap();
 
         // 4단계 경로는 가운데가 줄어든다.
-        assert_eq!(short_parent_path(find("p1"), &items).unwrap(), "경제적 자유 › … › 강의 제작");
+        assert_eq!(short_parent_path(find("p1"), &items, Lang::Ko).unwrap(), "경제적 자유 › … › 강의 제작");
         // 2단계 이하는 그대로 보여 준다.
-        assert_eq!(short_parent_path(find("k1"), &items).unwrap(), "경제적 자유 › 지식기업");
-        assert_eq!(short_parent_path(find("vi1"), &items).unwrap(), "경제적 자유");
+        assert_eq!(short_parent_path(find("k1"), &items, Lang::Ko).unwrap(), "경제적 자유 › 지식기업");
+        assert_eq!(short_parent_path(find("vi1"), &items, Lang::Ko).unwrap(), "경제적 자유");
         // 루트와 고아 항목.
-        assert_eq!(short_parent_path(find("v1"), &items), None);
-        assert_eq!(short_parent_path(find("orphan"), &items).unwrap(), "(연결된 상위 항목 없음)");
+        assert_eq!(short_parent_path(find("v1"), &items, Lang::Ko), None);
+        assert_eq!(short_parent_path(find("orphan"), &items, Lang::Ko).unwrap(), "(연결된 상위 항목 없음)");
     }
 
     #[test]
     fn parent_path_is_none_for_roots() {
         let items = sample();
         let root = items.iter().find(|item| item.id == "v1").unwrap();
-        assert_eq!(parent_path(root, &items), None);
+        assert_eq!(parent_path(root, &items, Lang::Ko), None);
     }
 
     #[test]
@@ -340,11 +341,11 @@ mod tests {
         items.push(item("p2", ItemKind::Kpi, Some("i1"), 1, "월 수강생"));
         items.push(item("p3", ItemKind::Kpi, Some("i2"), 0, "월 영업 건수"));
 
-        let rows = grouped_rows(ItemKind::Kpi, &items);
+        let rows = grouped_rows(ItemKind::Kpi, &items, Lang::Ko);
         let ids: Vec<&str> = rows.iter().map(|(_, item)| item.id.as_str()).collect();
         assert_eq!(ids, vec!["p1", "p2", "p3"]);
 
-        // 같은 IGT(i1)의 두 KPI는 한 헤더 아래 묶인다.
+        // 같은 Income Generating Task(i1)의 두 Key Performance Indicator는 한 헤더 아래 묶인다.
         let first = rows[0].0.as_ref().expect("first row should open a group");
         assert_eq!(first.prefix, "경제적 자유 › 지식기업 › 온라인 강의");
         assert_eq!(first.leaf, "강의 제작");
@@ -362,7 +363,7 @@ mod tests {
             item("v2", ItemKind::Identity, None, 1, "건강과 성장"),
         ];
 
-        let rows = grouped_rows(ItemKind::Identity, &items);
+        let rows = grouped_rows(ItemKind::Identity, &items, Lang::Ko);
         assert_eq!(rows.len(), 2);
         assert!(rows.iter().all(|(header, _)| header.is_none()), "value tab has no parent paths to group by");
     }
@@ -370,7 +371,7 @@ mod tests {
     #[test]
     fn grouped_rows_label_orphans() {
         let items = sample();
-        let rows = grouped_rows(ItemKind::Kra, &items);
+        let rows = grouped_rows(ItemKind::Kra, &items, Lang::Ko);
 
         let orphan_header = rows
             .iter()
@@ -383,7 +384,7 @@ mod tests {
 
     #[test]
     fn kpi_percent_clamps_and_rounds() {
-        let mut kpi = item("p", ItemKind::Kpi, None, 0, "KPI");
+        let mut kpi = item("p", ItemKind::Kpi, None, 0, "Key Performance Indicator");
         kpi.current_value = Some(8_000_000.0);
         kpi.target_value = Some(25_000_000.0);
         assert_eq!(kpi_percent(&kpi), Some(32));
@@ -401,7 +402,7 @@ mod tests {
 
     #[test]
     fn progress_text_formats_values() {
-        let mut kpi = item("p", ItemKind::Kpi, None, 0, "KPI");
+        let mut kpi = item("p", ItemKind::Kpi, None, 0, "Key Performance Indicator");
         kpi.current_value = Some(18.0);
         kpi.target_value = Some(30.0);
         kpi.unit = Some("km".to_string());
@@ -420,16 +421,16 @@ mod tests {
         let find = |id: &str| items.iter().find(|item| item.id == id).unwrap();
 
         let igt = find("i1"); // 현재 부모: k1
-        assert!(is_valid_drop(igt, find("orphan")), "다른 KRA로는 이동 가능");
+        assert!(is_valid_drop(igt, find("orphan")), "다른 Key Result Area로는 이동 가능");
         assert!(!is_valid_drop(igt, find("k1")), "현재 부모로는 이동 불가(무의미)");
-        assert!(!is_valid_drop(igt, find("vi1")), "Vision은 IGT의 부모가 될 수 없음");
+        assert!(!is_valid_drop(igt, find("vi1")), "Vision은 Income Generating Task의 부모가 될 수 없음");
         assert!(!is_valid_drop(igt, igt), "자기 자신 불가");
 
         let kpi = find("p1"); // 현재 부모: i1
-        assert!(is_valid_drop(kpi, find("i2")), "KPI는 다른 IGT 아래로 이동 가능");
+        assert!(is_valid_drop(kpi, find("i2")), "Key Performance Indicator는 다른 Income Generating Task 아래로 이동 가능");
         assert!(!is_valid_drop(kpi, find("i1")), "현재 부모 제외");
-        assert!(!is_valid_drop(kpi, find("k1")), "KRA는 더 이상 KPI의 부모가 될 수 없음");
-        assert!(!is_valid_drop(kpi, find("v1")), "Identity는 KPI의 부모가 될 수 없음");
+        assert!(!is_valid_drop(kpi, find("k1")), "Key Result Area는 더 이상 Key Performance Indicator의 부모가 될 수 없음");
+        assert!(!is_valid_drop(kpi, find("v1")), "Identity는 Key Performance Indicator의 부모가 될 수 없음");
     }
 
     #[test]

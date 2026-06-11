@@ -1,7 +1,8 @@
 #![allow(non_snake_case)]
 
 use super::record_grass::RecordGrass;
-use crate::{models::{KpiMeasurement,
+use crate::{i18n::use_lang,
+            models::{KpiMeasurement,
                      RecordKpiMeasurementRequest,
                      aggregation_label,
                      format_timestamp,
@@ -21,10 +22,12 @@ pub struct KpiMeasurementPanelProps {
     pub current_value: Signal<String>,
 }
 
-/// KPI 상세 화면의 "실적 기록" 패널. 값과 함께 그날의 느낌·감상을
+/// Key Performance Indicator 상세 화면의 "실적 기록" 패널. 값과 함께 그날의 느낌·감상을
 /// 일기처럼 남기면 백엔드가 집계 방식대로 현재값을 다시 계산하고,
 /// 기록의 꾸준함은 잔디 그래프로 쌓인다.
 pub fn KpiMeasurementPanel(props: KpiMeasurementPanelProps) -> Element {
+    let lang = use_lang();
+    let t = *lang.read();
     let kpi_id = use_signal(|| props.kpi_id.clone());
     let aggregation = props.aggregation;
     // 측정값 추가·삭제는 스토어를 거쳐 목록(현재값·진행률)까지 함께
@@ -54,7 +57,7 @@ pub fn KpiMeasurementPanel(props: KpiMeasurementPanelProps) -> Element {
         spawn(async move {
             match IvkikService::list_kpi_measurements(kpi_id.read().clone()).await {
                 | Ok(list) => apply(list),
-                | Err(e) => panel_error.set(Some(format!("실적 기록을 불러오지 못했습니다: {e}"))),
+                | Err(e) => panel_error.set(Some(lang.peek().err_load_records(&e))),
             }
         });
     });
@@ -67,7 +70,7 @@ pub fn KpiMeasurementPanel(props: KpiMeasurementPanelProps) -> Element {
 
         let raw = value_input.read().trim().to_string();
         let Ok(value) = raw.parse::<f64>() else {
-            panel_error.set(Some("측정값은 숫자로 입력하세요.".to_string()));
+            panel_error.set(Some(lang.peek().value_must_be_number().to_string()));
             return;
         };
         let note = note_input.read().trim().to_string();
@@ -89,7 +92,7 @@ pub fn KpiMeasurementPanel(props: KpiMeasurementPanelProps) -> Element {
                         | Err(e) => panel_error.set(Some(e)),
                     }
                 },
-                | Err(e) => panel_error.set(Some(format!("실적 기록 추가에 실패했습니다: {e}"))),
+                | Err(e) => panel_error.set(Some(lang.peek().err_add_record(&e))),
             }
             busy.set(false);
         });
@@ -116,7 +119,7 @@ pub fn KpiMeasurementPanel(props: KpiMeasurementPanelProps) -> Element {
                         | Err(e) => panel_error.set(Some(e)),
                     }
                 },
-                | Err(e) => panel_error.set(Some(format!("실적 기록 삭제에 실패했습니다: {e}"))),
+                | Err(e) => panel_error.set(Some(lang.peek().err_delete_record(&e))),
             }
             busy.set(false);
         });
@@ -127,8 +130,8 @@ pub fn KpiMeasurementPanel(props: KpiMeasurementPanelProps) -> Element {
     rsx! {
         div { class: "measurement-panel",
             div { class: "measurement-heading",
-                label { "실적 기록" }
-                span { class: "measurement-hint", "{aggregation_label(aggregation)}(으)로 현재값에 자동 집계됩니다." }
+                label { {t.records_heading()} }
+                span { class: "measurement-hint", {t.agg_auto_hint(aggregation_label(aggregation, t))} }
             }
 
             if let Some(error) = panel_error.read().clone() {
@@ -141,7 +144,7 @@ pub fn KpiMeasurementPanel(props: KpiMeasurementPanelProps) -> Element {
                         r#type: "number",
                         step: "any",
                         class: "measurement-value-input",
-                        placeholder: "측정값",
+                        placeholder: t.value_placeholder(),
                         value: "{value_input}",
                         oninput: move |evt| value_input.set(evt.value())
                     }
@@ -152,7 +155,7 @@ pub fn KpiMeasurementPanel(props: KpiMeasurementPanelProps) -> Element {
                 textarea {
                     rows: "2",
                     class: "measurement-note-input",
-                    placeholder: "오늘의 메모 (선택) — 느낌, 배운 점, 컨디션 등을 일기처럼 남겨 보세요.",
+                    placeholder: t.note_placeholder(),
                     value: "{note_input}",
                     oninput: move |evt| note_input.set(evt.value()),
                     onkeydown: move |evt| {
@@ -163,13 +166,13 @@ pub fn KpiMeasurementPanel(props: KpiMeasurementPanelProps) -> Element {
                     }
                 }
                 div { class: "measurement-add-actions",
-                    span { class: "measurement-submit-hint", "⌘+Enter로도 기록" }
+                    span { class: "measurement-submit-hint", {t.cmd_enter_hint()} }
                     button {
                         r#type: "button",
                         class: "btn btn-secondary",
                         disabled: *busy.read(),
                         onclick: move |_| submit(),
-                        "기록"
+                        {t.record()}
                     }
                 }
             }
@@ -177,7 +180,7 @@ pub fn KpiMeasurementPanel(props: KpiMeasurementPanelProps) -> Element {
             RecordGrass { timestamps: grass_timestamps }
 
             if measurements.read().is_empty() {
-                p { class: "measurement-empty", "아직 기록이 없습니다. 첫 실적을 기록해 보세요." }
+                p { class: "measurement-empty", {t.no_records_yet_panel()} }
             } else {
                 ul { class: "measurement-list",
                     for measurement in measurements.read().iter() {
@@ -197,7 +200,7 @@ pub fn KpiMeasurementPanel(props: KpiMeasurementPanelProps) -> Element {
                                                 class: "btn row-btn",
                                                 disabled: *busy.read(),
                                                 onclick: move |_| handle_delete(measurement_id.clone()),
-                                                "삭제"
+                                                {t.delete()}
                                             }
                                         }
                                     }

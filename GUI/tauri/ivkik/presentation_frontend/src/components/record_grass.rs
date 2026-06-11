@@ -1,5 +1,7 @@
 #![allow(non_snake_case)]
 
+use crate::i18n::{Lang,
+                  use_lang};
 use chrono::{Datelike,
              Duration,
              NaiveDate};
@@ -38,7 +40,7 @@ fn local_date(timestamp: &str, offset_minutes: i64) -> Option<NaiveDate> {
 
 /// GitHub 잔디처럼 하루 한 칸, 농도는 그날의 기록 건수. 측정값 크기가
 /// 아니라 "기록하는 행위의 꾸준함"을 보여 주는 것이 목적이다.
-fn build_grass(timestamps: &[String]) -> Option<GrassData> {
+fn build_grass(timestamps: &[String], t: Lang) -> Option<GrassData> {
     let today = local_today()?;
     let offset_minutes = js_sys::Date::new_0().get_timezone_offset() as i64;
     // 마지막 열이 이번 주(일요일 시작)가 되도록 시작일을 맞춘다.
@@ -83,10 +85,11 @@ fn build_grass(timestamps: &[String]) -> Option<GrassData> {
                         };
                     }
                     let count = counts.get(&date).copied().unwrap_or(0);
+                    let date_text = date.to_string();
                     let title = if count == 0 {
-                        format!("{date} · 기록 없음")
+                        t.grass_no_record(&date_text)
                     } else {
-                        format!("{date} · {count}건 기록")
+                        t.grass_count(&date_text, count)
                     };
                     GrassCell {
                         level: count.min(4) as u8,
@@ -108,34 +111,33 @@ fn build_grass(timestamps: &[String]) -> Option<GrassData> {
 
 #[derive(Props, Clone, PartialEq)]
 pub struct RecordGrassProps {
-    /// RFC3339 측정 시각 목록. 어느 KPI의 기록인지는 구분하지 않는다 —
+    /// RFC3339 측정 시각 목록. 어느 Key Performance Indicator의 기록인지는 구분하지 않는다 —
     /// 잔디는 기록하는 행위 자체를 본다.
     pub timestamps: Vec<String>,
-    /// 머리글의 범위 설명(예: "전체 KPI"). 없으면 기간만 보여 준다.
+    /// 머리글의 범위 설명(예: "전체 Key Performance Indicator"). 없으면 기간만 보여 준다.
     #[props(default)]
     pub scope: Option<String>,
 }
 
-/// 기록의 꾸준함을 보여 주는 잔디 그래프. KPI 상세 패널과 대시보드가
+/// 기록의 꾸준함을 보여 주는 잔디 그래프. Key Performance Indicator 상세 패널과 대시보드가
 /// 같은 구현을 공유한다.
 pub fn RecordGrass(props: RecordGrassProps) -> Element {
-    let Some(grass) = build_grass(&props.timestamps) else {
+    let t = *use_lang().read();
+    let Some(grass) = build_grass(&props.timestamps, t) else {
         return rsx! {};
     };
-    let range = match props.scope.as_deref() {
-        | Some(scope) => format!("{scope} · 최근 {GRASS_WEEKS}주"),
-        | None => format!("최근 {GRASS_WEEKS}주"),
-    };
+    let range = t.grass_range(props.scope.as_deref(), GRASS_WEEKS);
 
     rsx! {
         div { class: "measurement-grass",
             div { class: "grass-heading",
                 span { class: "grass-title",
-                    "기록 잔디 "
+                    {t.grass_title()}
+                    " "
                     span { class: "grass-range", "{range}" }
                 }
                 span { class: "grass-stats",
-                    "{grass.recorded_days}일 기록 · 최장 연속 {grass.longest_streak}일 · 이번 주 {grass.this_week_days}일"
+                    {t.grass_stats(grass.recorded_days, grass.longest_streak, grass.this_week_days)}
                 }
             }
             div { class: "grass-grid",
@@ -152,13 +154,13 @@ pub fn RecordGrass(props: RecordGrassProps) -> Element {
                 }
             }
             div { class: "grass-legend",
-                "적음"
+                {t.grass_less()}
                 span { class: "grass-cell l0" }
                 span { class: "grass-cell l1" }
                 span { class: "grass-cell l2" }
                 span { class: "grass-cell l3" }
                 span { class: "grass-cell l4" }
-                "많음"
+                {t.grass_more()}
             }
         }
     }

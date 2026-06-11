@@ -1,5 +1,6 @@
 #![allow(non_snake_case)]
 
+use crate::i18n::use_lang;
 use dioxus::prelude::*;
 
 const TOAST_DURATION_MS: i32 = 4000;
@@ -67,6 +68,7 @@ pub struct RecordToastViewProps {
 }
 
 pub fn RecordToastView(props: RecordToastViewProps) -> Element {
+    let t = *use_lang().read();
     let Some(current) = props.host.current() else {
         return rsx! {};
     };
@@ -82,7 +84,7 @@ pub fn RecordToastView(props: RecordToastViewProps) -> Element {
                         props.host.dismiss();
                         props.on_undo.call(undo.clone());
                     },
-                    "실행 취소"
+                    {t.undo()}
                 }
             }
         }

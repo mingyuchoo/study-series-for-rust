@@ -31,9 +31,9 @@ impl ItemKind {
         match self {
             | Self::Identity => "Identity",
             | Self::Vision => "Vision",
-            | Self::Kra => "KRA",
-            | Self::Igt => "IGT",
-            | Self::Kpi => "KPI",
+            | Self::Kra => "Key Result Area",
+            | Self::Igt => "Income Generating Task",
+            | Self::Kpi => "Key Performance Indicator",
         }
     }
 
@@ -120,7 +120,7 @@ impl FromStr for ItemStatus {
     }
 }
 
-/// KPI 측정 기록들을 현재값으로 취합하는 방식.
+/// Key Performance Indicator 측정 기록들을 현재값으로 취합하는 방식.
 ///
 /// 체지방률처럼 "지금 수준"이 의미 있는 지표는 `Latest`, 월 커밋 수처럼
 /// 기록이 쌓여 성과가 되는 지표는 `Sum`, 평균 수면 시간처럼 기록의
@@ -173,7 +173,7 @@ impl FromStr for KpiAggregation {
             | "latest" => Ok(Self::Latest),
             | "sum" => Ok(Self::Sum),
             | "average" => Ok(Self::Average),
-            | _ => Err(format!("Unsupported KPI aggregation: {value}")),
+            | _ => Err(format!("Unsupported Key Performance Indicator aggregation: {value}")),
         }
     }
 }
@@ -186,7 +186,7 @@ mod tests {
     fn kind_knows_allowed_hierarchy() {
         assert!(ItemKind::Vision.allows_parent(ItemKind::Identity));
         assert!(ItemKind::Kpi.allows_parent(ItemKind::Igt));
-        assert!(!ItemKind::Kpi.allows_parent(ItemKind::Kra), "KPI는 정확히 1단계 위인 IGT만 허용");
+        assert!(!ItemKind::Kpi.allows_parent(ItemKind::Kra), "Key Performance Indicator는 정확히 1단계 위인 Income Generating Task만 허용");
         assert!(!ItemKind::Identity.allows_parent(ItemKind::Vision));
     }
 

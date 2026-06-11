@@ -4,7 +4,9 @@
 //! 처리는 전부 여기서 담당한다. 시그널은 모두 Copy라 스토어 자체를
 //! 값으로 들고 다닐 수 있다.
 
-use crate::{models::{CreateItemRequest,
+use crate::{i18n::{Lang,
+                   use_lang},
+            models::{CreateItemRequest,
                      ItemKind,
                      IvkikItem,
                      KpiMeasurement,
@@ -19,23 +21,27 @@ pub struct IvkikStore {
     pub loading: Signal<bool>,
     pub error: Signal<Option<String>>,
     pub search_query: Signal<String>,
+    /// 오류 메시지를 현재 언어로 만들기 위해 들고 다닌다.
+    lang: Signal<Lang>,
 }
 
-/// 스토어를 만들고 첫 목록을 불러온다. `App` 최상단에서 한 번 호출한다.
-/// 컨텍스트로도 제공하므로 하위 컴포넌트는 prop 없이
-/// `use_context::<IvkikStore>()`로 데이터 갱신을 요청할 수 있다.
+/// 스토어를 만들고 첫 목록을 불러온다. `App` 최상단에서 언어 컨텍스트
+/// 제공 후 한 번 호출한다. 컨텍스트로도 제공하므로 하위 컴포넌트는
+/// prop 없이 `use_context::<IvkikStore>()`로 데이터 갱신을 요청할 수 있다.
 pub fn use_ivkik_store() -> IvkikStore {
     let store = IvkikStore {
         items: use_signal(Vec::new),
         loading: use_signal(|| false),
         error: use_signal(|| None),
         search_query: use_signal(String::new),
+        lang: use_lang(),
     };
     use_context_provider(|| store);
 
     use_effect(move || {
         spawn(async move {
-            store.reload("IVKIK 항목을 불러오지 못했습니다").await;
+            let label = store.lang().err_load_items();
+            store.reload(label).await;
         });
     });
 
@@ -43,6 +49,8 @@ pub fn use_ivkik_store() -> IvkikStore {
 }
 
 impl IvkikStore {
+    fn lang(&self) -> Lang { *self.lang.peek() }
+
     pub fn is_busy(&self) -> bool { *self.loading.read() }
 
     pub fn clear_error(mut self) { self.error.set(None); }
@@ -90,15 +98,15 @@ impl IvkikStore {
         succeeded
     }
 
-    pub async fn search(self) { self.reload("검색에 실패했습니다").await; }
+    pub async fn search(self) { self.reload(self.lang().err_search()).await; }
 
     /// 폼 바깥에서 데이터가 바뀌었을 때(측정 기록 추가·삭제 등) 목록을
     /// 현재 검색어 기준으로 다시 불러온다.
-    pub async fn refresh(self) { self.reload("IVKIK 항목을 불러오지 못했습니다").await; }
+    pub async fn refresh(self) { self.reload(self.lang().err_load_items()).await; }
 
     pub async fn clear_search(mut self) {
         self.search_query.set(String::new());
-        self.reload("IVKIK 항목을 불러오지 못했습니다").await;
+        self.reload(self.lang().err_load_items()).await;
     }
 
     /// 성공하면 true를 돌려주어 호출한 화면이 닫기 등 후속 동작을
@@ -114,11 +122,11 @@ impl IvkikStore {
 
         match result {
             | Ok(_) => {
-                self.reload("목록을 새로고침하지 못했습니다").await;
+                self.reload(self.lang().err_refresh_list()).await;
                 true
             },
             | Err(e) => {
-                self.error.set(Some(format!("항목 추가에 실패했습니다: {e}")));
+                self.error.set(Some(self.lang().err_create_item(&e)));
                 false
             },
         }
@@ -135,11 +143,11 @@ impl IvkikStore {
 
         match result {
             | Ok(_) => {
-                self.reload("목록을 새로고침하지 못했습니다").await;
+                self.reload(self.lang().err_refresh_list()).await;
                 true
             },
             | Err(e) => {
-                self.error.set(Some(format!("항목 수정에 실패했습니다: {e}")));
+                self.error.set(Some(self.lang().err_update_item(&e)));
                 false
             },
         }
@@ -171,10 +179,10 @@ impl IvkikStore {
 
         match result {
             | Ok(_) => {
-                self.reload("목록을 새로고침하지 못했습니다").await;
+                self.reload(self.lang().err_refresh_list()).await;
             },
             | Err(e) => {
-                self.error.set(Some(format!("항목 삭제에 실패했습니다: {e}")));
+                self.error.set(Some(self.lang().err_delete_item(&e)));
             },
         }
     }

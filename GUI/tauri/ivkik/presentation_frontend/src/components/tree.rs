@@ -3,7 +3,8 @@
 use super::{item_form::AddPreset,
             quick_add::{QuickAddData,
                         QuickAddRow}};
-use crate::models::{ItemKind,
+use crate::{i18n::use_lang,
+            models::{ItemKind,
                     ItemStatus,
                     IvkikItem,
                     kind_description,
@@ -15,7 +16,7 @@ use crate::models::{ItemKind,
                            kpi_percent,
                            progress_text,
                            root_items,
-                           sorted_children}};
+                           sorted_children}}};
 use dioxus::prelude::*;
 use std::collections::HashSet;
 
@@ -33,6 +34,7 @@ pub struct IvkikTreeViewProps {
 /// 전체 구조 탭: 접기/펼치기가 가능한 컴팩트 트리. 행을 끌어 유효한
 /// 상위 항목 위에 놓으면 그 아래로 이동한다.
 pub fn IvkikTreeView(props: IvkikTreeViewProps) -> Element {
+    let t = *use_lang().read();
     let mut adding_value = use_signal(|| false);
     // 기본 펼침 상태에서 뒤집힌 노드 집합. 펼침 여부 = default_open XOR
     // 포함 여부라서, 항목이 추가·삭제돼도 나머지 노드의 상태가 유지된다.
@@ -70,13 +72,13 @@ pub fn IvkikTreeView(props: IvkikTreeViewProps) -> Element {
         div { class: "ivkik-tree",
             if props.items.is_empty() {
                 p { class: "tree-hint",
-                    "아직 IVKIK 항목이 없습니다. 아래에서 Identity부터 추가해 보세요."
+                    {t.tree_empty_hint()}
                 }
             } else {
                 div { class: "tree-toolbar",
-                    button { r#type: "button", class: "btn btn-sm btn-outline", onclick: expand_all, "모두 펼치기" }
-                    button { r#type: "button", class: "btn btn-sm btn-outline", onclick: collapse_all, "모두 접기" }
-                    span { class: "tree-flow", "Identity → Vision → KRA → IGT → KPI · 행을 끌어 새 상위 항목 위에 놓으면 이동합니다" }
+                    button { r#type: "button", class: "btn btn-sm btn-outline", onclick: expand_all, {t.expand_all()} }
+                    button { r#type: "button", class: "btn btn-sm btn-outline", onclick: collapse_all, {t.collapse_all()} }
+                    span { class: "tree-flow", {t.tree_flow_hint()} }
                 }
             }
             for item in roots {
@@ -108,7 +110,7 @@ pub fn IvkikTreeView(props: IvkikTreeViewProps) -> Element {
                     r#type: "button",
                     class: "btn tree-add-root",
                     onclick: move |_| adding_value.set(true),
-                    "+ Identity 추가"
+                    {t.add_identity()}
                 }
             }
         }
@@ -131,6 +133,7 @@ struct IvkikTreeNodeProps {
 }
 
 fn IvkikTreeNode(props: IvkikTreeNodeProps) -> Element {
+    let t = *use_lang().read();
     let mut quick_add_kind = use_signal(|| None::<ItemKind>);
     let mut toggled = props.toggled;
     let mut drag_source = props.drag_source;
@@ -240,7 +243,7 @@ fn IvkikTreeNode(props: IvkikTreeNodeProps) -> Element {
                         r#type: "button",
                         class: "chevron-btn",
                         aria_expanded: is_open,
-                        aria_label: if is_open { "접기" } else { "펼치기" },
+                        aria_label: if is_open { t.collapse() } else { t.expand() },
                         onclick: toggle,
                         if is_open { "▾" } else { "▸" }
                     }
@@ -277,7 +280,7 @@ fn IvkikTreeNode(props: IvkikTreeNodeProps) -> Element {
                         r#type: "button",
                         class: "row-count",
                         onclick: toggle_from_count,
-                        "하위 {descendant_count}"
+                        {t.nested_count(descendant_count)}
                     }
                 }
 
@@ -289,7 +292,8 @@ fn IvkikTreeNode(props: IvkikTreeNodeProps) -> Element {
                             let item = item.clone();
                             move |_| props.on_open.call(item.clone())
                         },
-                        "수정"
+                        // on_open은 수정 화면이 아니라 읽기 전용 상세로 간다.
+                        {t.detail()}
                     }
                     button {
                         r#type: "button",
@@ -298,13 +302,13 @@ fn IvkikTreeNode(props: IvkikTreeNodeProps) -> Element {
                             let item = item.clone();
                             move |_| props.on_delete.call(item.clone())
                         },
-                        "삭제"
+                        {t.delete()}
                     }
                     for child_kind in child_kinds.iter().copied() {
                         button {
                             r#type: "button",
                             class: "btn row-btn",
-                            title: "{kind_description(child_kind)}",
+                            title: kind_description(child_kind, t),
                             onclick: move |_| quick_add_kind.set(Some(child_kind)),
                             "+ {child_kind.label()}"
                         }

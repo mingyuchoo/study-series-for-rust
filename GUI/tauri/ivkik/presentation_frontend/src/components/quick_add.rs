@@ -1,11 +1,12 @@
 #![allow(non_snake_case)]
 
 use super::item_form::AddPreset;
-use crate::models::{ItemKind,
-                    IvkikItem};
+use crate::{i18n::use_lang,
+            models::{ItemKind,
+                     IvkikItem}};
 use dioxus::prelude::*;
 
-/// 인라인 빠른 추가가 만들어 내는 최소 입력. 설명·KPI 값은 비워 두고
+/// 인라인 빠른 추가가 만들어 내는 최소 입력. 설명·Key Performance Indicator 값은 비워 두고
 /// 생성 후 필요하면 수정한다.
 #[derive(Debug, Clone, PartialEq)]
 pub struct QuickAddData {
@@ -26,6 +27,7 @@ pub struct QuickAddRowProps {
 /// 제목만 입력해 바로 추가하는 인라인 행. "자세히 입력"은 입력한 제목을
 /// 들고 전체 폼으로 이동한다.
 pub fn QuickAddRow(props: QuickAddRowProps) -> Element {
+    let t = *use_lang().read();
     let mut title = use_signal(String::new);
 
     let handle_submit = {
@@ -65,7 +67,7 @@ pub fn QuickAddRow(props: QuickAddRowProps) -> Element {
                 r#type: "text",
                 required: true,
                 autofocus: true,
-                placeholder: "{props.kind.label()} 제목을 입력하고 Enter",
+                placeholder: t.quick_add_placeholder(props.kind.label()),
                 value: "{title}",
                 oninput: move |evt| title.set(evt.value()),
                 onkeydown: move |evt| {
@@ -74,18 +76,18 @@ pub fn QuickAddRow(props: QuickAddRowProps) -> Element {
                     }
                 }
             }
-            button { r#type: "submit", class: "btn btn-sm btn-primary", "추가" }
+            button { r#type: "submit", class: "btn btn-sm btn-primary", {t.add()} }
             button {
                 r#type: "button",
                 class: "btn btn-sm btn-outline",
                 onclick: handle_detail,
-                "자세히 입력"
+                {t.more_details()}
             }
             button {
                 r#type: "button",
                 class: "btn btn-sm btn-secondary",
                 onclick: move |_| props.on_close.call(()),
-                "취소"
+                {t.cancel()}
             }
         }
     }

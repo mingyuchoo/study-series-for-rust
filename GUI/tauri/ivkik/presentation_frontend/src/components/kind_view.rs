@@ -2,7 +2,8 @@
 
 use super::record_toast::{RecordToastView,
                           use_record_toast};
-use crate::{models::{ItemKind,
+use crate::{i18n::use_lang,
+            models::{ItemKind,
                      IvkikItem,
                      KpiAggregation,
                      RecordKpiMeasurementRequest,
@@ -21,20 +22,21 @@ pub struct IvkikKindViewProps {
     pub kind: ItemKind,
     pub items: Vec<IvkikItem>,
     pub on_open: EventHandler<IvkikItem>,
-    pub on_delete: EventHandler<IvkikItem>,
 }
 
 /// 한 단계의 항목들을 표로 보여 주는 탭 화면. 같은 상위 경로의 항목을
 /// 묶고 경로를 그룹 헤더로 한 번만 보여 주어, 어떤 가치·목표 아래의
-/// 항목인지 줄임 없이 드러낸다. KPI 탭은 설명 대신 진행률을 보여 주고,
+/// 항목인지 줄임 없이 드러낸다. Key Performance Indicator 탭은 설명 대신 진행률을 보여 주고,
 /// 수정 화면에 들어가지 않고도 실적을 기록할 수 있도록 집계 방식에
 /// 맞는 퀵 기록 버튼을 항상 노출한다.
 pub fn IvkikKindView(props: IvkikKindViewProps) -> Element {
+    let lang = use_lang();
+    let t = *lang.read();
     let is_kpi = props.kind == ItemKind::Kpi;
     let store = use_context::<IvkikStore>();
     let toast = use_record_toast();
 
-    // 측정값 입력 팝오버가 열려 있는 KPI id. 한 번에 하나만 연다.
+    // 측정값 입력 팝오버가 열려 있는 Key Performance Indicator id. 한 번에 하나만 연다.
     let mut open_record = use_signal(|| None::<String>);
     let mut record_input = use_signal(String::new);
     let mut record_busy = use_signal(|| false);
@@ -62,10 +64,10 @@ pub fn IvkikKindView(props: IvkikKindViewProps) -> Element {
                     } else {
                         format_value(value)
                     };
-                    let message = format!("\"{}\" {amount} {unit} 기록됨", item.title).trim_end().to_string();
+                    let message = lang.peek().recorded_toast(&item.title, &amount, &unit);
                     toast.show(message, Some((item.id.clone(), measurement.id)));
                 },
-                | Err(e) => toast.show(format!("실적 기록에 실패했습니다: {e}"), None),
+                | Err(e) => toast.show(lang.peek().err_record(&e), None),
             }
             record_busy.set(false);
         });
@@ -76,7 +78,7 @@ pub fn IvkikKindView(props: IvkikKindViewProps) -> Element {
         let raw = record_input.read().trim().to_string();
         match raw.parse::<f64>() {
             | Ok(value) => record_measurement(item, value),
-            | Err(_) => toast.show("측정값은 숫자로 입력하세요.".to_string(), None),
+            | Err(_) => toast.show(lang.peek().value_must_be_number().to_string(), None),
         }
     };
 
@@ -84,12 +86,12 @@ pub fn IvkikKindView(props: IvkikKindViewProps) -> Element {
     let handle_undo = move |(kpi_id, measurement_id): (String, String)| {
         spawn(async move {
             if let Err(e) = store.delete_measurement(kpi_id, measurement_id).await {
-                toast.show(format!("실행 취소에 실패했습니다: {e}"), None);
+                toast.show(lang.peek().err_undo(&e), None);
             }
         });
     };
 
-    let display = grouped_rows(props.kind, &props.items);
+    let display = grouped_rows(props.kind, &props.items, t);
     let row_count = display.len();
     let any_grouped = display.iter().any(|(header, _)| header.is_some());
 
@@ -98,24 +100,27 @@ pub fn IvkikKindView(props: IvkikKindViewProps) -> Element {
             div { class: "lane-heading",
                 div {
                     h2 { "{props.kind.label()}" }
-                    p { "{kind_description(props.kind)}" }
+                    p { {kind_description(props.kind, t)} }
                 }
                 span { class: "lane-count", "{row_count}" }
             }
             if display.is_empty() {
-                div { class: "lane-empty", "비어 있음" }
+                div { class: "lane-empty", {t.empty_lane()} }
             } else {
                 table { class: "kind-table",
                     thead {
                         tr {
-                            th { class: "col-title", "제목" }
+                            th { class: "col-title", {t.title_label()} }
                             if is_kpi {
-                                th { class: "col-mid col-mid-kpi", "진행률" }
+                                th { class: "col-mid col-mid-kpi", {t.progress_label()} }
                             } else {
-                                th { class: "col-mid col-desc", "설명" }
+                                th { class: "col-mid col-desc", {t.description_label()} }
                             }
-                            th { class: "col-status", "상태" }
-                            th { class: if is_kpi { "col-actions col-actions-kpi" } else { "col-actions" } }
+                            th { class: "col-status", {t.status_field()} }
+                            // 동작 컬럼은 퀵 기록 버튼이 있는 Key Performance Indicator 탭에만 둔다.
+                            if is_kpi {
+                                th { class: "col-actions" }
+                            }
                         }
                     }
                     tbody {
@@ -129,14 +134,13 @@ pub fn IvkikKindView(props: IvkikKindViewProps) -> Element {
                                 let record_open = is_kpi && *open_record.read() == Some(item.id.clone());
                                 let title_class = if any_grouped { "cell-title grouped" } else { "cell-title" };
                                 let row_item = item.clone();
-                                let delete_item = item.clone();
                                 let quick_item = item.clone();
                                 let submit_item = item.clone();
                                 let save_item = item.clone();
                                 rsx! {
                                     if let Some(header) = header {
                                         tr { class: "group-row",
-                                            td { colspan: "4", title: "{header.tooltip}",
+                                            td { colspan: if is_kpi { "4" } else { "3" }, title: "{header.tooltip}",
                                                 if !header.prefix.is_empty() {
                                                     span { class: "group-path-prefix", "{header.prefix} › " }
                                                 }
@@ -170,18 +174,11 @@ pub fn IvkikKindView(props: IvkikKindViewProps) -> Element {
                                         td {
                                             span { class: "status-pill {item.status}", "{status_label(item.status)}" }
                                         }
-                                        td { class: "cell-actions",
-                                            div { class: "table-actions",
-                                                button {
-                                                    r#type: "button",
-                                                    class: "btn row-btn row-hover-btn",
-                                                    onclick: move |evt| {
-                                                        evt.stop_propagation();
-                                                        props.on_delete.call(delete_item.clone());
-                                                    },
-                                                    "삭제"
-                                                }
-                                                if is_kpi {
+                                        // 삭제는 실수 클릭을 막기 위해 목록에서 빼고, 상세
+                                        // 화면과 전체 구조 트리에서만 할 수 있다.
+                                        if is_kpi {
+                                            td { class: "cell-actions",
+                                                div { class: "table-actions",
                                                     // 합계형은 한 번의 클릭으로 1을 누적하고,
                                                     // 최신값·평균형은 측정값 입력 팝오버를 연다.
                                                     if is_sum {
@@ -210,7 +207,7 @@ pub fn IvkikKindView(props: IvkikKindViewProps) -> Element {
                                                                     open_record.set(Some(quick_item.id.clone()));
                                                                 }
                                                             },
-                                                            "기록"
+                                                            {t.record()}
                                                         }
                                                     }
                                                 }
@@ -222,7 +219,7 @@ pub fn IvkikKindView(props: IvkikKindViewProps) -> Element {
                                             td { colspan: "4",
                                                 div { class: "record-popover",
                                                     span { class: "record-popover-hint",
-                                                        "측정값을 입력하면 {aggregation_label(item.aggregation)}(으)로 현재값에 바로 반영됩니다."
+                                                        {t.record_popover_hint(aggregation_label(item.aggregation, t))}
                                                     }
                                                     div { class: "record-popover-controls",
                                                         input {
@@ -230,7 +227,7 @@ pub fn IvkikKindView(props: IvkikKindViewProps) -> Element {
                                                             step: "any",
                                                             class: "record-popover-input",
                                                             autofocus: true,
-                                                            placeholder: "측정값",
+                                                            placeholder: t.value_placeholder(),
                                                             value: "{record_input}",
                                                             oninput: move |evt| record_input.set(evt.value()),
                                                             onkeydown: move |evt| {
@@ -247,13 +244,13 @@ pub fn IvkikKindView(props: IvkikKindViewProps) -> Element {
                                                             class: "btn btn-primary",
                                                             disabled: *record_busy.read(),
                                                             onclick: move |_| submit_record(save_item.clone()),
-                                                            "저장"
+                                                            {t.save()}
                                                         }
                                                         button {
                                                             r#type: "button",
                                                             class: "btn btn-secondary",
                                                             onclick: move |_| open_record.set(None),
-                                                            "취소"
+                                                            {t.cancel()}
                                                         }
                                                     }
                                                 }

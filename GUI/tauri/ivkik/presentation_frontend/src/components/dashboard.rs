@@ -1,7 +1,8 @@
 #![allow(non_snake_case)]
 
 use super::record_grass::RecordGrass;
-use crate::{models::{ItemKind,
+use crate::{i18n::use_lang,
+            models::{ItemKind,
                      ItemStatus,
                      IvkikItem,
                      kind_description,
@@ -19,7 +20,7 @@ pub struct IvkikDashboardProps {
     pub on_open: EventHandler<IvkikItem>,
 }
 
-/// KPI 목록 한 줄을 그리는 데 필요한 값 묶음.
+/// Key Performance Indicator 목록 한 줄을 그리는 데 필요한 값 묶음.
 struct KpiRow {
     item: IvkikItem,
     percent: Option<i64>,
@@ -27,14 +28,15 @@ struct KpiRow {
     path: Option<String>,
 }
 
-/// 대시보드 탭: 단계별 총 수량과 상태별 수량, KPI 달성 현황을
-/// 한눈에 보여 준다. KPI는 주의가 필요한 지표가 먼저 보이도록
+/// 대시보드 탭: 단계별 총 수량과 상태별 수량, Key Performance Indicator 달성 현황을
+/// 한눈에 보여 준다. Key Performance Indicator는 주의가 필요한 지표가 먼저 보이도록
 /// 달성률 낮은 순으로 나열한다.
 pub fn IvkikDashboard(props: IvkikDashboardProps) -> Element {
+    let t = *use_lang().read();
     let items = &props.items;
 
-    // 전체 KPI의 측정 시각. "오늘 이 시스템과 마주했는가"를 보여 주는
-    // 잔디의 재료라 KPI 구분 없이 한 번에 불러온다.
+    // 전체 Key Performance Indicator의 측정 시각. "오늘 이 시스템과 마주했는가"를 보여 주는
+    // 잔디의 재료라 Key Performance Indicator 구분 없이 한 번에 불러온다.
     let mut grass_timestamps = use_signal(Vec::<String>::new);
     use_effect(move || {
         spawn(async move {
@@ -67,10 +69,10 @@ pub fn IvkikDashboard(props: IvkikDashboardProps) -> Element {
             item: item.clone(),
             percent: kpi_percent(item),
             progress: progress_text(item),
-            path: short_parent_path(item, items),
+            path: short_parent_path(item, items, t),
         })
         .collect();
-    // 달성률 낮은 순. 목표가 없어 달성률을 계산할 수 없는 KPI는 뒤로 보낸다.
+    // 달성률 낮은 순. 목표가 없어 달성률을 계산할 수 없는 Key Performance Indicator는 뒤로 보낸다.
     kpi_rows.sort_by(|a, b| match (a.percent, b.percent) {
         | (Some(left), Some(right)) => left.cmp(&right).then_with(|| a.item.title.cmp(&b.item.title)),
         | (Some(_), None) => std::cmp::Ordering::Less,
@@ -85,7 +87,7 @@ pub fn IvkikDashboard(props: IvkikDashboardProps) -> Element {
     rsx! {
         section { class: "ivkik-dashboard",
             if props.is_filtering {
-                p { class: "dash-notice", "검색 결과 기준 집계입니다." }
+                p { class: "dash-notice", {t.dash_filter_notice()} }
             }
 
             div { class: "dash-cards",
@@ -95,7 +97,7 @@ pub fn IvkikDashboard(props: IvkikDashboardProps) -> Element {
                             span { class: "dash-card-kind", "{kind.label()}" }
                             span { class: "dash-card-total", "{total}" }
                         }
-                        p { class: "dash-card-desc", "{kind_description(kind)}" }
+                        p { class: "dash-card-desc", {kind_description(kind, t)} }
                         div { class: "dash-card-statuses",
                             for (index, status) in ItemStatus::ALL.into_iter().enumerate() {
                                 span { class: "dash-status {status}", "{status_label(status)} {by_status[index]}" }
@@ -106,21 +108,21 @@ pub fn IvkikDashboard(props: IvkikDashboardProps) -> Element {
             }
 
             div { class: "dash-grass",
-                RecordGrass { timestamps: grass_timestamps.read().clone(), scope: Some("전체 KPI".to_string()) }
+                RecordGrass { timestamps: grass_timestamps.read().clone(), scope: Some(t.all_kpis().to_string()) }
             }
 
             div { class: "dash-kpi-section",
                 div { class: "lane-heading",
                     div {
-                        h2 { "KPI 현재 수준" }
+                        h2 { {t.kpi_levels_heading()} }
                         p {
                             if let Some(average) = average_percent {
-                                "평균 달성률 {average}%"
+                                {t.dash_average(average)}
                             } else {
-                                "달성률을 계산할 KPI가 없습니다."
+                                {t.dash_no_measurable()}
                             }
                             if unmeasured_count > 0 {
-                                " · 목표 미설정 {unmeasured_count}개"
+                                {t.dash_no_target_suffix(unmeasured_count)}
                             }
                         }
                     }
@@ -128,13 +130,13 @@ pub fn IvkikDashboard(props: IvkikDashboardProps) -> Element {
                 }
 
                 if kpi_rows.is_empty() {
-                    div { class: "lane-empty", "KPI가 없습니다." }
+                    div { class: "lane-empty", {t.no_kpis()} }
                 } else {
                     div { class: "dash-kpi-list",
                         for KpiRow { item, percent, progress, path } in kpi_rows {
                             {
                                 let row_item = item.clone();
-                                let path_display = path.unwrap_or_else(|| "최상위".to_string());
+                                let path_display = path.unwrap_or_else(|| t.top_level().to_string());
                                 rsx! {
                                     button {
                                         r#type: "button",
@@ -154,7 +156,7 @@ pub fn IvkikDashboard(props: IvkikDashboardProps) -> Element {
                                             if let Some(progress) = progress {
                                                 span { class: "dash-kpi-text", "{progress}" }
                                             } else {
-                                                span { class: "dash-kpi-text", "목표 미설정" }
+                                                span { class: "dash-kpi-text", {t.no_target()} }
                                             }
                                         }
                                     }

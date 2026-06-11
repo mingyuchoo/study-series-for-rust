@@ -4,7 +4,7 @@
 //! 실행해도 시드가 중복으로 들어가지 않는다.
 //!
 //! 시드 규모는 단계마다 부모 하나당 자식 둘(2 × 2 × 2 × 2 × 2)로,
-//! Identity 2 → Vision 4 → KRA 8 → IGT 16 → KPI 32, 총 62개 항목이다.
+//! Identity 2 → Vision 4 → Key Result Area 8 → Income Generating Task 16 → Key Performance Indicator 32, 총 62개 항목이다.
 
 use domain::{DomainError,
              ItemKind,
@@ -301,7 +301,7 @@ fn seed_tree() -> [IdentitySeed; 2] {
     ]
 }
 
-/// `metric`은 KPI 전용으로, (목표값, 단위, 집계 방식)이다. 현재값은
+/// `metric`은 Key Performance Indicator 전용으로, (목표값, 단위, 집계 방식)이다. 현재값은
 /// 0에서 시작한다.
 async fn create<R>(
     repository: &R,
@@ -457,7 +457,7 @@ mod tests {
             }
         }
 
-        // 누적형 KPI에는 합계 집계가 지정되어 있어야 한다.
+        // 누적형 Key Performance Indicator에는 합계 집계가 지정되어 있어야 한다.
         let commits = items.iter().find(|item| item.title == "월 커밋 수").expect("seeded kpi should exist");
         assert_eq!(commits.aggregation, KpiAggregation::Sum);
         let body_fat = items.iter().find(|item| item.title == "체지방률").expect("seeded kpi should exist");

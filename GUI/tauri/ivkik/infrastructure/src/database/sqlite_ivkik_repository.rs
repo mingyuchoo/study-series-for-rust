@@ -101,9 +101,9 @@ mod tests {
     async fn lists_items_in_ivkik_kind_order() {
         let repository = repository().await;
         for (kind, title) in [
-            (ItemKind::Kpi, "KPI"),
-            (ItemKind::Igt, "IGT"),
-            (ItemKind::Kra, "KRA"),
+            (ItemKind::Kpi, "Key Performance Indicator"),
+            (ItemKind::Igt, "Income Generating Task"),
+            (ItemKind::Kra, "Key Result Area"),
             (ItemKind::Vision, "Vision"),
             (ItemKind::Identity, "Identity"),
         ] {
@@ -200,11 +200,11 @@ mod tests {
         let measurements = repository.list_kpi_measurements(kpi.id).await.expect("measurements should be listed");
         assert_eq!(measurements, vec![measurement.clone()]);
 
-        // 전체 조회는 KPI 구분 없이 모든 기록을 돌려준다.
+        // 전체 조회는 Key Performance Indicator 구분 없이 모든 기록을 돌려준다.
         let all = repository.list_all_kpi_measurements().await.expect("all measurements should be listed");
         assert_eq!(all, vec![measurement.clone()]);
 
-        // 다른 KPI의 id로는 지워지지 않아야 한다.
+        // 다른 Key Performance Indicator의 id로는 지워지지 않아야 한다.
         repository
             .delete_kpi_measurement(Uuid::new_v4(), measurement.id)
             .await

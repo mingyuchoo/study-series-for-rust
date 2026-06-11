@@ -379,7 +379,7 @@ async fn record_kpi_measurement_updates_current_value() {
     assert_eq!(measurements, vec![measurement]);
 }
 
-/// Identity → … → KPI 계층을 만들어 측정 기록 테스트가 쓸 KPI를 돌려준다.
+/// Identity → … → Key Performance Indicator 계층을 만들어 측정 기록 테스트가 쓸 Key Performance Indicator를 돌려준다.
 async fn seeded_kpi(repository: &Arc<MockIvkikRepository>, aggregation: KpiAggregation) -> IvkikItem {
     let create = CreateItemUseCase::new(repository.clone());
     let identity = create.execute(draft(ItemKind::Identity, None, "Freedom")).await.unwrap();

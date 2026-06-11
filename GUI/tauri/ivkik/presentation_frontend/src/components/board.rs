@@ -5,8 +5,9 @@ use super::{dashboard::IvkikDashboard,
             kind_view::IvkikKindView,
             quick_add::QuickAddData,
             tree::IvkikTreeView};
-use crate::models::{ItemKind,
-                    IvkikItem};
+use crate::{i18n::use_lang,
+            models::{ItemKind,
+                     IvkikItem}};
 use dioxus::prelude::*;
 
 #[derive(Props, Clone, PartialEq)]
@@ -23,6 +24,7 @@ pub struct IvkikBoardProps {
 
 /// 탭 바와 탭별 화면(전체 구조 트리 / 단계별 카드)을 배선한다.
 pub fn IvkikBoard(props: IvkikBoardProps) -> Element {
+    let t = *use_lang().read();
     let mut active_tab = props.active_tab;
     let current_tab = active_tab.read().clone();
     let is_dashboard = current_tab == "dashboard";
@@ -31,14 +33,14 @@ pub fn IvkikBoard(props: IvkikBoardProps) -> Element {
 
     rsx! {
         div { class: "ivkik-board",
-            nav { class: "board-tabs", role: "tablist", aria_label: "IVKIK 단계 탭",
+            nav { class: "board-tabs", role: "tablist", aria_label: t.tabs_aria(),
                 button {
                     r#type: "button",
                     role: "tab",
                     aria_selected: is_dashboard,
                     class: if is_dashboard { "board-tab active" } else { "board-tab" },
                     onclick: move |_| active_tab.set("dashboard".to_string()),
-                    "대시보드"
+                    {t.dashboard_tab()}
                 }
                 button {
                     r#type: "button",
@@ -46,7 +48,7 @@ pub fn IvkikBoard(props: IvkikBoardProps) -> Element {
                     aria_selected: is_tree,
                     class: if is_tree { "board-tab active" } else { "board-tab" },
                     onclick: move |_| active_tab.set("tree".to_string()),
-                    "전체 구조"
+                    {t.structure_tab()}
                 }
                 for kind in ItemKind::ALL {
                     {
@@ -69,7 +71,7 @@ pub fn IvkikBoard(props: IvkikBoardProps) -> Element {
 
             if props.items.is_empty() && props.is_filtering {
                 div { class: "empty-state",
-                    p { "검색 결과가 없습니다." }
+                    p { {t.no_search_results()} }
                 }
             } else {
                 if is_dashboard {
@@ -84,8 +86,7 @@ pub fn IvkikBoard(props: IvkikBoardProps) -> Element {
                             IvkikKindView {
                                 kind,
                                 items: props.items.clone(),
-                                on_open: props.on_open,
-                                on_delete: props.on_delete
+                                on_open: props.on_open
                             }
                         },
                         None => rsx! {
