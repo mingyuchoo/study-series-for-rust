@@ -7,8 +7,7 @@ use crate::{components::{AddPreset,
                          ItemFormData,
                          QuickAddData},
             i18n,
-            models::{CreateItemRequest,
-                     IkikItem,
+            models::{IkikItem,
                      ItemKind,
                      UpdateItemRequest},
             store::{IkikStore,
@@ -73,18 +72,7 @@ pub fn App() -> Element {
         }
 
         let position = store.next_position(quick_add.kind, quick_add.parent_id.as_deref());
-        let request = CreateItemRequest {
-            kind: quick_add.kind,
-            parent_id: quick_add.parent_id,
-            title: quick_add.title,
-            description: None,
-            target_value: None,
-            current_value: None,
-            unit: None,
-            position: Some(position),
-            aggregation: Default::default(),
-            due_date: None,
-        };
+        let request = quick_add.to_create_request(position);
         spawn(async move {
             store.create(request).await;
         });

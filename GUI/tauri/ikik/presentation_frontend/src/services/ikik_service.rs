@@ -1,10 +1,13 @@
-use crate::models::{ApiError,
-                    CreateItemRequest,
-                    IkikItem,
-                    ItemRevision,
-                    KpiMeasurement,
-                    RecordKpiMeasurementRequest,
-                    UpdateItemRequest};
+use crate::{i18n,
+            models::{ApiError,
+                     CreateItemRequest,
+                     IkikItem,
+                     ItemRevision,
+                     KpiMeasurement,
+                     RecordKpiMeasurementRequest,
+                     UpdateItemRequest,
+                     validation_issue_message}};
+use contracts::ApiErrorKind;
 use js_sys::Reflect;
 use serde::{Serialize,
             de::DeserializeOwned};
@@ -20,6 +23,16 @@ pub struct IkikService;
 
 fn rejection_to_message(error: JsValue) -> String {
     if let Ok(api_error) = serde_wasm_bindgen::from_value::<ApiError>(error.clone()) {
+        // 구조화된 검증 오류와 NotFound는 현재 언어로 문구를 조립하고,
+        // 그 밖에는 백엔드의 기본 문구를 그대로 보여 준다. 언어 토글이
+        // localStorage에 보존되므로 저장된 선택이 곧 현재 언어다.
+        let lang = i18n::initial_lang();
+        if let Some(issue) = api_error.issue {
+            return validation_issue_message(issue, lang);
+        }
+        if api_error.kind == ApiErrorKind::NotFound {
+            return lang.item_not_found().to_string();
+        }
         return api_error.message;
     }
 

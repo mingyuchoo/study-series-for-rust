@@ -9,7 +9,6 @@ use crate::{i18n::use_lang,
                      aggregation_label,
                      format_timestamp,
                      format_value},
-            services::IkikService,
             store::IkikStore};
 use dioxus::prelude::*;
 
@@ -70,7 +69,7 @@ pub fn KpiMeasurementPanel(props: KpiMeasurementPanelProps) -> Element {
 
     use_effect(move || {
         spawn(async move {
-            match IkikService::list_kpi_measurements(kpi_id.read().clone()).await {
+            match store.load_measurements(kpi_id.read().clone()).await {
                 | Ok(list) => apply(list),
                 | Err(e) => panel_error.set(Some(lang.peek().err_load_records(&e))),
             }
@@ -97,7 +96,7 @@ pub fn KpiMeasurementPanel(props: KpiMeasurementPanelProps) -> Element {
                 | Ok(_) => {
                     note_input.set(String::new());
                     panel_error.set(None);
-                    match IkikService::list_kpi_measurements(kpi_id.read().clone()).await {
+                    match store.load_measurements(kpi_id.read().clone()).await {
                         | Ok(list) => apply(list),
                         | Err(e) => panel_error.set(Some(e)),
                     }
@@ -118,7 +117,7 @@ pub fn KpiMeasurementPanel(props: KpiMeasurementPanelProps) -> Element {
             match store.delete_measurement(kpi_id.read().clone(), measurement_id).await {
                 | Ok(()) => {
                     panel_error.set(None);
-                    match IkikService::list_kpi_measurements(kpi_id.read().clone()).await {
+                    match store.load_measurements(kpi_id.read().clone()).await {
                         | Ok(list) => {
                             // 마지막 기록을 지우면 집계값이 없어지므로 표시도 비운다.
                             if list.is_empty() {

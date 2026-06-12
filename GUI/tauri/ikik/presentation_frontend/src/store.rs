@@ -3,12 +3,17 @@
 //! 컴포넌트는 시그널을 읽어 그리기만 하고, 목록 새로고침·로딩·오류
 //! 처리는 전부 여기서 담당한다. 시그널은 모두 Copy라 스토어 자체를
 //! 값으로 들고 다닐 수 있다.
+//!
+//! 컴포넌트는 `IkikService`를 직접 부르지 않는다 — 화면-국소 데이터
+//! (측정 기록·변경 이력·잔디)도 아래의 load_* 메서드를 거쳐, 데이터
+//! 접근 경로가 스토어 하나로 모인다.
 
 use crate::{i18n::{Lang,
                    use_lang},
             models::{CreateItemRequest,
                      IkikItem,
                      ItemKind,
+                     ItemRevision,
                      KpiMeasurement,
                      RecordKpiMeasurementRequest,
                      UpdateItemRequest},
@@ -152,6 +157,16 @@ impl IkikStore {
             },
         }
     }
+
+    /// Key Performance Indicator 하나의 측정 기록(최신순). 화면-국소
+    /// 데이터라 시그널에 담지 않고 호출자에게 돌려준다.
+    pub async fn load_measurements(&self, kpi_id: String) -> Result<Vec<KpiMeasurement>, String> { IkikService::list_kpi_measurements(kpi_id).await }
+
+    /// 모든 측정 기록(최신순). 대시보드의 기록 잔디가 쓴다.
+    pub async fn load_all_measurements(&self) -> Result<Vec<KpiMeasurement>, String> { IkikService::list_all_kpi_measurements().await }
+
+    /// 항목 정의 변경 이력(최신순).
+    pub async fn load_revisions(&self, item_id: String) -> Result<Vec<ItemRevision>, String> { IkikService::list_item_revisions(item_id).await }
 
     /// 측정값을 기록하고 목록(현재값·진행률)을 새로고침한다. 오류
     /// 표시는 호출한 화면이 맡으므로 스토어 오류를 건드리지 않는다.

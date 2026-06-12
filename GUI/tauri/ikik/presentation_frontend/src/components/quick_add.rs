@@ -2,7 +2,8 @@
 
 use super::item_form::AddPreset;
 use crate::{i18n::use_lang,
-            models::{IkikItem,
+            models::{CreateItemRequest,
+                     IkikItem,
                      ItemKind,
                      kind_label}};
 use dioxus::prelude::*;
@@ -14,6 +15,25 @@ pub struct QuickAddData {
     pub kind: ItemKind,
     pub parent_id: Option<String>,
     pub title: String,
+}
+
+impl QuickAddData {
+    /// 빠른 추가의 생성 요청. 선택 필드를 어떻게 비우는지가 여기 한
+    /// 곳에 모인다 — 요청에 필드가 늘면 이 메서드만 따라가면 된다.
+    pub fn to_create_request(self, position: i64) -> CreateItemRequest {
+        CreateItemRequest {
+            kind: self.kind,
+            parent_id: self.parent_id,
+            title: self.title,
+            description: None,
+            target_value: None,
+            current_value: None,
+            unit: None,
+            position: Some(position),
+            aggregation: Default::default(),
+            due_date: None,
+        }
+    }
 }
 
 #[derive(Props, Clone, PartialEq)]

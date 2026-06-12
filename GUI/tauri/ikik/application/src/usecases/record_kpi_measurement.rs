@@ -25,9 +25,7 @@ impl RecordKpiMeasurementUseCase {
 
         let kpi = self.repository.get_item_by_id(kpi_id).await?.ok_or(DomainError::ItemNotFound)?;
         if kpi.kind != ItemKind::Kpi {
-            return Err(DomainError::InvalidIkikData(
-                "Key Performance Indicator 항목에만 측정값을 기록할 수 있습니다.".to_string(),
-            ));
+            return Err(DomainError::Validation(domain::ValidationIssue::MeasurementsRequireKpi));
         }
 
         let measurement = self.repository.record_kpi_measurement(KpiMeasurement::new(kpi_id, value, note)).await?;

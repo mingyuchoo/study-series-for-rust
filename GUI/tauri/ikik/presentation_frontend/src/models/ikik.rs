@@ -11,7 +11,61 @@ pub use contracts::{ApiError,
                     KpiAggregation,
                     KpiMeasurementDto as KpiMeasurement,
                     RecordKpiMeasurementRequest,
-                    UpdateItemRequest};
+                    UpdateItemRequest,
+                    ValidationIssue};
+
+/// 백엔드의 구조화된 검증 오류를 현재 언어의 문구로 조립한다.
+/// 백엔드는 이유(코드+파라미터)만 내려보내고, 표기는 화면이 정한다.
+pub fn validation_issue_message(issue: ValidationIssue, lang: Lang) -> String {
+    match (lang, issue) {
+        | (Lang::Ko, ValidationIssue::TitleRequired) => "제목을 입력하세요.".to_string(),
+        | (Lang::Ko, ValidationIssue::IdentityMustBeRoot) => format!("{}은 최상위 항목이어야 합니다.", kind_label(ItemKind::Identity, lang)),
+        | (
+            Lang::Ko,
+            ValidationIssue::ParentRequired {
+                kind,
+            },
+        ) => format!("{} 항목의 상위 항목을 선택하세요.", kind_label(kind, lang)),
+        | (
+            Lang::Ko,
+            ValidationIssue::ParentKindMismatch {
+                kind,
+                parent_kind,
+            },
+        ) => format!("{} 항목은 {} 아래에 둘 수 없습니다.", kind_label(kind, lang), kind_label(parent_kind, lang)),
+        | (Lang::Ko, ValidationIssue::SelfParent) => "자기 자신을 상위 항목으로 선택할 수 없습니다.".to_string(),
+        | (Lang::Ko, ValidationIssue::KpiFieldsOnNonKpi) => {
+            format!("목표값, 현재값, 단위는 {} 항목에서만 사용합니다.", kind_label(ItemKind::Kpi, lang))
+        },
+        | (Lang::Ko, ValidationIssue::DueDateOnIdentity) => {
+            format!("마감 기한은 {} 항목에서는 사용할 수 없습니다.", kind_label(ItemKind::Identity, lang))
+        },
+        | (Lang::Ko, ValidationIssue::MeasurementNotNumeric) => "측정값은 유효한 숫자여야 합니다.".to_string(),
+        | (Lang::Ko, ValidationIssue::MeasurementsRequireKpi) => {
+            format!("측정 기록은 {} 항목에서만 사용할 수 있습니다.", kind_label(ItemKind::Kpi, lang))
+        },
+        | (Lang::En, ValidationIssue::TitleRequired) => "Enter a title.".to_string(),
+        | (Lang::En, ValidationIssue::IdentityMustBeRoot) => "Identity must be a top-level item.".to_string(),
+        | (
+            Lang::En,
+            ValidationIssue::ParentRequired {
+                kind,
+            },
+        ) => format!("Select a parent for the {} item.", kind_label(kind, lang)),
+        | (
+            Lang::En,
+            ValidationIssue::ParentKindMismatch {
+                kind,
+                parent_kind,
+            },
+        ) => format!("A {} item cannot live under a {} item.", kind_label(kind, lang), kind_label(parent_kind, lang)),
+        | (Lang::En, ValidationIssue::SelfParent) => "An item cannot be its own parent.".to_string(),
+        | (Lang::En, ValidationIssue::KpiFieldsOnNonKpi) => "Target, current value, and unit are only for Key Performance Indicator items.".to_string(),
+        | (Lang::En, ValidationIssue::DueDateOnIdentity) => "Identity items cannot have a due date.".to_string(),
+        | (Lang::En, ValidationIssue::MeasurementNotNumeric) => "The measurement must be a valid number.".to_string(),
+        | (Lang::En, ValidationIssue::MeasurementsRequireKpi) => "Records are only available on Key Performance Indicator items.".to_string(),
+    }
+}
 
 /// 단계의 화면용 레이블. 한국어 화면은 우리말 명칭을, 영어 화면은
 /// 와이어 정의(contracts)의 영문 풀네임을 쓴다.
@@ -115,5 +169,28 @@ pub fn kind_description(kind: ItemKind, lang: Lang) -> &'static str {
         | (Lang::En, ItemKind::Kra) => "Key areas that demand focus",
         | (Lang::En, ItemKind::Igt) => "Execution work that produces real money and results",
         | (Lang::En, ItemKind::Kpi) => "Metrics that tune the system through measurement and feedback",
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn validation_issue_messages_localize_kind_labels() {
+        let issue = ValidationIssue::ParentRequired {
+            kind: ItemKind::Kra,
+        };
+        assert_eq!(validation_issue_message(issue, Lang::Ko), "핵심 결과 영역 항목의 상위 항목을 선택하세요.");
+        assert_eq!(validation_issue_message(issue, Lang::En), "Select a parent for the Key Result Area item.");
+
+        let mismatch = ValidationIssue::ParentKindMismatch {
+            kind: ItemKind::Kpi,
+            parent_kind: ItemKind::Kra,
+        };
+        assert_eq!(
+            validation_issue_message(mismatch, Lang::Ko),
+            "핵심 성과 지표 항목은 핵심 결과 영역 아래에 둘 수 없습니다."
+        );
     }
 }

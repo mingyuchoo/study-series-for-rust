@@ -20,9 +20,7 @@ impl ListKpiMeasurementsUseCase {
     pub async fn execute(&self, kpi_id: Uuid) -> Result<Vec<KpiMeasurement>, DomainError> {
         let kpi = self.repository.get_item_by_id(kpi_id).await?.ok_or(DomainError::ItemNotFound)?;
         if kpi.kind != ItemKind::Kpi {
-            return Err(DomainError::InvalidIkikData(
-                "Key Performance Indicator 항목의 측정 기록만 조회할 수 있습니다.".to_string(),
-            ));
+            return Err(DomainError::Validation(domain::ValidationIssue::MeasurementsRequireKpi));
         }
 
         self.repository.list_kpi_measurements(kpi_id).await

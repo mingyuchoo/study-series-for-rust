@@ -10,7 +10,7 @@ use domain::DomainError;
 pub fn domain_error_to_api(error: DomainError) -> ApiError {
     match error {
         | DomainError::ItemNotFound => ApiError::new(ApiErrorKind::NotFound, "IKIK 항목을 찾을 수 없습니다."),
-        | DomainError::InvalidIkikData(message) => ApiError::new(ApiErrorKind::Validation, message),
+        | DomainError::Validation(issue) => ApiError::validation(issue),
         // Raw DB error text is intentionally not forwarded to the frontend, but
         // it is logged server-side so failures remain diagnosable.
         | DomainError::DatabaseError(detail) => {

@@ -11,7 +11,7 @@ use crate::{i18n::use_lang,
                      tree::{kpi_percent,
                             progress_text,
                             short_parent_path}},
-            services::IkikService};
+            store::IkikStore};
 use dioxus::prelude::*;
 
 #[derive(Props, Clone, PartialEq)]
@@ -41,10 +41,11 @@ pub fn IkikDashboard(props: IkikDashboardProps) -> Element {
     // 전체 Key Performance Indicator의 측정 시각. "오늘 이 시스템과 마주했는가"를
     // 보여 주는 잔디의 재료라 Key Performance Indicator 구분 없이 한 번에
     // 불러온다.
+    let store = use_context::<IkikStore>();
     let mut grass_timestamps = use_signal(Vec::<String>::new);
     use_effect(move || {
         spawn(async move {
-            if let Ok(measurements) = IkikService::list_all_kpi_measurements().await {
+            if let Ok(measurements) = store.load_all_measurements().await {
                 grass_timestamps.set(measurements.into_iter().map(|measurement| measurement.measured_at).collect());
             }
         });

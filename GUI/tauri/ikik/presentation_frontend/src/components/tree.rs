@@ -2,7 +2,9 @@
 
 use super::{item_form::AddPreset,
             quick_add::{QuickAddData,
-                        QuickAddRow}};
+                        QuickAddRow},
+            tree_drag::{TreeDrag,
+                        use_tree_drag}};
 use crate::{i18n::use_lang,
             models::{IkikItem,
                      ItemKind,
@@ -16,7 +18,6 @@ use crate::{i18n::use_lang,
                             count_descendants,
                             default_open,
                             has_children,
-                            is_valid_drop,
                             kpi_percent,
                             progress_text,
                             root_items,
@@ -43,9 +44,7 @@ pub fn IkikTreeView(props: IkikTreeViewProps) -> Element {
     // 기본 펼침 상태에서 뒤집힌 노드 집합. 펼침 여부 = default_open XOR
     // 포함 여부라서, 항목이 추가·삭제돼도 나머지 노드의 상태가 유지된다.
     let mut toggled = use_signal(HashSet::<String>::new);
-    // 드래그 중인 항목과, 지금 드롭 대상으로 가리키는 행.
-    let drag_source = use_signal(|| None::<IkikItem>);
-    let drop_target = use_signal(|| None::<String>);
+    let drag = use_tree_drag();
     let roots = root_items(&props.items);
 
     let expand_all = {
@@ -91,8 +90,7 @@ pub fn IkikTreeView(props: IkikTreeViewProps) -> Element {
                     all_items: props.items.clone(),
                     depth: 0,
                     toggled,
-                    drag_source,
-                    drop_target,
+                    drag,
                     on_open: props.on_open,
                     on_delete: props.on_delete,
                     on_quick_add: props.on_quick_add,
@@ -127,8 +125,7 @@ struct IkikTreeNodeProps {
     all_items: Vec<IkikItem>,
     depth: usize,
     toggled: Signal<HashSet<String>>,
-    drag_source: Signal<Option<IkikItem>>,
-    drop_target: Signal<Option<String>>,
+    drag: TreeDrag,
     on_open: EventHandler<IkikItem>,
     on_delete: EventHandler<IkikItem>,
     on_quick_add: EventHandler<QuickAddData>,
@@ -140,8 +137,7 @@ fn IkikTreeNode(props: IkikTreeNodeProps) -> Element {
     let t = *use_lang().read();
     let mut quick_add_kind = use_signal(|| None::<ItemKind>);
     let mut toggled = props.toggled;
-    let mut drag_source = props.drag_source;
-    let mut drop_target = props.drop_target;
+    let drag = props.drag;
 
     let item = props.item.clone();
     let children = if props.depth >= MAX_TREE_DEPTH {
@@ -160,18 +156,7 @@ fn IkikTreeNode(props: IkikTreeNodeProps) -> Element {
         .as_deref()
         .and_then(|due| local_today().and_then(|today| due_chip(due, item.kind, t, today)));
 
-    // 드래그 상태에 따라 자신·유효 대상·무효 대상을 시각적으로 구분한다.
-    let row_class = match drag_source.read().as_ref() {
-        | Some(dragged) if dragged.id == item.id => "tree-row dragging",
-        | Some(dragged) if is_valid_drop(dragged, &item) =>
-            if drop_target.read().as_deref() == Some(item.id.as_str()) {
-                "tree-row drop-ok drop-hover"
-            } else {
-                "tree-row drop-ok"
-            },
-        | Some(_) => "tree-row drop-dim",
-        | None => "tree-row",
-    };
+    let row_class = drag.row_class(&item);
 
     let toggle = {
         let item_id = item.id.clone();
@@ -194,46 +179,23 @@ fn IkikTreeNode(props: IkikTreeNodeProps) -> Element {
 
     let handle_drag_start = {
         let item = item.clone();
-        move |_| drag_source.set(Some(item.clone()))
+        move |_| drag.start(item.clone())
     };
-    let handle_drag_end = move |_| {
-        drag_source.set(None);
-        drop_target.set(None);
-    };
-    // prevent_default를 호출해야 브라우저가 이 행을 드롭 대상으로 받아들인다.
+    let handle_drag_end = move |_| drag.reset();
     let handle_drag_over = {
         let item = item.clone();
-        move |evt: DragEvent| {
-            let Some(dragged) = drag_source.peek().clone() else {
-                return;
-            };
-            if is_valid_drop(&dragged, &item) {
-                evt.prevent_default();
-                if drop_target.peek().as_deref() != Some(item.id.as_str()) {
-                    drop_target.set(Some(item.id.clone()));
-                }
-            }
-        }
+        move |evt: DragEvent| drag.hover(&evt, &item)
     };
     let handle_drag_leave = {
         let item_id = item.id.clone();
-        move |_| {
-            if drop_target.peek().as_deref() == Some(item_id.as_str()) {
-                drop_target.set(None);
-            }
-        }
+        move |_| drag.leave(&item_id)
     };
     let handle_drop = {
         let item = item.clone();
         move |evt: DragEvent| {
-            evt.prevent_default();
-            if let Some(dragged) = drag_source.peek().clone()
-                && is_valid_drop(&dragged, &item)
-            {
-                props.on_reparent.call((dragged, item.clone()));
+            if let Some(pair) = drag.drop_on(&evt, &item) {
+                props.on_reparent.call(pair);
             }
-            drag_source.set(None);
-            drop_target.set(None);
         }
     };
 
@@ -348,8 +310,7 @@ fn IkikTreeNode(props: IkikTreeNodeProps) -> Element {
                             all_items: props.all_items.clone(),
                             depth: props.depth + 1,
                             toggled,
-                            drag_source,
-                            drop_target,
+                            drag,
                             on_open: props.on_open,
                             on_delete: props.on_delete,
                             on_quick_add: props.on_quick_add,

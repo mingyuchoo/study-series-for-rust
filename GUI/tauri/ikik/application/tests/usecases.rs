@@ -164,7 +164,7 @@ async fn create_rejects_blank_title() {
 
     let result = use_case.execute(draft(ItemKind::Identity, None, "   ")).await;
 
-    assert!(matches!(result, Err(DomainError::InvalidIkikData(_))));
+    assert!(matches!(result, Err(DomainError::Validation(_))));
     assert_eq!(repository.count(), 0);
 }
 
@@ -179,7 +179,7 @@ async fn create_rejects_invalid_parent_hierarchy() {
 
     let result = create.execute(draft(ItemKind::Igt, Some(identity.id), "Sales engine")).await;
 
-    assert!(matches!(result, Err(DomainError::InvalidIkikData(_))));
+    assert!(matches!(result, Err(DomainError::Validation(_))));
     assert_eq!(repository.count(), 1);
 }
 
@@ -195,7 +195,7 @@ async fn create_rejects_due_date_on_identity() {
         })
         .await;
 
-    assert!(matches!(result, Err(DomainError::InvalidIkikData(_))));
+    assert!(matches!(result, Err(DomainError::Validation(_))));
     assert_eq!(repository.count(), 0);
 }
 
@@ -531,7 +531,7 @@ async fn list_kpi_measurements_rejects_non_kpi_items() {
         .unwrap();
 
     let result = ListKpiMeasurementsUseCase::new(repository.clone()).execute(identity.id).await;
-    assert!(matches!(result, Err(DomainError::InvalidIkikData(_))));
+    assert!(matches!(result, Err(DomainError::Validation(_))));
 
     let missing = ListKpiMeasurementsUseCase::new(repository).execute(Uuid::new_v4()).await;
     assert!(matches!(missing, Err(DomainError::ItemNotFound)));

@@ -1,11 +1,12 @@
 use chrono::NaiveDate;
 use domain::{DomainError,
              IkikItem,
-             ItemKind};
+             ItemKind,
+             ValidationIssue};
 
 pub fn validate_title(title: &str) -> Result<(), DomainError> {
     if title.trim().is_empty() {
-        return Err(DomainError::InvalidIkikData("제목을 입력하세요.".to_string()));
+        return Err(DomainError::Validation(ValidationIssue::TitleRequired));
     }
 
     Ok(())
@@ -13,23 +14,22 @@ pub fn validate_title(title: &str) -> Result<(), DomainError> {
 
 pub fn validate_parent(kind: ItemKind, parent: Option<&IkikItem>) -> Result<(), DomainError> {
     match (kind, parent) {
-        | (ItemKind::Identity, Some(_)) => Err(DomainError::InvalidIkikData("Identity는 최상위 항목이어야 합니다.".to_string())),
+        | (ItemKind::Identity, Some(_)) => Err(DomainError::Validation(ValidationIssue::IdentityMustBeRoot)),
         | (ItemKind::Identity, None) => Ok(()),
-        | (_, None) => Err(DomainError::InvalidIkikData(format!("{} 항목의 상위 항목을 선택하세요.", kind.label()))),
+        | (_, None) => Err(DomainError::Validation(ValidationIssue::ParentRequired {
+            kind,
+        })),
         | (_, Some(parent)) if kind.allows_parent(parent.kind) => Ok(()),
-        | (_, Some(parent)) => Err(DomainError::InvalidIkikData(format!(
-            "{} 항목은 {} 아래에 둘 수 없습니다.",
-            kind.label(),
-            parent.kind.label()
-        ))),
+        | (_, Some(parent)) => Err(DomainError::Validation(ValidationIssue::ParentKindMismatch {
+            kind,
+            parent_kind: parent.kind,
+        })),
     }
 }
 
 pub fn validate_kpi_values(kind: ItemKind, target_value: Option<f64>, current_value: Option<f64>, unit: Option<&str>) -> Result<(), DomainError> {
     if kind != ItemKind::Kpi && (target_value.is_some() || current_value.is_some() || unit.is_some_and(|unit| !unit.trim().is_empty())) {
-        return Err(DomainError::InvalidIkikData(
-            "목표값, 현재값, 단위는 Key Performance Indicator 항목에서만 사용합니다.".to_string(),
-        ));
+        return Err(DomainError::Validation(ValidationIssue::KpiFieldsOnNonKpi));
     }
 
     Ok(())
@@ -38,7 +38,7 @@ pub fn validate_kpi_values(kind: ItemKind, target_value: Option<f64>, current_va
 /// Identity는 마감 없이 지속되는 단계이므로 마감 기한을 허용하지 않는다.
 pub fn validate_due_date(kind: ItemKind, due_date: Option<NaiveDate>) -> Result<(), DomainError> {
     if kind == ItemKind::Identity && due_date.is_some() {
-        return Err(DomainError::InvalidIkikData("마감 기한은 Identity 항목에서는 사용할 수 없습니다.".to_string()));
+        return Err(DomainError::Validation(ValidationIssue::DueDateOnIdentity));
     }
 
     Ok(())
@@ -46,9 +46,7 @@ pub fn validate_due_date(kind: ItemKind, due_date: Option<NaiveDate>) -> Result<
 
 pub fn validate_measurement_value(value: f64) -> Result<(), DomainError> {
     if !value.is_finite() {
-        return Err(DomainError::InvalidIkikData(
-            "Key Performance Indicator 측정값은 유효한 숫자여야 합니다.".to_string(),
-        ));
+        return Err(DomainError::Validation(ValidationIssue::MeasurementNotNumeric));
     }
 
     Ok(())

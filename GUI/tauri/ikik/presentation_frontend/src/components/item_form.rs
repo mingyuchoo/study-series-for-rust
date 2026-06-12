@@ -1,5 +1,6 @@
 #![allow(non_snake_case)]
 
+use super::breadcrumb::Breadcrumb;
 use crate::{i18n::{Lang,
                    use_lang},
             models::{CreateItemRequest,
@@ -109,6 +110,85 @@ impl ItemFormData {
 
 fn number_to_string(value: Option<f64>) -> String { value.map(|value| value.to_string()).unwrap_or_default() }
 
+#[derive(Props, Clone, PartialEq)]
+struct StructureFieldsProps {
+    kind: Signal<ItemKind>,
+    parent_id: Signal<String>,
+    due_date: Signal<String>,
+    /// 트리의 "+ 하위 추가"로 진입했으면 단계와 상위 항목이 잠긴다.
+    locked_parent: Option<IkikItem>,
+    parent_options: Vec<IkikItem>,
+}
+
+/// 생성 모드의 구조 선택: 단계 세그먼트와 상위 항목. 단계를 바꾸면
+/// 상위 항목 선택이 초기화되고, Identity는 마감을 갖지 않으므로 마감
+/// 입력값도 비운다.
+fn StructureFields(props: StructureFieldsProps) -> Element {
+    let t = *use_lang().read();
+    let mut kind = props.kind;
+    let mut parent_id = props.parent_id;
+    let mut due_date = props.due_date;
+    let selected_kind = *kind.read();
+
+    if let Some(parent) = props.locked_parent.as_ref() {
+        return rsx! {
+            div { class: "form-grid",
+                div { class: "form-group",
+                    label { {t.stage_label()} }
+                    div { class: "locked-field", {kind_label(selected_kind, t)} }
+                }
+                div { class: "form-group",
+                    label { {t.parent_label()} }
+                    div { class: "locked-field", "{kind_label(parent.kind, t)} · {parent.title}" }
+                }
+            }
+        };
+    }
+
+    rsx! {
+        div { class: "form-group",
+            label { {t.stage_label()} }
+            div { class: "kind-segment", role: "radiogroup", aria_label: t.stage_select_aria(),
+                for kind_option in ItemKind::ALL {
+                    button {
+                        r#type: "button",
+                        role: "radio",
+                        aria_checked: selected_kind == kind_option,
+                        title: kind_description(kind_option, t),
+                        class: if selected_kind == kind_option { "segment-btn active" } else { "segment-btn" },
+                        onclick: move |_| {
+                            if *kind.read() != kind_option {
+                                kind.set(kind_option);
+                                parent_id.set(String::new());
+                                // Identity는 마감을 갖지 않으므로 입력값을 비운다.
+                                if kind_option == ItemKind::Identity {
+                                    due_date.set(String::new());
+                                }
+                            }
+                        },
+                        {kind_label(kind_option, t)}
+                    }
+                }
+            }
+        }
+
+        if selected_kind != ItemKind::Identity {
+            div { class: "form-group",
+                label { r#for: "parent", {t.parent_label()} }
+                select {
+                    id: "parent",
+                    value: "{parent_id}",
+                    onchange: move |evt| parent_id.set(evt.value()),
+                    option { value: "", {t.parent_select_placeholder()} }
+                    for parent in props.parent_options.iter() {
+                        option { value: "{parent.id}", "{kind_label(parent.kind, t)} · {parent.title}" }
+                    }
+                }
+            }
+        }
+    }
+}
+
 pub fn ItemForm(props: ItemFormProps) -> Element {
     let lang = use_lang();
     let t = *lang.read();
@@ -131,8 +211,8 @@ pub fn ItemForm(props: ItemFormProps) -> Element {
         .or_else(|| props.preset.as_ref().map(|preset| preset.title.clone()))
         .unwrap_or_default();
 
-    let mut kind = use_signal(|| initial_kind);
-    let mut parent_id = use_signal(|| initial_parent_id);
+    let kind = use_signal(|| initial_kind);
+    let parent_id = use_signal(|| initial_parent_id);
     let mut title = use_signal(|| initial_title);
     let mut description = use_signal(|| props.item.as_ref().and_then(|item| item.description.clone()).unwrap_or_default());
     let mut target_value = use_signal(|| props.item.as_ref().map(|item| number_to_string(item.target_value)).unwrap_or_default());
@@ -206,87 +286,21 @@ pub fn ItemForm(props: ItemFormProps) -> Element {
                 // 수정 모드: 어떤 항목을 고치는지 브레드크럼으로 보여 주고,
                 // 조상을 누르면 그 항목의 수정 화면으로 이동한다.
                 if let Some((chain, current_title)) = edit_context.as_ref() {
-                    nav { class: "edit-breadcrumb", aria_label: t.breadcrumb_aria(),
-                        for ancestor in chain.iter() {
-                            {
-                                let ancestor = ancestor.clone();
-                                let ancestor_title = ancestor.title.clone();
-                                let ancestor_kind = kind_label(ancestor.kind, t);
-                                rsx! {
-                                    span { class: "breadcrumb-seg",
-                                        span { class: "breadcrumb-kind", "{ancestor_kind}" }
-                                        button {
-                                            r#type: "button",
-                                            class: "breadcrumb-link",
-                                            title: t.goto_detail(ancestor_kind),
-                                            onclick: move |_| props.on_navigate.call(ancestor.clone()),
-                                            "{ancestor_title}"
-                                        }
-                                    }
-                                    span { class: "breadcrumb-sep", "›" }
-                                }
-                            }
-                        }
-                        span { class: "breadcrumb-seg",
-                            span { class: "breadcrumb-kind", {kind_label(selected_kind, t)} }
-                            span { class: "breadcrumb-current", "{current_title}" }
-                        }
+                    Breadcrumb {
+                        chain: chain.clone(),
+                        current_kind: selected_kind,
+                        current_title: current_title.clone(),
+                        on_navigate: props.on_navigate
                     }
                 }
 
                 if !is_edit {
-                    if let Some(parent) = locked_parent.as_ref() {
-                        div { class: "form-grid",
-                            div { class: "form-group",
-                                label { {t.stage_label()} }
-                                div { class: "locked-field", {kind_label(selected_kind, t)} }
-                            }
-                            div { class: "form-group",
-                                label { {t.parent_label()} }
-                                div { class: "locked-field", "{kind_label(parent.kind, t)} · {parent.title}" }
-                            }
-                        }
-                    } else {
-                        div { class: "form-group",
-                            label { {t.stage_label()} }
-                            div { class: "kind-segment", role: "radiogroup", aria_label: t.stage_select_aria(),
-                                for kind_option in ItemKind::ALL {
-                                    button {
-                                        r#type: "button",
-                                        role: "radio",
-                                        aria_checked: selected_kind == kind_option,
-                                        title: kind_description(kind_option, t),
-                                        class: if selected_kind == kind_option { "segment-btn active" } else { "segment-btn" },
-                                        onclick: move |_| {
-                                            if *kind.read() != kind_option {
-                                                kind.set(kind_option);
-                                                parent_id.set(String::new());
-                                                // Identity는 마감을 갖지 않으므로 입력값을 비운다.
-                                                if kind_option == ItemKind::Identity {
-                                                    due_date.set(String::new());
-                                                }
-                                            }
-                                        },
-                                        {kind_label(kind_option, t)}
-                                    }
-                                }
-                            }
-                        }
-
-                        if selected_kind != ItemKind::Identity {
-                            div { class: "form-group",
-                                label { r#for: "parent", {t.parent_label()} }
-                                select {
-                                    id: "parent",
-                                    value: "{parent_id}",
-                                    onchange: move |evt| parent_id.set(evt.value()),
-                                    option { value: "", {t.parent_select_placeholder()} }
-                                    for parent in parent_options.iter() {
-                                        option { value: "{parent.id}", "{kind_label(parent.kind, t)} · {parent.title}" }
-                                    }
-                                }
-                            }
-                        }
+                    StructureFields {
+                        kind,
+                        parent_id,
+                        due_date,
+                        locked_parent: locked_parent.clone(),
+                        parent_options: parent_options.clone()
                     }
                 }
 

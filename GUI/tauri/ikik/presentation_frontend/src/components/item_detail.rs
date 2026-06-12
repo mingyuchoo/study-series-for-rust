@@ -1,6 +1,7 @@
 #![allow(non_snake_case)]
 
-use super::kpi_measurements::KpiMeasurementPanel;
+use super::{breadcrumb::Breadcrumb,
+            kpi_measurements::KpiMeasurementPanel};
 use crate::{i18n::use_lang,
             models::{IkikItem,
                      ItemKind,
@@ -19,7 +20,7 @@ use crate::{i18n::use_lang,
                             parent_chain,
                             progress_text,
                             sorted_children}},
-            services::IkikService};
+            store::IkikStore};
 use dioxus::prelude::*;
 
 #[derive(Props, Clone, PartialEq)]
@@ -52,10 +53,11 @@ pub fn ItemDetail(props: ItemDetailProps) -> Element {
     let has_measurements = use_signal(|| false);
     let panel_current_value = use_signal(String::new);
 
+    let store = use_context::<IkikStore>();
     let revision_item_id = use_signal(|| item.id.clone());
     use_effect(move || {
         spawn(async move {
-            match IkikService::list_item_revisions(revision_item_id.read().clone()).await {
+            match store.load_revisions(revision_item_id.read().clone()).await {
                 | Ok(list) => revisions.set(list),
                 | Err(e) => revisions_error.set(Some(lang.peek().err_load_revisions(&e))),
             }
@@ -76,31 +78,11 @@ pub fn ItemDetail(props: ItemDetailProps) -> Element {
 
     rsx! {
         div { class: "item-detail",
-            nav { class: "edit-breadcrumb", aria_label: t.breadcrumb_aria(),
-                for ancestor in chain.iter() {
-                    {
-                        let ancestor = ancestor.clone();
-                        let ancestor_title = ancestor.title.clone();
-                        let ancestor_kind = kind_label(ancestor.kind, t);
-                        rsx! {
-                            span { class: "breadcrumb-seg",
-                                span { class: "breadcrumb-kind", "{ancestor_kind}" }
-                                button {
-                                    r#type: "button",
-                                    class: "breadcrumb-link",
-                                    title: t.goto_detail(ancestor_kind),
-                                    onclick: move |_| props.on_navigate.call(ancestor.clone()),
-                                    "{ancestor_title}"
-                                }
-                            }
-                            span { class: "breadcrumb-sep", "›" }
-                        }
-                    }
-                }
-                span { class: "breadcrumb-seg",
-                    span { class: "breadcrumb-kind", {kind_label(item.kind, t)} }
-                    span { class: "breadcrumb-current", "{item.title}" }
-                }
+            Breadcrumb {
+                chain,
+                current_kind: item.kind,
+                current_title: item.title.clone(),
+                on_navigate: props.on_navigate
             }
 
             div { class: "detail-heading",
