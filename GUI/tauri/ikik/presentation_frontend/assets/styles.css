@@ -95,6 +95,7 @@ body {
   gap: 8px;
 }
 
+.mode-toggle,
 .theme-toggle,
 .lang-toggle {
   display: inline-flex;
@@ -118,16 +119,32 @@ body {
   font-weight: 500;
 }
 
+.mode-toggle:hover,
 .theme-toggle:hover,
 .lang-toggle:hover {
   border-color: var(--color-charcoal);
   color: var(--color-ink);
 }
 
+.mode-toggle:focus-visible,
 .theme-toggle:focus-visible,
 .lang-toggle:focus-visible {
   outline: none;
   box-shadow: 0 0 0 3px var(--color-focus-ring);
+}
+
+/* 관리 모드가 열려 있는 동안 자물쇠가 검정 반전으로 남아, 위험한
+   상태임이 한눈에 보인다. */
+.mode-toggle.active {
+  border-color: var(--color-primary);
+  background: var(--color-primary);
+  color: var(--color-on-primary);
+}
+
+.mode-toggle.active:hover {
+  border-color: var(--color-ink-deep);
+  background: var(--color-ink-deep);
+  color: var(--color-on-primary);
 }
 
 .app-header h1 {

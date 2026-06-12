@@ -6,6 +6,7 @@ use super::{item_form::AddPreset,
             tree_drag::{TreeDrag,
                         use_tree_drag}};
 use crate::{i18n::use_lang,
+            mode::use_mode,
             models::{IkikItem,
                      ItemKind,
                      ItemStatus,
@@ -40,6 +41,7 @@ pub struct IkikTreeViewProps {
 /// 상위 항목 위에 놓으면 그 아래로 이동한다.
 pub fn IkikTreeView(props: IkikTreeViewProps) -> Element {
     let t = *use_lang().read();
+    let is_manage = use_mode().read().is_manage();
     let mut adding_value = use_signal(|| false);
     // 기본 펼침 상태에서 뒤집힌 노드 집합. 펼침 여부 = default_open XOR
     // 포함 여부라서, 항목이 추가·삭제돼도 나머지 노드의 상태가 유지된다.
@@ -99,20 +101,22 @@ pub fn IkikTreeView(props: IkikTreeViewProps) -> Element {
                 }
             }
 
-            if *adding_value.read() {
-                QuickAddRow {
-                    kind: ItemKind::Identity,
-                    parent: None,
-                    on_quick_add: props.on_quick_add,
-                    on_add_child: props.on_add_child,
-                    on_close: move |_| adding_value.set(false)
-                }
-            } else {
-                button {
-                    r#type: "button",
-                    class: "btn tree-add-root",
-                    onclick: move |_| adding_value.set(true),
-                    {t.add_identity()}
+            if is_manage {
+                if *adding_value.read() {
+                    QuickAddRow {
+                        kind: ItemKind::Identity,
+                        parent: None,
+                        on_quick_add: props.on_quick_add,
+                        on_add_child: props.on_add_child,
+                        on_close: move |_| adding_value.set(false)
+                    }
+                } else {
+                    button {
+                        r#type: "button",
+                        class: "btn tree-add-root",
+                        onclick: move |_| adding_value.set(true),
+                        {t.add_identity()}
+                    }
                 }
             }
         }
@@ -135,6 +139,7 @@ struct IkikTreeNodeProps {
 
 fn IkikTreeNode(props: IkikTreeNodeProps) -> Element {
     let t = *use_lang().read();
+    let is_manage = use_mode().read().is_manage();
     let mut quick_add_kind = use_signal(|| None::<ItemKind>);
     let mut toggled = props.toggled;
     let drag = props.drag;
@@ -202,7 +207,8 @@ fn IkikTreeNode(props: IkikTreeNodeProps) -> Element {
     rsx! {
         div { class: "tree-node",
             div { class: "{row_class}",
-                draggable: true,
+                // 행 이동(재배치)도 구조 변경이라 관리 모드에서만 끌 수 있다.
+                draggable: is_manage,
                 ondragstart: handle_drag_start,
                 ondragend: handle_drag_end,
                 ondragover: handle_drag_over,
@@ -269,22 +275,24 @@ fn IkikTreeNode(props: IkikTreeNodeProps) -> Element {
                         // on_open은 수정 화면이 아니라 읽기 전용 상세로 간다.
                         {t.detail()}
                     }
-                    button {
-                        r#type: "button",
-                        class: "btn row-btn",
-                        onclick: {
-                            let item = item.clone();
-                            move |_| props.on_delete.call(item.clone())
-                        },
-                        {t.delete()}
-                    }
-                    for child_kind in child_kinds.iter().copied() {
+                    if is_manage {
                         button {
                             r#type: "button",
                             class: "btn row-btn",
-                            title: kind_description(child_kind, t),
-                            onclick: move |_| quick_add_kind.set(Some(child_kind)),
-                            "+ {kind_label(child_kind, t)}"
+                            onclick: {
+                                let item = item.clone();
+                                move |_| props.on_delete.call(item.clone())
+                            },
+                            {t.delete()}
+                        }
+                        for child_kind in child_kinds.iter().copied() {
+                            button {
+                                r#type: "button",
+                                class: "btn row-btn",
+                                title: kind_description(child_kind, t),
+                                onclick: move |_| quick_add_kind.set(Some(child_kind)),
+                                "+ {kind_label(child_kind, t)}"
+                            }
                         }
                     }
                 }

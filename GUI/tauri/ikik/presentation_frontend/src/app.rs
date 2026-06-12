@@ -7,6 +7,7 @@ use crate::{components::{AddPreset,
                          ItemFormData,
                          QuickAddData},
             i18n,
+            mode,
             models::{IkikItem,
                      ItemKind,
                      UpdateItemRequest},
@@ -36,6 +37,11 @@ pub fn App() -> Element {
     let t = *lang.read();
 
     let store: IkikStore = use_ikik_store();
+    // 사용/관리 모드: 사용 모드(기본)에서는 구조 변경 진입점을 숨긴다.
+    let mut mode = use_signal(mode::initial_mode);
+    use_context_provider(|| mode);
+    use_effect(move || mode::apply_mode(*mode.read()));
+    let is_manage = mode.read().is_manage();
     let mut theme = use_signal(theme::initial_theme);
     // 시그널이 바뀔 때마다 <html data-theme>와 localStorage에 반영한다.
     use_effect(move || theme::apply_theme(*theme.read()));
@@ -136,6 +142,44 @@ pub fn App() -> Element {
         main { class: "app",
             header { class: "app-header",
                 div { class: "header-controls",
+                // 자물쇠 토글: 잠겨 있으면 사용 모드, 열려 있으면 관리 모드.
+                button {
+                    r#type: "button",
+                    class: if is_manage { "mode-toggle active" } else { "mode-toggle" },
+                    aria_label: if is_manage { t.to_use_mode() } else { t.to_manage_mode() },
+                    title: if is_manage { t.to_use_mode() } else { t.to_manage_mode() },
+                    onclick: move |_| {
+                        let next = mode.read().toggled();
+                        mode.set(next);
+                    },
+                    if is_manage {
+                        svg {
+                            width: "18",
+                            height: "18",
+                            view_box: "0 0 24 24",
+                            fill: "none",
+                            stroke: "currentColor",
+                            stroke_width: "1.8",
+                            stroke_linecap: "round",
+                            stroke_linejoin: "round",
+                            rect { x: "3", y: "11", width: "18", height: "10", rx: "2" }
+                            path { d: "M7 11V7a5 5 0 0 1 9.9-1" }
+                        }
+                    } else {
+                        svg {
+                            width: "18",
+                            height: "18",
+                            view_box: "0 0 24 24",
+                            fill: "none",
+                            stroke: "currentColor",
+                            stroke_width: "1.8",
+                            stroke_linecap: "round",
+                            stroke_linejoin: "round",
+                            rect { x: "3", y: "11", width: "18", height: "10", rx: "2" }
+                            path { d: "M7 11V7a5 5 0 0 1 10 0v4" }
+                        }
+                    }
+                }
                 button {
                     r#type: "button",
                     class: "lang-toggle",
@@ -215,15 +259,17 @@ pub fn App() -> Element {
                                 }
                             }
                         }
-                        button {
-                            class: "btn btn-primary",
-                            onclick: move |_| {
-                                store.clear_error();
-                                // 단계 탭을 보고 있었다면 그 단계를 기본 선택한다.
-                                let kind = active_tab.read().parse::<ItemKind>().unwrap_or(ItemKind::Identity);
-                                current_view.set(AppView::Add(Box::new(AddPreset { kind, parent: None, title: String::new() })));
-                            },
-                            {t.new_item()}
+                        if is_manage {
+                            button {
+                                class: "btn btn-primary",
+                                onclick: move |_| {
+                                    store.clear_error();
+                                    // 단계 탭을 보고 있었다면 그 단계를 기본 선택한다.
+                                    let kind = active_tab.read().parse::<ItemKind>().unwrap_or(ItemKind::Identity);
+                                    current_view.set(AppView::Add(Box::new(AddPreset { kind, parent: None, title: String::new() })));
+                                },
+                                {t.new_item()}
+                            }
                         }
                     }
                 }

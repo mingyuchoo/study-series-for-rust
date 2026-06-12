@@ -78,6 +78,23 @@ impl Lang {
 
     pub fn reset(self) -> &'static str { pick(self, "초기화", "Reset") }
 
+    /// 자물쇠 토글: 다음에 전환될 모드를 설명한다.
+    pub fn to_manage_mode(self) -> &'static str {
+        pick(
+            self,
+            "관리 모드로 전환 — 수정·삭제·추가가 열립니다",
+            "Switch to manage mode — edit, delete, and add open up",
+        )
+    }
+
+    pub fn to_use_mode(self) -> &'static str {
+        pick(
+            self,
+            "사용 모드로 전환 — 기록과 조회만 남습니다",
+            "Switch to use mode — records and browsing only",
+        )
+    }
+
     pub fn new_item(self) -> &'static str { pick(self, "새 항목", "New item") }
 
     pub fn to_light_theme(self) -> &'static str { pick(self, "라이트 테마로 전환", "Switch to light theme") }

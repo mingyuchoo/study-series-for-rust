@@ -3,6 +3,7 @@
 use super::{breadcrumb::Breadcrumb,
             kpi_measurements::KpiMeasurementPanel};
 use crate::{i18n::use_lang,
+            mode::use_mode,
             models::{IkikItem,
                      ItemKind,
                      ItemRevision,
@@ -43,6 +44,7 @@ pub struct ItemDetailProps {
 pub fn ItemDetail(props: ItemDetailProps) -> Element {
     let lang = use_lang();
     let t = *lang.read();
+    let is_manage = use_mode().read().is_manage();
     let item = props.item.clone();
     let is_kpi = item.kind == ItemKind::Kpi;
 
@@ -102,17 +104,21 @@ pub fn ItemDetail(props: ItemDetailProps) -> Element {
             }
 
             div { class: "detail-actions",
-                button {
-                    r#type: "button",
-                    class: "btn btn-primary",
-                    onclick: move |_| props.on_edit.call(edit_item.clone()),
-                    {t.edit()}
-                }
-                button {
-                    r#type: "button",
-                    class: "btn btn-secondary",
-                    onclick: move |_| props.on_delete.call(delete_item.clone()),
-                    {t.delete()}
+                // 수정·삭제는 관리 모드에서만 보인다 — 사용 모드에서
+                // 실수로 기준 문서를 바꾸는 것을 막는다.
+                if is_manage {
+                    button {
+                        r#type: "button",
+                        class: "btn btn-primary",
+                        onclick: move |_| props.on_edit.call(edit_item.clone()),
+                        {t.edit()}
+                    }
+                    button {
+                        r#type: "button",
+                        class: "btn btn-secondary",
+                        onclick: move |_| props.on_delete.call(delete_item.clone()),
+                        {t.delete()}
+                    }
                 }
                 button {
                     r#type: "button",

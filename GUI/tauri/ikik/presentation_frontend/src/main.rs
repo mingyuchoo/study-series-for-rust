@@ -1,6 +1,7 @@
 mod app;
 mod components;
 mod i18n;
+mod mode;
 mod models;
 mod services;
 mod store;
