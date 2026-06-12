@@ -1,7 +1,6 @@
 mod models;
 mod routes;
 
-use application::*;
 use infrastructure::{SqliteIkikRepository,
                      seed_if_empty};
 use routes::*;
