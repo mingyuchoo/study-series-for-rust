@@ -10,8 +10,7 @@ use crate::{i18n::use_lang,
             models::{IkikItem,
                      ItemKind,
                      ItemStatus,
-                     deadline::{due_chip,
-                                local_today},
+                     deadline::chip_for,
                      kind_description,
                      kind_label,
                      status_label,
@@ -156,10 +155,7 @@ fn IkikTreeNode(props: IkikTreeNodeProps) -> Element {
     let progress = progress_text(&item);
     let percent = kpi_percent(&item);
     let descendant_count = count_descendants(&item.id, &props.all_items);
-    let deadline = item
-        .due_date
-        .as_deref()
-        .and_then(|due| local_today().and_then(|today| due_chip(due, item.kind, t, today)));
+    let deadline = chip_for(&item, t);
 
     let row_class = drag.row_class(&item);
 

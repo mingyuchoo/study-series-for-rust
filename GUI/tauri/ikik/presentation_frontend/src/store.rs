@@ -114,15 +114,17 @@ impl IkikStore {
         self.reload(self.lang().err_load_items()).await;
     }
 
-    /// 성공하면 true를 돌려주어 호출한 화면이 닫기 등 후속 동작을
-    /// 결정할 수 있게 한다.
-    pub async fn create(mut self, request: CreateItemRequest) -> bool {
+    /// 변이 한 건의 공통 경로: busy 가드 → 호출 → 성공 시 목록
+    /// 새로고침 / 실패 시 오류 표시. 변이 후에는 반드시 목록을 다시
+    /// 불러온다는 규칙이 여기 한 곳에 산다. 성공하면 true를 돌려주어
+    /// 호출한 화면이 닫기 등 후속 동작을 결정할 수 있게 한다.
+    async fn mutate<T>(mut self, call: impl Future<Output = Result<T, String>>, error_message: impl FnOnce(Lang, &str) -> String) -> bool {
         if self.is_busy() {
             return false;
         }
 
         self.loading.set(true);
-        let result = IkikService::create_item(request).await;
+        let result = call.await;
         self.loading.set(false);
 
         match result {
@@ -131,31 +133,35 @@ impl IkikStore {
                 true
             },
             | Err(e) => {
-                self.error.set(Some(self.lang().err_create_item(&e)));
+                self.error.set(Some(error_message(self.lang(), &e)));
                 false
             },
         }
     }
 
-    pub async fn update(mut self, request: UpdateItemRequest) -> bool {
-        if self.is_busy() {
-            return false;
-        }
+    pub async fn create(self, request: CreateItemRequest) -> bool { self.mutate(IkikService::create_item(request), |lang, e| lang.err_create_item(e)).await }
 
-        self.loading.set(true);
-        let result = IkikService::update_item(request).await;
-        self.loading.set(false);
+    pub async fn update(self, request: UpdateItemRequest) -> bool { self.mutate(IkikService::update_item(request), |lang, e| lang.err_update_item(e)).await }
 
-        match result {
-            | Ok(_) => {
-                self.reload(self.lang().err_refresh_list()).await;
-                true
-            },
-            | Err(e) => {
-                self.error.set(Some(self.lang().err_update_item(&e)));
-                false
-            },
-        }
+    /// 트리 드래그: 항목을 새 상위 항목 아래 맨 뒤로 옮긴다. 요청
+    /// 조립(어떤 필드를 비우는지)이 화면이 아니라 여기서 결정된다.
+    pub async fn reparent(self, item: IkikItem, new_parent: IkikItem) -> bool {
+        let position = self.next_position(item.kind, Some(new_parent.id.as_str()));
+        let request = UpdateItemRequest {
+            id: item.id,
+            kind: None,
+            parent_id: Some(Some(new_parent.id)),
+            title: None,
+            description: None,
+            target_value: None,
+            current_value: None,
+            unit: None,
+            position: Some(position),
+            status: None,
+            aggregation: None,
+            due_date: None,
+        };
+        self.update(request).await
     }
 
     /// Key Performance Indicator 하나의 측정 기록(최신순). 화면-국소
@@ -183,22 +189,5 @@ impl IkikStore {
         Ok(())
     }
 
-    pub async fn delete(mut self, id: String) {
-        if self.is_busy() {
-            return;
-        }
-
-        self.loading.set(true);
-        let result = IkikService::delete_item(id).await;
-        self.loading.set(false);
-
-        match result {
-            | Ok(_) => {
-                self.reload(self.lang().err_refresh_list()).await;
-            },
-            | Err(e) => {
-                self.error.set(Some(self.lang().err_delete_item(&e)));
-            },
-        }
-    }
+    pub async fn delete(self, id: String) { self.mutate(IkikService::delete_item(id), |lang, e| lang.err_delete_item(e)).await; }
 }

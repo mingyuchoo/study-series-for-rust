@@ -9,8 +9,7 @@ use crate::{components::{AddPreset,
             i18n,
             mode,
             models::{IkikItem,
-                     ItemKind,
-                     UpdateItemRequest},
+                     ItemKind},
             store::{IkikStore,
                     use_ikik_store},
             theme::{self,
@@ -113,27 +112,8 @@ pub fn App() -> Element {
 
     // 트리에서 행을 드래그해 새 상위 항목 위에 놓으면 그 아래 맨 뒤로 이동한다.
     let handle_reparent = move |(item, new_parent): (IkikItem, IkikItem)| {
-        if store.is_busy() {
-            return;
-        }
-
-        let position = store.next_position(item.kind, Some(new_parent.id.as_str()));
-        let request = UpdateItemRequest {
-            id: item.id.clone(),
-            kind: None,
-            parent_id: Some(Some(new_parent.id.clone())),
-            title: None,
-            description: None,
-            target_value: None,
-            current_value: None,
-            unit: None,
-            position: Some(position),
-            status: None,
-            aggregation: None,
-            due_date: None,
-        };
         spawn(async move {
-            store.update(request).await;
+            store.reparent(item, new_parent).await;
         });
     };
 

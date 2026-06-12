@@ -8,8 +8,7 @@ use crate::{i18n::use_lang,
                      ItemKind,
                      ItemRevision,
                      aggregation_label,
-                     deadline::{due_chip,
-                                local_today},
+                     deadline::chip_for,
                      format_timestamp,
                      kind_label,
                      revision_field_label,
@@ -73,10 +72,7 @@ pub fn ItemDetail(props: ItemDetailProps) -> Element {
     let delete_item = item.clone();
     let description = item.description.clone().filter(|text| !text.is_empty());
     let created_at = format_timestamp(&item.created_at);
-    let deadline = item
-        .due_date
-        .as_deref()
-        .and_then(|due| local_today().and_then(|today| due_chip(due, item.kind, t, today)));
+    let deadline = chip_for(&item, t);
 
     rsx! {
         div { class: "item-detail",

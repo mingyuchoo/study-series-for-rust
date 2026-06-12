@@ -38,82 +38,72 @@ pub fn root_items(items: &[IkikItem]) -> Vec<IkikItem> {
     roots
 }
 
-/// 상위 항목 경로를 "Identity · 제목 › Key Result Area · 제목" 형태로 만든다.
-pub fn parent_path(item: &IkikItem, items: &[IkikItem], lang: Lang) -> Option<String> {
-    let mut segments = Vec::new();
-    let mut current = item.parent_id.clone();
+/// 조상 걷기 결과: 루트부터 직계 부모까지(루트 우선)와, 부모 id가
+/// 있는데 목록에 없어(검색 필터 등) 걷기가 끊겼는지 여부.
+struct AncestorWalk<'a> {
+    chain: Vec<&'a IkikItem>,
+    broken: bool,
+}
+
+/// 조상 순회의 단일 구현. 깊이 가드(순환 방어)와 끊긴 부모 처리를
+/// 여기 한 곳에서 결정하고, 경로 표기들은 결과를 가공만 한다.
+fn walk_ancestors<'a>(item: &IkikItem, items: &'a [IkikItem]) -> AncestorWalk<'a> {
+    let mut chain: Vec<&'a IkikItem> = Vec::new();
+    let mut broken = false;
+    let mut current = item.parent_id.as_deref();
 
     while let Some(parent_id) = current {
         match items.iter().find(|candidate| candidate.id == parent_id) {
             | Some(parent) => {
-                segments.push(format!("{} · {}", kind_label(parent.kind, lang), parent.title));
-                current = parent.parent_id.clone();
+                chain.push(parent);
+                current = parent.parent_id.as_deref();
             },
             | None => {
-                segments.push(lang.missing_parent().to_string());
+                broken = true;
                 break;
             },
         }
-        if segments.len() >= MAX_TREE_DEPTH {
-            break;
-        }
-    }
-
-    if segments.is_empty() {
-        None
-    } else {
-        segments.reverse();
-        Some(segments.join(" › "))
-    }
-}
-
-/// 루트부터 직계 부모까지의 조상 목록. 브레드크럼처럼 조상으로
-/// 이동하는 UI에 쓴다. 끊긴 부모를 만나면 거기서 멈춘다.
-pub fn parent_chain(item: &IkikItem, items: &[IkikItem]) -> Vec<IkikItem> {
-    let mut chain = Vec::new();
-    let mut current = item.parent_id.clone();
-
-    while let Some(parent_id) = current {
-        let Some(parent) = items.iter().find(|candidate| candidate.id == parent_id) else {
-            break;
-        };
-        chain.push(parent.clone());
-        current = parent.parent_id.clone();
         if chain.len() >= MAX_TREE_DEPTH {
             break;
         }
     }
 
     chain.reverse();
-    chain
+    AncestorWalk {
+        chain,
+        broken,
+    }
 }
+
+/// 상위 항목 경로를 "Identity · 제목 › Key Result Area · 제목" 형태로 만든다.
+pub fn parent_path(item: &IkikItem, items: &[IkikItem], lang: Lang) -> Option<String> {
+    let walk = walk_ancestors(item, items);
+    let mut segments: Vec<String> = Vec::with_capacity(walk.chain.len() + 1);
+    if walk.broken {
+        segments.push(lang.missing_parent().to_string());
+    }
+    segments.extend(walk.chain.iter().map(|parent| format!("{} · {}", kind_label(parent.kind, lang), parent.title)));
+
+    if segments.is_empty() { None } else { Some(segments.join(" › ")) }
+}
+
+/// 루트부터 직계 부모까지의 조상 목록. 브레드크럼처럼 조상으로
+/// 이동하는 UI에 쓴다. 끊긴 부모를 만나면 거기서 멈춘다.
+pub fn parent_chain(item: &IkikItem, items: &[IkikItem]) -> Vec<IkikItem> { walk_ancestors(item, items).chain.into_iter().cloned().collect() }
 
 /// 표 표시용 짧은 경로: 부모 제목만 모으고, 3단계 이상이면 가운데를
 /// 줄여 "최상위 › … › 직계 부모" 형태로 만든다.
 pub fn short_parent_path(item: &IkikItem, items: &[IkikItem], lang: Lang) -> Option<String> {
-    let mut titles = Vec::new();
-    let mut current = item.parent_id.clone();
-
-    while let Some(parent_id) = current {
-        match items.iter().find(|candidate| candidate.id == parent_id) {
-            | Some(parent) => {
-                titles.push(parent.title.clone());
-                current = parent.parent_id.clone();
-            },
-            | None => {
-                titles.push(lang.missing_parent().to_string());
-                break;
-            },
-        }
-        if titles.len() >= MAX_TREE_DEPTH {
-            break;
-        }
+    let walk = walk_ancestors(item, items);
+    let mut titles: Vec<String> = Vec::with_capacity(walk.chain.len() + 1);
+    if walk.broken {
+        titles.push(lang.missing_parent().to_string());
     }
+    titles.extend(walk.chain.iter().map(|parent| parent.title.clone()));
 
     if titles.is_empty() {
         return None;
     }
-    titles.reverse();
 
     if titles.len() > 2 {
         Some(format!("{} › … › {}", titles.first().unwrap(), titles.last().unwrap()))

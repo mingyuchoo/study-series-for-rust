@@ -2,6 +2,7 @@
 //! 공유한다. Key Performance Indicator는 마감이 아니라 목표 달성일이므로
 //! "~까지" 표기로 구분한다.
 
+use super::ikik::IkikItem;
 use crate::i18n::Lang;
 use chrono::{Datelike,
              NaiveDate};
@@ -42,6 +43,14 @@ fn format_due_date(date: NaiveDate, today: NaiveDate, lang: Lang) -> String {
             }
         },
     }
+}
+
+/// 항목의 마감 칩. 마감이 없거나 칩을 만들 수 없으면 None — 화면은
+/// 이 한 줄만 부르면 된다.
+pub fn chip_for(item: &IkikItem, lang: Lang) -> Option<DueChip> {
+    let due = item.due_date.as_deref()?;
+    let today = local_today()?;
+    due_chip(due, item.kind, lang, today)
 }
 
 /// "YYYY-MM-DD" 마감 기한을 칩 표기로 바꾼다. Identity나 파싱 불가
