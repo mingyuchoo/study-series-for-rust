@@ -1488,9 +1488,10 @@ textarea:focus {
   font-size: 13px;
 }
 
+/* 단계 수(4)와 같은 열 수라 카드가 화면 폭에 고르게 찬다. */
 .dash-cards {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 12px;
 }
 
