@@ -1,8 +1,9 @@
 //! 도메인 엔티티 → 공유 와이어 DTO 변환.
 //!
-//! DTO 타입 자체는 `contracts` 크레이트가 단일 정의를 갖는다. 엔티티와
-//! DTO 모두 외부 크레이트 타입이라(orphan rule) `From` 대신 자유 함수로
-//! 변환한다.
+//! DTO 타입 자체는 `contracts` 크레이트가 단일 정의를 갖는다. 단계·상태·
+//! 집계 방식 enum도 contracts의 것을 도메인이 그대로 재사용하므로
+//! 변환할 것은 id·시각의 문자열 표현뿐이다. 엔티티와 DTO 모두 외부
+//! 크레이트 타입이라(orphan rule) `From` 대신 자유 함수로 변환한다.
 
 pub use contracts::{CreateItemRequest,
                     IkikItemDto,
@@ -14,60 +15,10 @@ use domain::{IkikItem,
              ItemRevision,
              KpiMeasurement};
 
-pub fn kind_to_domain(kind: contracts::ItemKind) -> domain::ItemKind {
-    match kind {
-        | contracts::ItemKind::Identity => domain::ItemKind::Identity,
-        | contracts::ItemKind::Kra => domain::ItemKind::Kra,
-        | contracts::ItemKind::Igt => domain::ItemKind::Igt,
-        | contracts::ItemKind::Kpi => domain::ItemKind::Kpi,
-    }
-}
-
-pub fn status_to_domain(status: contracts::ItemStatus) -> domain::ItemStatus {
-    match status {
-        | contracts::ItemStatus::Active => domain::ItemStatus::Active,
-        | contracts::ItemStatus::Paused => domain::ItemStatus::Paused,
-        | contracts::ItemStatus::Completed => domain::ItemStatus::Completed,
-    }
-}
-
-pub fn aggregation_to_domain(aggregation: contracts::KpiAggregation) -> domain::KpiAggregation {
-    match aggregation {
-        | contracts::KpiAggregation::Latest => domain::KpiAggregation::Latest,
-        | contracts::KpiAggregation::Sum => domain::KpiAggregation::Sum,
-        | contracts::KpiAggregation::Average => domain::KpiAggregation::Average,
-    }
-}
-
-fn kind_to_dto(kind: domain::ItemKind) -> contracts::ItemKind {
-    match kind {
-        | domain::ItemKind::Identity => contracts::ItemKind::Identity,
-        | domain::ItemKind::Kra => contracts::ItemKind::Kra,
-        | domain::ItemKind::Igt => contracts::ItemKind::Igt,
-        | domain::ItemKind::Kpi => contracts::ItemKind::Kpi,
-    }
-}
-
-fn status_to_dto(status: domain::ItemStatus) -> contracts::ItemStatus {
-    match status {
-        | domain::ItemStatus::Active => contracts::ItemStatus::Active,
-        | domain::ItemStatus::Paused => contracts::ItemStatus::Paused,
-        | domain::ItemStatus::Completed => contracts::ItemStatus::Completed,
-    }
-}
-
-fn aggregation_to_dto(aggregation: domain::KpiAggregation) -> contracts::KpiAggregation {
-    match aggregation {
-        | domain::KpiAggregation::Latest => contracts::KpiAggregation::Latest,
-        | domain::KpiAggregation::Sum => contracts::KpiAggregation::Sum,
-        | domain::KpiAggregation::Average => contracts::KpiAggregation::Average,
-    }
-}
-
 pub fn item_to_dto(item: IkikItem) -> IkikItemDto {
     IkikItemDto {
         id: item.id.to_string(),
-        kind: kind_to_dto(item.kind),
+        kind: item.kind,
         parent_id: item.parent_id.map(|id| id.to_string()),
         title: item.title,
         description: item.description,
@@ -75,8 +26,8 @@ pub fn item_to_dto(item: IkikItem) -> IkikItemDto {
         current_value: item.current_value,
         unit: item.unit,
         position: item.position,
-        status: status_to_dto(item.status),
-        aggregation: aggregation_to_dto(item.aggregation),
+        status: item.status,
+        aggregation: item.aggregation,
         due_date: item.due_date.map(|date| date.to_string()),
         created_at: item.created_at.to_rfc3339(),
         updated_at: item.updated_at.to_rfc3339(),

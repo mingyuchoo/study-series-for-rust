@@ -1,20 +1,15 @@
 use crate::models::*;
 use application::*;
+use domain::IkikRepository;
 use std::sync::Arc;
 use tauri::State;
 use uuid::Uuid;
 
+/// 커맨드가 공유하는 유일한 상태. 유스케이스는 전부 무상태라 커맨드가
+/// 그 자리에서 만들고, 리포지토리만 여기서 들고 다닌다 — 유스케이스를
+/// 추가해도 이 구조체는 변하지 않는다.
 pub struct AppState {
-    pub create_item_use_case: Arc<CreateItemUseCase>,
-    pub list_items_use_case: Arc<ListItemsUseCase>,
-    pub update_item_use_case: Arc<UpdateItemUseCase>,
-    pub delete_item_use_case: Arc<DeleteItemUseCase>,
-    pub search_items_use_case: Arc<SearchItemsUseCase>,
-    pub record_kpi_measurement_use_case: Arc<RecordKpiMeasurementUseCase>,
-    pub list_kpi_measurements_use_case: Arc<ListKpiMeasurementsUseCase>,
-    pub delete_kpi_measurement_use_case: Arc<DeleteKpiMeasurementUseCase>,
-    pub list_all_kpi_measurements_use_case: Arc<ListAllKpiMeasurementsUseCase>,
-    pub list_item_revisions_use_case: Arc<ListItemRevisionsUseCase>,
+    pub repository: Arc<dyn IkikRepository>,
 }
 
 fn parse_id(id: &str) -> Result<Uuid, ApiError> { Uuid::parse_str(id).map_err(|e| ApiError::invalid_id(format!("Invalid IKIK item id: {e}"))) }
@@ -36,10 +31,9 @@ pub async fn create_item(state: State<'_, AppState>, request: CreateItemRequest)
     let parent_id = parse_optional_id(request.parent_id)?;
     let due_date = parse_optional_due_date(request.due_date)?;
 
-    state
-        .create_item_use_case
+    CreateItemUseCase::new(state.repository.clone())
         .execute(domain::NewIkikItem {
-            kind: kind_to_domain(request.kind),
+            kind: request.kind,
             parent_id,
             title: request.title,
             description: request.description,
@@ -47,7 +41,7 @@ pub async fn create_item(state: State<'_, AppState>, request: CreateItemRequest)
             current_value: request.current_value,
             unit: request.unit,
             position: request.position.unwrap_or_default(),
-            aggregation: aggregation_to_domain(request.aggregation),
+            aggregation: request.aggregation,
             due_date,
         })
         .await
@@ -57,8 +51,7 @@ pub async fn create_item(state: State<'_, AppState>, request: CreateItemRequest)
 
 #[tauri::command]
 pub async fn list_items(state: State<'_, AppState>) -> Result<Vec<IkikItemDto>, ApiError> {
-    state
-        .list_items_use_case
+    ListItemsUseCase::new(state.repository.clone())
         .execute()
         .await
         .map(|items| items.into_iter().map(item_to_dto).collect())
@@ -71,12 +64,11 @@ pub async fn update_item(state: State<'_, AppState>, request: UpdateItemRequest)
     let parent_id = request.parent_id.map(parse_optional_id).transpose()?;
     let due_date = request.due_date.map(parse_optional_due_date).transpose()?;
 
-    state
-        .update_item_use_case
+    UpdateItemUseCase::new(state.repository.clone())
         .execute(
             uuid,
             domain::ItemPatch {
-                kind: request.kind.map(kind_to_domain),
+                kind: request.kind,
                 parent_id,
                 title: request.title,
                 description: request.description,
@@ -84,8 +76,8 @@ pub async fn update_item(state: State<'_, AppState>, request: UpdateItemRequest)
                 current_value: request.current_value,
                 unit: request.unit,
                 position: request.position,
-                status: request.status.map(status_to_domain),
-                aggregation: request.aggregation.map(aggregation_to_domain),
+                status: request.status,
+                aggregation: request.aggregation,
                 due_date,
             },
         )
@@ -98,13 +90,15 @@ pub async fn update_item(state: State<'_, AppState>, request: UpdateItemRequest)
 pub async fn delete_item(state: State<'_, AppState>, id: String) -> Result<(), ApiError> {
     let uuid = parse_id(&id)?;
 
-    state.delete_item_use_case.execute(uuid).await.map_err(domain_error_to_api)
+    DeleteItemUseCase::new(state.repository.clone())
+        .execute(uuid)
+        .await
+        .map_err(domain_error_to_api)
 }
 
 #[tauri::command]
 pub async fn search_items(state: State<'_, AppState>, query: String) -> Result<Vec<IkikItemDto>, ApiError> {
-    state
-        .search_items_use_case
+    SearchItemsUseCase::new(state.repository.clone())
         .execute(&query)
         .await
         .map(|items| items.into_iter().map(item_to_dto).collect())
@@ -115,8 +109,7 @@ pub async fn search_items(state: State<'_, AppState>, query: String) -> Result<V
 pub async fn record_kpi_measurement(state: State<'_, AppState>, request: RecordKpiMeasurementRequest) -> Result<KpiMeasurementDto, ApiError> {
     let kpi_id = parse_id(&request.kpi_id)?;
 
-    state
-        .record_kpi_measurement_use_case
+    RecordKpiMeasurementUseCase::new(state.repository.clone())
         .execute(kpi_id, request.value, request.note)
         .await
         .map(measurement_to_dto)
@@ -127,8 +120,7 @@ pub async fn record_kpi_measurement(state: State<'_, AppState>, request: RecordK
 pub async fn list_kpi_measurements(state: State<'_, AppState>, kpi_id: String) -> Result<Vec<KpiMeasurementDto>, ApiError> {
     let kpi_id = parse_id(&kpi_id)?;
 
-    state
-        .list_kpi_measurements_use_case
+    ListKpiMeasurementsUseCase::new(state.repository.clone())
         .execute(kpi_id)
         .await
         .map(|measurements| measurements.into_iter().map(measurement_to_dto).collect())
@@ -137,8 +129,7 @@ pub async fn list_kpi_measurements(state: State<'_, AppState>, kpi_id: String) -
 
 #[tauri::command]
 pub async fn list_all_kpi_measurements(state: State<'_, AppState>) -> Result<Vec<KpiMeasurementDto>, ApiError> {
-    state
-        .list_all_kpi_measurements_use_case
+    ListAllKpiMeasurementsUseCase::new(state.repository.clone())
         .execute()
         .await
         .map(|measurements| measurements.into_iter().map(measurement_to_dto).collect())
@@ -149,8 +140,7 @@ pub async fn list_all_kpi_measurements(state: State<'_, AppState>) -> Result<Vec
 pub async fn list_item_revisions(state: State<'_, AppState>, item_id: String) -> Result<Vec<ItemRevisionDto>, ApiError> {
     let item_id = parse_id(&item_id)?;
 
-    state
-        .list_item_revisions_use_case
+    ListItemRevisionsUseCase::new(state.repository.clone())
         .execute(item_id)
         .await
         .map(|revisions| revisions.into_iter().map(revision_to_dto).collect())
@@ -162,8 +152,7 @@ pub async fn delete_kpi_measurement(state: State<'_, AppState>, kpi_id: String, 
     let kpi_id = parse_id(&kpi_id)?;
     let measurement_id = parse_id(&measurement_id)?;
 
-    state
-        .delete_kpi_measurement_use_case
+    DeleteKpiMeasurementUseCase::new(state.repository.clone())
         .execute(kpi_id, measurement_id)
         .await
         .map_err(domain_error_to_api)

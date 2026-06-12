@@ -1,21 +1,19 @@
 #![allow(non_snake_case)]
 
-use super::record_toast::{RecordToastView,
-                          use_record_toast};
+use super::{measurement_stepper::MeasurementStepper,
+            quick_record::use_quick_record,
+            record_toast::RecordToastView};
 use crate::{i18n::use_lang,
             models::{IkikItem,
                      ItemKind,
                      KpiAggregation,
-                     RecordKpiMeasurementRequest,
                      aggregation_label,
-                     format_value,
                      kind_description,
                      kind_label,
                      status_label,
                      tree::{grouped_rows,
                             kpi_percent,
-                            progress_text}},
-            store::IkikStore};
+                            progress_text}}};
 use dioxus::prelude::*;
 
 #[derive(Props, Clone, PartialEq)]
@@ -31,64 +29,23 @@ pub struct IkikKindViewProps {
 /// 진행률을 보여 주고, 수정 화면에 들어가지 않고도 실적을 기록할 수 있도록 집계
 /// 방식에 맞는 퀵 기록 버튼을 항상 노출한다.
 pub fn IkikKindView(props: IkikKindViewProps) -> Element {
-    let lang = use_lang();
-    let t = *lang.read();
+    let t = *use_lang().read();
     let is_kpi = props.kind == ItemKind::Kpi;
-    let store = use_context::<IkikStore>();
-    let toast = use_record_toast();
+    // 기록·토스트·실행 취소는 퀵 기록 훅이 책임진다.
+    let quick = use_quick_record();
 
     // 측정값 입력 팝오버가 열려 있는 Key Performance Indicator id. 한 번에 하나만
     // 연다.
     let mut open_record = use_signal(|| None::<String>);
-    let mut record_input = use_signal(String::new);
-    let mut record_busy = use_signal(|| false);
+    // 팝오버 스테퍼가 만드는 측정값. 팝오버를 열 때 직전 집계값으로 채운다.
+    let mut record_value = use_signal(|| 0.0_f64);
 
-    // 측정값 한 건을 기록하고 토스트로 결과를 알린다. 합계형 +1과
-    // 팝오버 저장이 모두 이 경로를 쓴다.
+    // 합계형 +1과 팝오버 저장이 모두 같은 기록 경로를 쓴다. 성공하면
+    // 팝오버를 닫는다.
     let record_measurement = move |item: IkikItem, value: f64| {
-        if *record_busy.read() {
-            return;
-        }
-
         spawn(async move {
-            record_busy.set(true);
-            let request = RecordKpiMeasurementRequest {
-                kpi_id: item.id.clone(),
-                value,
-                note: None,
-            };
-            match store.record_measurement(request).await {
-                | Ok(measurement) => {
-                    open_record.set(None);
-                    let unit = item.unit.clone().unwrap_or_default();
-                    let amount = if item.aggregation == KpiAggregation::Sum {
-                        format!("+{}", format_value(value))
-                    } else {
-                        format_value(value)
-                    };
-                    let message = lang.peek().recorded_toast(&item.title, &amount, &unit);
-                    toast.show(message, Some((item.id.clone(), measurement.id)));
-                },
-                | Err(e) => toast.show(lang.peek().err_record(&e), None),
-            }
-            record_busy.set(false);
-        });
-    };
-
-    // 팝오버 입력값을 검증해 기록한다.
-    let submit_record = move |item: IkikItem| {
-        let raw = record_input.read().trim().to_string();
-        match raw.parse::<f64>() {
-            | Ok(value) => record_measurement(item, value),
-            | Err(_) => toast.show(lang.peek().value_must_be_number().to_string(), None),
-        }
-    };
-
-    // 실행 취소: 방금 추가한 측정값을 지우고 목록을 새로고침한다.
-    let handle_undo = move |(kpi_id, measurement_id): (String, String)| {
-        spawn(async move {
-            if let Err(e) = store.delete_measurement(kpi_id, measurement_id).await {
-                toast.show(lang.peek().err_undo(&e), None);
+            if quick.record(&item, value).await {
+                open_record.set(None);
             }
         });
     };
@@ -137,7 +94,6 @@ pub fn IkikKindView(props: IkikKindViewProps) -> Element {
                                 let title_class = if any_grouped { "cell-title grouped" } else { "cell-title" };
                                 let row_item = item.clone();
                                 let quick_item = item.clone();
-                                let submit_item = item.clone();
                                 let save_item = item.clone();
                                 rsx! {
                                     if let Some(header) = header {
@@ -187,7 +143,7 @@ pub fn IkikKindView(props: IkikKindViewProps) -> Element {
                                                         button {
                                                             r#type: "button",
                                                             class: "btn row-btn quick-record-btn",
-                                                            disabled: *record_busy.read(),
+                                                            disabled: quick.is_busy(),
                                                             onclick: move |evt| {
                                                                 evt.stop_propagation();
                                                                 record_measurement(quick_item.clone(), 1.0);
@@ -198,14 +154,14 @@ pub fn IkikKindView(props: IkikKindViewProps) -> Element {
                                                         button {
                                                             r#type: "button",
                                                             class: "btn row-btn quick-record-btn",
-                                                            disabled: *record_busy.read(),
+                                                            disabled: quick.is_busy(),
                                                             onclick: move |evt| {
                                                                 evt.stop_propagation();
                                                                 if record_open {
                                                                     open_record.set(None);
                                                                 } else {
-                                                                    // 직전 집계값을 미리 채워 숫자만 고치면 되게 한다.
-                                                                    record_input.set(quick_item.current_value.map(format_value).unwrap_or_default());
+                                                                    // 직전 집계값을 미리 채워 몇 클릭으로 고치면 되게 한다.
+                                                                    record_value.set(quick_item.current_value.unwrap_or(0.0).max(0.0));
                                                                     open_record.set(Some(quick_item.id.clone()));
                                                                 }
                                                             },
@@ -224,28 +180,18 @@ pub fn IkikKindView(props: IkikKindViewProps) -> Element {
                                                         {t.record_popover_hint(aggregation_label(item.aggregation, t))}
                                                     }
                                                     div { class: "record-popover-controls",
-                                                        input {
-                                                            r#type: "number",
-                                                            step: "any",
-                                                            class: "record-popover-input",
-                                                            autofocus: true,
-                                                            placeholder: t.value_placeholder(),
-                                                            value: "{record_input}",
-                                                            oninput: move |evt| record_input.set(evt.value()),
-                                                            onkeydown: move |evt| {
-                                                                if evt.key() == Key::Enter {
-                                                                    submit_record(submit_item.clone());
-                                                                }
-                                                            }
-                                                        }
-                                                        if !unit.is_empty() {
-                                                            span { class: "record-popover-unit", "{unit}" }
+                                                        // 상세 패널과 같은 스테퍼 입력을 쓴다.
+                                                        MeasurementStepper {
+                                                            target_value: item.target_value,
+                                                            aggregation: item.aggregation,
+                                                            unit: item.unit.clone(),
+                                                            value: record_value
                                                         }
                                                         button {
                                                             r#type: "button",
                                                             class: "btn btn-primary",
-                                                            disabled: *record_busy.read(),
-                                                            onclick: move |_| submit_record(save_item.clone()),
+                                                            disabled: quick.is_busy(),
+                                                            onclick: move |_| record_measurement(save_item.clone(), *record_value.peek()),
                                                             {t.save()}
                                                         }
                                                         button {
@@ -266,7 +212,7 @@ pub fn IkikKindView(props: IkikKindViewProps) -> Element {
                 }
             }
 
-            RecordToastView { host: toast, on_undo: handle_undo }
+            RecordToastView { host: quick.toast, on_undo: move |pair| quick.undo(pair) }
         }
     }
 }

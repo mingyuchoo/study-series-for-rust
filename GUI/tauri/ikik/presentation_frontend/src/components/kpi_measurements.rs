@@ -1,24 +1,17 @@
 #![allow(non_snake_case)]
 
-use super::record_grass::RecordGrass;
+use super::{measurement_stepper::MeasurementStepper,
+            record_grass::RecordGrass};
 use crate::{i18n::use_lang,
             models::{KpiAggregation,
                      KpiMeasurement,
                      RecordKpiMeasurementRequest,
                      aggregation_label,
                      format_timestamp,
-                     format_value,
-                     stepper::{bump_value,
-                               default_step,
-                               step_chips}},
+                     format_value},
             services::IkikService,
             store::IkikStore};
 use dioxus::prelude::*;
-use gloo_timers::future::TimeoutFuture;
-
-/// 길게 누르기 자동 반복: 시작 지연(ms)과 반복 간격(ms).
-const HOLD_DELAY_MS: u32 = 450;
-const HOLD_REPEAT_MS: u32 = 90;
 
 #[derive(Props, Clone, PartialEq)]
 pub struct KpiMeasurementPanelProps {
@@ -47,15 +40,10 @@ pub fn KpiMeasurementPanel(props: KpiMeasurementPanelProps) -> Element {
     let store = use_context::<IkikStore>();
     let unit = props.unit.clone().unwrap_or_default();
 
-    let chips = step_chips(props.target_value, aggregation);
-
     let mut measurements = use_signal(Vec::<KpiMeasurement>::new);
-    // 스테퍼 상태: 입력 중인 측정값, 한 클릭의 변화량, 길게 누르기 토큰.
-    // 토큰은 누를 때마다 증가하고, 반복 루프는 자기 토큰이 최신일 때만
-    // 돈다 — 손을 떼거나 다른 버튼을 누르면 이전 루프가 멈춘다.
+    // 스테퍼가 만드는 입력 중인 측정값. 시작값과 제출 후 초기화는
+    // apply()가 결정한다.
     let mut step_value = use_signal(|| 0.0_f64);
-    let mut step_size = use_signal(|| default_step(&step_chips(props.target_value, aggregation)));
-    let mut hold_token = use_signal(|| 0_u32);
     let mut note_input = use_signal(String::new);
     let mut busy = use_signal(|| false);
     let mut panel_error = use_signal(|| None::<String>);
@@ -80,29 +68,6 @@ pub fn KpiMeasurementPanel(props: KpiMeasurementPanelProps) -> Element {
         measurements.set(list);
     };
 
-    let mut bump = move |direction: f64| {
-        let next = bump_value(*step_value.peek(), *step_size.peek(), direction);
-        step_value.set(next);
-    };
-
-    // 누르는 즉시 한 번 움직이고, 잠시 후 자동 반복으로 빨라진다.
-    let mut start_hold = move |direction: f64| {
-        let token = *hold_token.peek() + 1;
-        hold_token.set(token);
-        spawn(async move {
-            bump(direction);
-            TimeoutFuture::new(HOLD_DELAY_MS).await;
-            while *hold_token.peek() == token {
-                bump(direction);
-                TimeoutFuture::new(HOLD_REPEAT_MS).await;
-            }
-        });
-    };
-    let mut stop_hold = move || {
-        let token = *hold_token.peek() + 1;
-        hold_token.set(token);
-    };
-
     use_effect(move || {
         spawn(async move {
             match IkikService::list_kpi_measurements(kpi_id.read().clone()).await {
@@ -113,7 +78,7 @@ pub fn KpiMeasurementPanel(props: KpiMeasurementPanelProps) -> Element {
     });
 
     // 버튼 클릭과 메모 입력의 ⌘+Enter가 같은 경로를 쓴다.
-    let mut submit = move || {
+    let submit = move || {
         if *busy.read() {
             return;
         }
@@ -184,48 +149,12 @@ pub fn KpiMeasurementPanel(props: KpiMeasurementPanelProps) -> Element {
             }
 
             div { class: "measurement-add",
-                // 직접 입력 대신 − / + 스테퍼로 측정값을 만든다. 길게
-                // 누르면 자동 반복되고, 칩은 한 클릭의 크기를 바꾼다.
-                div { class: "measurement-add-value",
-                    div { class: "measurement-stepper",
-                        button {
-                            r#type: "button",
-                            class: "step-btn",
-                            aria_label: t.step_decrease(),
-                            disabled: *step_value.read() <= 0.0,
-                            onmousedown: move |_| start_hold(-1.0),
-                            onmouseup: move |_| stop_hold(),
-                            onmouseleave: move |_| stop_hold(),
-                            "−"
-                        }
-                        span { class: "step-num", "{format_value(*step_value.read())}" }
-                        button {
-                            r#type: "button",
-                            class: "step-btn",
-                            aria_label: t.step_increase(),
-                            onmousedown: move |_| start_hold(1.0),
-                            onmouseup: move |_| stop_hold(),
-                            onmouseleave: move |_| stop_hold(),
-                            "+"
-                        }
-                    }
-                    if !unit.is_empty() {
-                        span { class: "measurement-unit", "{unit}" }
-                    }
-                }
-                if chips.len() > 1 {
-                    div { class: "step-chips", role: "radiogroup", aria_label: t.step_size_aria(),
-                        for chip in chips.clone() {
-                            button {
-                                r#type: "button",
-                                role: "radio",
-                                aria_checked: *step_size.read() == chip,
-                                class: if *step_size.read() == chip { "step-chip active" } else { "step-chip" },
-                                onclick: move |_| step_size.set(chip),
-                                "±{format_value(chip)}"
-                            }
-                        }
-                    }
+                // 직접 입력 대신 − / + 스테퍼로 측정값을 만든다.
+                MeasurementStepper {
+                    target_value: props.target_value,
+                    aggregation,
+                    unit: props.unit.clone(),
+                    value: step_value
                 }
                 textarea {
                     rows: "2",

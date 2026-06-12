@@ -1269,17 +1269,6 @@ textarea:focus {
   gap: 8px;
 }
 
-.record-popover-input {
-  width: 140px;
-  height: 36px;
-  background: var(--color-canvas);
-}
-
-.record-popover-unit {
-  color: var(--color-charcoal);
-  font-size: 13px;
-}
-
 /* 기록 직후 결과와 실행 취소를 보여 주는 토스트. */
 .record-toast {
   position: fixed;

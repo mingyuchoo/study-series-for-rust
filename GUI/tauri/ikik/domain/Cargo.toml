@@ -5,6 +5,10 @@
   version.workspace = true
 
 [dependencies]
+  # 와이어 계약(contracts)의 enum을 공유 커널로 재사용한다 — 단계·상태·
+  # 집계 방식은 와이어와 도메인에서 같은 규칙이어야 하는 값 타입이다.
+  contracts = {path = "../contracts"}
+
   async-trait.workspace = true
   chrono.workspace      = true
   serde.workspace       = true
