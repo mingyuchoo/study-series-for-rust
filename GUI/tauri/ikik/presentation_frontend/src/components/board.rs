@@ -5,7 +5,8 @@ use super::{dashboard::IkikDashboard,
             kind_view::IkikKindView,
             quick_add::QuickAddData,
             tree::IkikTreeView};
-use crate::{i18n::use_lang,
+use crate::{board_tab::BoardTab,
+            i18n::use_lang,
             models::{IkikItem,
                      ItemKind,
                      kind_label}};
@@ -15,7 +16,7 @@ use dioxus::prelude::*;
 pub struct IkikBoardProps {
     pub items: Vec<IkikItem>,
     pub is_filtering: bool,
-    pub active_tab: Signal<String>,
+    pub active_tab: Signal<BoardTab>,
     pub on_open: EventHandler<IkikItem>,
     pub on_delete: EventHandler<IkikItem>,
     pub on_quick_add: EventHandler<QuickAddData>,
@@ -27,10 +28,13 @@ pub struct IkikBoardProps {
 pub fn IkikBoard(props: IkikBoardProps) -> Element {
     let t = *use_lang().read();
     let mut active_tab = props.active_tab;
-    let current_tab = active_tab.read().clone();
-    let is_dashboard = current_tab == "dashboard";
-    let kind_tab: Option<ItemKind> = current_tab.parse().ok();
-    let is_tree = !is_dashboard && kind_tab.is_none();
+    let current_tab = *active_tab.read();
+    let is_dashboard = current_tab == BoardTab::Dashboard;
+    let is_tree = current_tab == BoardTab::Structure;
+    let kind_tab: Option<ItemKind> = match current_tab {
+        | BoardTab::Kind(kind) => Some(kind),
+        | _ => None,
+    };
 
     rsx! {
         div { class: "ikik-board",
@@ -40,7 +44,7 @@ pub fn IkikBoard(props: IkikBoardProps) -> Element {
                     role: "tab",
                     aria_selected: is_dashboard,
                     class: if is_dashboard { "board-tab active" } else { "board-tab" },
-                    onclick: move |_| active_tab.set("dashboard".to_string()),
+                    onclick: move |_| active_tab.set(BoardTab::Dashboard),
                     {t.dashboard_tab()}
                 }
                 button {
@@ -48,7 +52,7 @@ pub fn IkikBoard(props: IkikBoardProps) -> Element {
                     role: "tab",
                     aria_selected: is_tree,
                     class: if is_tree { "board-tab active" } else { "board-tab" },
-                    onclick: move |_| active_tab.set("tree".to_string()),
+                    onclick: move |_| active_tab.set(BoardTab::Structure),
                     {t.structure_tab()}
                 }
                 // 단계별 수량은 대시보드 카드가 상태 분포와 함께 보여
@@ -62,7 +66,7 @@ pub fn IkikBoard(props: IkikBoardProps) -> Element {
                                 role: "tab",
                                 aria_selected: is_active,
                                 class: if is_active { "board-tab active" } else { "board-tab" },
-                                onclick: move |_| active_tab.set(kind.as_str().to_string()),
+                                onclick: move |_| active_tab.set(BoardTab::Kind(kind)),
                                 {kind_label(kind, t)}
                             }
                         }
@@ -80,7 +84,7 @@ pub fn IkikBoard(props: IkikBoardProps) -> Element {
                         items: props.items.clone(),
                         is_filtering: props.is_filtering,
                         on_open: props.on_open,
-                        on_kind_select: move |kind: ItemKind| active_tab.set(kind.as_str().to_string())
+                        on_kind_select: move |kind: ItemKind| active_tab.set(BoardTab::Kind(kind))
                     }
                 } else {
                     match kind_tab {

@@ -1,6 +1,7 @@
 #![allow(non_snake_case)]
 
-use crate::{components::{AddPreset,
+use crate::{board_tab::BoardTab,
+            components::{AddPreset,
                          AppHeader,
                          ConfirmDialog,
                          IkikBoard,
@@ -10,8 +11,7 @@ use crate::{components::{AddPreset,
                          QuickAddData},
             i18n,
             mode,
-            models::{IkikItem,
-                     ItemKind},
+            models::IkikItem,
             store::{IkikStore,
                     use_ikik_store},
             theme};
@@ -47,7 +47,7 @@ pub fn App() -> Element {
     use_effect(move || theme::apply_theme(*theme.read()));
     let mut current_view = use_signal(|| AppView::Board);
     let mut pending_delete = use_signal(|| None::<IkikItem>);
-    let active_tab = use_signal(|| "dashboard".to_string());
+    let active_tab = use_signal(BoardTab::default);
 
     let items = store.items;
     let loading = store.loading;
@@ -136,7 +136,7 @@ pub fn App() -> Element {
                 on_new: move |_| {
                     store.clear_error();
                     // 단계 탭을 보고 있었다면 그 단계를 기본 선택한다.
-                    let kind = active_tab.read().parse::<ItemKind>().unwrap_or(ItemKind::Identity);
+                    let kind = active_tab.read().default_new_kind();
                     current_view.set(AppView::Add(Box::new(AddPreset { kind, parent: None, title: String::new() })));
                 }
             }

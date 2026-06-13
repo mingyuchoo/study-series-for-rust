@@ -1,4 +1,5 @@
 mod app;
+mod board_tab;
 mod components;
 mod i18n;
 mod mode;

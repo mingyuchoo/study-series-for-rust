@@ -49,10 +49,6 @@ pub fn ItemDetail(props: ItemDetailProps) -> Element {
 
     let mut revisions = use_signal(Vec::<ItemRevision>::new);
     let mut revisions_error = use_signal(|| None::<String>);
-    // KpiMeasurementPanel과 공유하는 시그널. 상세 화면에서는 패널이
-    // 집계한 현재값을 별도로 쓰지 않지만 패널 계약상 필요하다.
-    let has_measurements = use_signal(|| false);
-    let panel_current_value = use_signal(String::new);
 
     let store = use_context::<IkikStore>();
     let revision_item_id = use_signal(|| item.id.clone());
@@ -146,9 +142,7 @@ pub fn ItemDetail(props: ItemDetailProps) -> Element {
                     kpi_id: item.id.clone(),
                     aggregation: item.aggregation,
                     unit: item.unit.clone(),
-                    target_value: item.target_value,
-                    has_measurements,
-                    current_value: panel_current_value
+                    target_value: item.target_value
                 }
             }
 

@@ -22,10 +22,6 @@ pub struct KpiMeasurementPanelProps {
     /// 스텝 칩 구성을 정하는 목표값.
     #[props(default)]
     pub target_value: Option<f64>,
-    /// 기록 유무를 폼과 공유해 현재값 입력을 잠근다.
-    pub has_measurements: Signal<bool>,
-    /// 집계된 현재값을 폼의 현재값 입력에도 반영한다.
-    pub current_value: Signal<String>,
 }
 
 /// Key Performance Indicator 상세 화면의 "실적 기록" 패널. 값과 함께 그날의
@@ -50,18 +46,12 @@ pub fn KpiMeasurementPanel(props: KpiMeasurementPanelProps) -> Element {
     let mut note_input = use_signal(String::new);
     let mut busy = use_signal(|| false);
     let mut panel_error = use_signal(|| None::<String>);
-    let mut has_measurements = props.has_measurements;
-    let mut current_value = props.current_value;
 
-    // 목록을 받아 패널 상태와 폼의 현재값 표시를 한꺼번에 갱신한다.
-    // 스테퍼 시작값도 여기서 정한다: 합계형은 증분 기록이라 0에서,
-    // 최신값·평균형은 직전 기록값에서 이어서 고친다.
+    // 목록을 받아 패널 상태를 갱신한다. 스테퍼 시작값도 여기서 정한다:
+    // 합계형은 증분 기록이라 0에서, 최신값·평균형은 직전 기록값에서
+    // 이어서 고친다. (현재값 집계·진행률 갱신은 스토어가 목록을 다시
+    // 불러올 때 백엔드 집계값으로 반영된다.)
     let mut apply = move |list: Vec<KpiMeasurement>| {
-        has_measurements.set(!list.is_empty());
-        let values: Vec<f64> = list.iter().map(|measurement| measurement.value).collect();
-        if let Some(aggregated) = aggregation.aggregate(&values) {
-            current_value.set(format_value(aggregated));
-        }
         let start = if aggregation == KpiAggregation::Sum {
             0.0
         } else {
@@ -122,13 +112,7 @@ pub fn KpiMeasurementPanel(props: KpiMeasurementPanelProps) -> Element {
                 | Ok(()) => {
                     panel_error.set(None);
                     match store.load_measurements(kpi_id.read().clone()).await {
-                        | Ok(list) => {
-                            // 마지막 기록을 지우면 집계값이 없어지므로 표시도 비운다.
-                            if list.is_empty() {
-                                current_value.set(String::new());
-                            }
-                            apply(list);
-                        },
+                        | Ok(list) => apply(list),
                         | Err(e) => panel_error.set(Some(e)),
                     }
                 },
