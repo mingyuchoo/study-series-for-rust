@@ -5,15 +5,15 @@
   "identifier": "com.mingyuchoo.ikik",
   "build": {
     "beforeDevCommand": {
-      "script": "dx build --release --platform web --debug-symbols false && mkdir -p dist && rm -rf dist/* && cp -R ../target/dx/presentation_frontend/release/web/public/. dist/",
+      "script": "dx build --release --platform web --debug-symbols false",
       "cwd": "../presentation_frontend",
       "wait": true
     },
     "beforeBuildCommand": {
-      "script": "dx build --release --platform web --debug-symbols false && mkdir -p dist && rm -rf dist/* && cp -R ../target/dx/presentation_frontend/release/web/public/. dist/",
+      "script": "dx build --release --platform web --debug-symbols false",
       "cwd": "../presentation_frontend"
     },
-    "frontendDist": "../presentation_frontend/dist"
+    "frontendDist": "../target/dx/presentation_frontend/release/web/public"
   },
   "app": {
     "withGlobalTauri": true,

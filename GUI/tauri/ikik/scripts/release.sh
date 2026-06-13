@@ -9,6 +9,10 @@
 #   - Debian/Ubuntu -> .deb
 #   - Fedora/RHEL   -> .rpm
 # To target all three, run this script once on each operating system.
+#
+# To produce all three from a single trigger, push an `ikik-v*` tag: the
+# repo-root CI (.github/workflows/ikik-desktop-release.yml) runs this script on
+# macOS, Debian, and Fedora and attaches the installers to the GitHub Release.
 
 set -euo pipefail
 
