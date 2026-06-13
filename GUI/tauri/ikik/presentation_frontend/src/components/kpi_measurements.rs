@@ -4,6 +4,7 @@ use super::{icons::PencilIcon,
             measurement_stepper::MeasurementStepper,
             record_grass::RecordGrass};
 use crate::{i18n::use_lang,
+            mode::use_mode,
             models::{KpiAggregation,
                      KpiMeasurement,
                      RecordKpiMeasurementRequest,
@@ -33,6 +34,8 @@ pub struct KpiMeasurementPanelProps {
 pub fn KpiMeasurementPanel(props: KpiMeasurementPanelProps) -> Element {
     let lang = use_lang();
     let t = *lang.read();
+    // 삭제는 구조 변경이므로 관리 모드에서만 노출한다(사용 모드에선 숨김).
+    let is_manage = use_mode().read().is_manage();
     let kpi_id = use_signal(|| props.kpi_id.clone());
     let aggregation = props.aggregation;
     // 측정값 추가·삭제는 스토어를 거쳐 목록(현재값·진행률)까지 함께
@@ -146,7 +149,6 @@ pub fn KpiMeasurementPanel(props: KpiMeasurementPanelProps) -> Element {
                     PencilIcon {}
                     label { {t.diary_heading()} }
                 }
-                span { class: "measurement-hint", {t.agg_auto_hint(aggregation_label(aggregation, t))} }
             }
 
             if let Some(error) = panel_error.read().clone() {
@@ -163,6 +165,8 @@ pub fn KpiMeasurementPanel(props: KpiMeasurementPanelProps) -> Element {
                         unit: props.unit.clone(),
                         value: step_value
                     }
+                    // 집계 방식 안내는 그 결과가 만들어지는 스테퍼 곁에 둔다.
+                    span { class: "measurement-hint", {t.agg_auto_hint(aggregation_label(aggregation, t))} }
                 }
                 textarea {
                     rows: "4",
@@ -212,12 +216,14 @@ pub fn KpiMeasurementPanel(props: KpiMeasurementPanelProps) -> Element {
                                     div { class: "timeline-entry-head",
                                         span { class: "timeline-date", title: "{measurement.measured_at}", "{measured_at}" }
                                         span { class: "timeline-value", "{value_text} {unit}" }
-                                        button {
-                                            r#type: "button",
-                                            class: "btn row-btn timeline-del",
-                                            disabled: *busy.read(),
-                                            onclick: move |_| handle_delete(measurement_id.clone()),
-                                            {t.delete()}
+                                        if is_manage {
+                                            button {
+                                                r#type: "button",
+                                                class: "btn row-btn timeline-del",
+                                                disabled: *busy.read(),
+                                                onclick: move |_| handle_delete(measurement_id.clone()),
+                                                {t.delete()}
+                                            }
                                         }
                                     }
                                     if !note.is_empty() {

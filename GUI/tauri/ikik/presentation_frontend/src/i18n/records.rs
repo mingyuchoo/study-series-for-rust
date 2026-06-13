@@ -13,8 +13,8 @@ impl Lang {
 
     pub fn agg_auto_hint(self, aggregation_label: &str) -> String {
         match self {
-            | Self::Ko => format!("{aggregation_label}(으)로 현재값에 자동 집계됩니다."),
-            | Self::En => format!("Aggregated into the current value via {aggregation_label}."),
+            | Self::Ko => format!("{aggregation_label}(으)로 자동 집계"),
+            | Self::En => format!("Auto-aggregated via {aggregation_label}"),
         }
     }
 
