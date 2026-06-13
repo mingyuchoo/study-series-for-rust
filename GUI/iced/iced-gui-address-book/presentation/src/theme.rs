@@ -9,7 +9,6 @@ use iced::{Background,
            Color,
            Shadow,
            Theme,
-           Vector,
            font::{Family,
                   Stretch,
                   Style as FontStyle,
@@ -99,17 +98,6 @@ pub const R_FULL: f32 = 9999.0;
 /// 콘텐츠 컬럼 최대 너비(centred container).
 pub const CONTENT_MAX_WIDTH: f32 = 760.0;
 
-// ───────────────────────── Elevation ─────────────────────────
-
-/// "barely-there" Level-1 소프트 섀도.
-fn soft_shadow() -> Shadow {
-    Shadow {
-        color: Color::from_rgba8(0x00, 0x00, 0x00, 0.04),
-        offset: Vector::new(0.0, 2.0),
-        blur_radius: 12.0,
-    }
-}
-
 // ───────────────────────── Application ─────────────────────────
 
 /// 윈도우 전체 배경(따뜻한 캔버스)과 기본 텍스트 색.
@@ -122,7 +110,11 @@ pub fn application(_state: &crate::app::AddressBook, _theme: &Theme) -> iced::th
 
 // ───────────────────────── Containers ─────────────────────────
 
-/// 흰색 표면 + 하어라인 + 12px 라운드 + 소프트 섀도의 기본 카드(feature-card).
+/// 흰색 표면 + 하어라인 + 12px 라운드의 기본 카드(feature-card).
+///
+/// DESIGN.md 의 기본 카드는 "Level 0 — Flat: hairline border, no shadow" 이다.
+/// 그림자는 tiny-skia(소프트웨어 렌더러)에서 매 redraw 마다 픽셀당 SDF/blur 를
+/// 계산해 입력 지연을 유발하므로 사용하지 않는다(하어라인만으로 표현).
 pub fn card(_theme: &Theme) -> container::Style {
     container::Style {
         background: Some(Background::Color(SURFACE)),
@@ -132,7 +124,6 @@ pub fn card(_theme: &Theme) -> container::Style {
             width: 1.0,
             radius: R_LG.into(),
         },
-        shadow: soft_shadow(),
         ..container::Style::default()
     }
 }
@@ -200,7 +191,7 @@ pub fn secondary_button(_theme: &Theme, status: button::Status) -> button::Style
             width: 1.0,
             radius: R_FULL.into(),
         },
-        shadow: soft_shadow(),
+        shadow: Shadow::default(),
         snap: true,
     }
 }
