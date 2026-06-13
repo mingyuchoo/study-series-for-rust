@@ -59,3 +59,14 @@ pub fn MoonIcon() -> Element {
         }
     }
 }
+
+/// 연필. 일기처럼 글을 남기는 입력 영역의 머리말에 쓴다.
+#[component]
+pub fn PencilIcon() -> Element {
+    rsx! {
+        StrokeIcon {
+            path { d: "M12 20h9" }
+            path { d: "M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" }
+        }
+    }
+}

@@ -19,6 +19,8 @@
   color-scheme: light;
   --font-rounded: "SF Pro Rounded", ui-rounded, "Arial Rounded MT Bold", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   --font-sans: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  /* 일기 본문은 회고를 읽는 느낌을 주는 명조/세리프 계열로. */
+  --font-serif: "AppleMyungjo", "Nanum Myeongjo", "Apple SD Gothic Neo", ui-serif, Georgia, serif;
   --radius-sm: 6px;
   --radius-lg: 12px;
   --radius-full: 9999px;
@@ -1750,6 +1752,18 @@ textarea:focus {
   font-weight: 600;
 }
 
+/* 일기 머리말: 연필 아이콘 + "오늘의 일기". */
+.diary-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--color-ink);
+}
+
+.diary-label svg {
+  color: var(--color-charcoal);
+}
+
 .measurement-hint {
   color: var(--color-mute);
   font-size: 12px;
@@ -1761,6 +1775,15 @@ textarea:focus {
   flex-direction: column;
   align-items: stretch;
   gap: 8px;
+}
+
+/* 측정값 스테퍼와 스텝 칩을 한 줄에 둔 보조 컨트롤. 일기 입력이
+   주인공이므로 그 위에 작게 자리한다. */
+.measurement-controls {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
 }
 
 .measurement-add-value {
@@ -1851,11 +1874,12 @@ textarea:focus {
   color: var(--color-on-primary);
 }
 
+/* 일기 입력은 패널의 주인공: 넉넉한 높이와 본문 크기 글자. */
 .measurement-note-input {
   width: 100%;
-  min-height: 56px;
-  font-size: 13px;
-  line-height: 1.5;
+  min-height: 104px;
+  font-size: 15px;
+  line-height: 1.7;
   resize: vertical;
 }
 
@@ -1967,60 +1991,102 @@ textarea:focus {
   font-size: 13px;
 }
 
-/* 기록 목록은 저널 형태: 값·날짜 머리줄 아래 메모 본문이 붙는다. */
-.measurement-list {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.measurement-row {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  border-radius: var(--radius-sm);
-  padding: 8px 10px;
-  background: var(--color-canvas);
-}
-
-.measurement-row-head {
+/* "지난 일기" 구획 머리말: 작은 제목 + 가는 구분선. */
+.timeline-divider {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 12px;
+  gap: 10px;
+  margin: 14px 0 12px;
 }
 
-.measurement-meta {
-  display: flex;
+.timeline-divider span:first-child {
   flex: none;
-  align-items: center;
-  gap: 8px;
-}
-
-.measurement-value {
-  flex: none;
-  color: var(--color-ink);
-  font-size: 14px;
+  color: var(--color-charcoal);
+  font-size: 13px;
   font-weight: 600;
 }
 
-.measurement-note {
-  margin: 0;
-  color: var(--color-body);
-  font-size: 13px;
-  line-height: 1.6;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
+.timeline-divider .rule {
+  flex: 1;
+  height: 1px;
+  background: var(--color-hairline);
 }
 
-.measurement-date {
+/* 지난 기록을 연속된 일기로 읽히게 하는 세로 타임라인. 왼쪽 선과
+   점이 항목을 잇고, 메모 본문(명조)이 도드라진다. */
+.measurement-timeline {
+  position: relative;
+  margin: 0;
+  padding: 0 0 0 20px;
+  list-style: none;
+}
+
+.measurement-timeline::before {
+  content: "";
+  position: absolute;
+  left: 4px;
+  top: 6px;
+  bottom: 6px;
+  width: 2px;
+  background: var(--color-hairline-strong);
+}
+
+.timeline-entry {
+  position: relative;
+  padding-bottom: 16px;
+}
+
+.timeline-entry:last-child {
+  padding-bottom: 0;
+}
+
+.timeline-entry::before {
+  content: "";
+  position: absolute;
+  left: -20px;
+  top: 5px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--color-mute);
+  /* 선이 점 뒤로 비치지 않도록 패널 배경색 링을 두른다. */
+  box-shadow: 0 0 0 2px var(--color-surface-soft);
+}
+
+.timeline-entry-head {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 4px;
+}
+
+.timeline-date {
   flex: none;
   color: var(--color-mute);
   font-size: 12px;
   white-space: nowrap;
+}
+
+.timeline-value {
+  flex: none;
+  color: var(--color-body);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.timeline-del {
+  margin-left: auto;
+}
+
+.timeline-note {
+  margin: 0;
+  font-family: var(--font-serif);
+  color: var(--color-ink);
+  font-size: 15px;
+  line-height: 1.65;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 
 @media (max-width: 900px) {

@@ -1,6 +1,7 @@
 #![allow(non_snake_case)]
 
-use super::{measurement_stepper::MeasurementStepper,
+use super::{icons::PencilIcon,
+            measurement_stepper::MeasurementStepper,
             record_grass::RecordGrass};
 use crate::{i18n::use_lang,
             models::{KpiAggregation,
@@ -138,8 +139,13 @@ pub fn KpiMeasurementPanel(props: KpiMeasurementPanelProps) -> Element {
 
     rsx! {
         div { class: "measurement-panel",
+            // 일기 우선: 머리말과 텍스트 영역이 패널의 주인공이고,
+            // 측정값 스테퍼는 그 위에 작은 보조 컨트롤로 둔다.
             div { class: "measurement-heading",
-                label { {t.records_heading()} }
+                span { class: "diary-label",
+                    PencilIcon {}
+                    label { {t.diary_heading()} }
+                }
                 span { class: "measurement-hint", {t.agg_auto_hint(aggregation_label(aggregation, t))} }
             }
 
@@ -148,15 +154,18 @@ pub fn KpiMeasurementPanel(props: KpiMeasurementPanelProps) -> Element {
             }
 
             div { class: "measurement-add",
-                // 직접 입력 대신 − / + 스테퍼로 측정값을 만든다.
-                MeasurementStepper {
-                    target_value: props.target_value,
-                    aggregation,
-                    unit: props.unit.clone(),
-                    value: step_value
+                // 직접 입력 대신 − / + 스테퍼로 측정값을 만든다. 한 줄짜리
+                // 보조 컨트롤이라 텍스트 영역이 더 도드라진다.
+                div { class: "measurement-controls",
+                    MeasurementStepper {
+                        target_value: props.target_value,
+                        aggregation,
+                        unit: props.unit.clone(),
+                        value: step_value
+                    }
                 }
                 textarea {
-                    rows: "2",
+                    rows: "4",
                     class: "measurement-note-input",
                     placeholder: t.note_placeholder(),
                     value: "{note_input}",
@@ -185,7 +194,13 @@ pub fn KpiMeasurementPanel(props: KpiMeasurementPanelProps) -> Element {
             if measurements.read().is_empty() {
                 p { class: "measurement-empty", {t.no_records_yet_panel()} }
             } else {
-                ul { class: "measurement-list",
+                // 지난 기록은 연속된 일기 타임라인으로 읽힌다: 날짜·수치는
+                // 흐린 머리줄로 두고 메모를 본문처럼 도드라지게 보여 준다.
+                div { class: "timeline-divider",
+                    span { {t.past_entries()} }
+                    span { class: "rule" }
+                }
+                ul { class: "measurement-timeline",
                     for measurement in measurements.read().iter() {
                         {
                             let measurement_id = measurement.id.clone();
@@ -193,22 +208,20 @@ pub fn KpiMeasurementPanel(props: KpiMeasurementPanelProps) -> Element {
                             let measured_at = format_timestamp(&measurement.measured_at);
                             let note = measurement.note.clone().unwrap_or_default();
                             rsx! {
-                                li { class: "measurement-row",
-                                    div { class: "measurement-row-head",
-                                        span { class: "measurement-value", "{value_text} {unit}" }
-                                        span { class: "measurement-meta",
-                                            span { class: "measurement-date", title: "{measurement.measured_at}", "{measured_at}" }
-                                            button {
-                                                r#type: "button",
-                                                class: "btn row-btn",
-                                                disabled: *busy.read(),
-                                                onclick: move |_| handle_delete(measurement_id.clone()),
-                                                {t.delete()}
-                                            }
+                                li { class: "timeline-entry",
+                                    div { class: "timeline-entry-head",
+                                        span { class: "timeline-date", title: "{measurement.measured_at}", "{measured_at}" }
+                                        span { class: "timeline-value", "{value_text} {unit}" }
+                                        button {
+                                            r#type: "button",
+                                            class: "btn row-btn timeline-del",
+                                            disabled: *busy.read(),
+                                            onclick: move |_| handle_delete(measurement_id.clone()),
+                                            {t.delete()}
                                         }
                                     }
                                     if !note.is_empty() {
-                                        p { class: "measurement-note", "{note}" }
+                                        p { class: "timeline-note", "{note}" }
                                     }
                                 }
                             }

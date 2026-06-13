@@ -5,7 +5,11 @@ use super::{Lang,
 
 impl Lang {
     // ── 실적 기록 ────────────────────────────────────────────
-    pub fn records_heading(self) -> &'static str { pick(self, "실적 기록", "Records") }
+    /// 일기 우선 입력 영역의 머리말.
+    pub fn diary_heading(self) -> &'static str { pick(self, "오늘의 일기", "Today's journal") }
+
+    /// 지난 기록을 일기 타임라인으로 보여 주는 구획의 머리말.
+    pub fn past_entries(self) -> &'static str { pick(self, "지난 일기", "Past entries") }
 
     pub fn agg_auto_hint(self, aggregation_label: &str) -> String {
         match self {
