@@ -7,9 +7,8 @@
 //! *데이터 표시 레이블*(kind_label 등)은 여기가 아니라 models에 있다 —
 //! i18n은 화면 문구, models는 도메인 값의 표기를 책임진다.
 
+use crate::preferences::PersistedToggle;
 use dioxus::prelude::*;
-
-const STORAGE_KEY: &str = "lang";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Lang {
@@ -21,29 +20,10 @@ pub enum Lang {
 pub fn use_lang() -> Signal<Lang> { use_context::<Signal<Lang>>() }
 
 /// 시작 언어: 저장된 사용자 선택 > 한국어.
-pub fn initial_lang() -> Lang {
-    let stored = web_sys::window()
-        .and_then(|window| window.local_storage().ok().flatten())
-        .and_then(|storage| storage.get_item(STORAGE_KEY).ok().flatten());
-    match stored.as_deref() {
-        | Some("en") => Lang::En,
-        | _ => Lang::Ko,
-    }
-}
+pub fn initial_lang() -> Lang { Lang::initial() }
 
 /// `<html lang>`을 갱신하고 선택을 저장한다.
-pub fn apply_lang(lang: Lang) {
-    let Some(window) = web_sys::window() else {
-        return;
-    };
-
-    if let Some(root) = window.document().and_then(|document| document.document_element()) {
-        let _ = root.set_attribute("lang", lang.html_code());
-    }
-    if let Ok(Some(storage)) = window.local_storage() {
-        let _ = storage.set_item(STORAGE_KEY, lang.html_code());
-    }
-}
+pub fn apply_lang(lang: Lang) { lang.apply(); }
 
 pub(crate) fn pick(lang: Lang, ko: &'static str, en: &'static str) -> &'static str {
     match lang {
@@ -59,8 +39,24 @@ impl Lang {
             | Self::En => Self::Ko,
         }
     }
+}
 
-    fn html_code(self) -> &'static str { pick(self, "ko", "en") }
+impl PersistedToggle for Lang {
+    const HTML_ATTR: Option<&'static str> = Some("lang");
+    const STORAGE_KEY: &'static str = "lang";
+
+    fn as_storage_value(self) -> &'static str { pick(self, "ko", "en") }
+
+    fn from_storage_value(value: &str) -> Option<Self> {
+        match value {
+            | "en" => Some(Self::En),
+            | "ko" => Some(Self::Ko),
+            | _ => None,
+        }
+    }
+
+    /// 기본 언어: 한국어.
+    fn fallback() -> Self { Self::Ko }
 }
 
 mod common;

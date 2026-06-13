@@ -3,6 +3,7 @@ mod components;
 mod i18n;
 mod mode;
 mod models;
+mod preferences;
 mod services;
 mod store;
 mod theme;

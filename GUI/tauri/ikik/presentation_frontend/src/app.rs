@@ -1,6 +1,8 @@
 #![allow(non_snake_case)]
 
 use crate::{components::{AddPreset,
+                         AppHeader,
+                         ConfirmDialog,
                          IkikBoard,
                          ItemDetail,
                          ItemForm,
@@ -12,8 +14,7 @@ use crate::{components::{AddPreset,
                      ItemKind},
             store::{IkikStore,
                     use_ikik_store},
-            theme::{self,
-                    Theme}};
+            theme};
 use dioxus::prelude::*;
 
 static CSS: Asset = asset!("/assets/styles.css");
@@ -29,19 +30,19 @@ enum AppView {
 }
 
 pub fn App() -> Element {
-    // 언어 컨텍스트는 스토어(오류 메시지)보다 먼저 제공해야 한다.
-    let mut lang = use_signal(i18n::initial_lang);
+    // 언어 컨텍스트는 스토어(오류 메시지)보다 먼저 제공해야 한다. 토글은
+    // 헤더가 직접 갱신하므로 여기서는 컨텍스트 제공과 영속화만 맡는다.
+    let lang = use_signal(i18n::initial_lang);
     use_context_provider(|| lang);
     use_effect(move || i18n::apply_lang(*lang.read()));
     let t = *lang.read();
 
     let store: IkikStore = use_ikik_store();
     // 사용/관리 모드: 사용 모드(기본)에서는 구조 변경 진입점을 숨긴다.
-    let mut mode = use_signal(mode::initial_mode);
+    let mode = use_signal(mode::initial_mode);
     use_context_provider(|| mode);
     use_effect(move || mode::apply_mode(*mode.read()));
-    let is_manage = mode.read().is_manage();
-    let mut theme = use_signal(theme::initial_theme);
+    let theme = use_signal(theme::initial_theme);
     // 시그널이 바뀔 때마다 <html data-theme>와 localStorage에 반영한다.
     use_effect(move || theme::apply_theme(*theme.read()));
     let mut current_view = use_signal(|| AppView::Board);
@@ -51,7 +52,7 @@ pub fn App() -> Element {
     let items = store.items;
     let loading = store.loading;
     let error_message = store.error;
-    let mut search_query = store.search_query;
+    let search_query = store.search_query;
 
     let handle_add_item = move |form_data: ItemFormData| {
         if store.is_busy() {
@@ -120,138 +121,23 @@ pub fn App() -> Element {
     rsx! {
         link { rel: "stylesheet", href: CSS }
         main { class: "app",
-            header { class: "app-header",
-                div { class: "header-controls",
-                // 자물쇠 토글: 잠겨 있으면 사용 모드, 열려 있으면 관리 모드.
-                button {
-                    r#type: "button",
-                    class: if is_manage { "mode-toggle active" } else { "mode-toggle" },
-                    aria_label: if is_manage { t.to_use_mode() } else { t.to_manage_mode() },
-                    title: if is_manage { t.to_use_mode() } else { t.to_manage_mode() },
-                    onclick: move |_| {
-                        let next = mode.read().toggled();
-                        mode.set(next);
-                    },
-                    if is_manage {
-                        svg {
-                            width: "18",
-                            height: "18",
-                            view_box: "0 0 24 24",
-                            fill: "none",
-                            stroke: "currentColor",
-                            stroke_width: "1.8",
-                            stroke_linecap: "round",
-                            stroke_linejoin: "round",
-                            rect { x: "3", y: "11", width: "18", height: "10", rx: "2" }
-                            path { d: "M7 11V7a5 5 0 0 1 9.9-1" }
-                        }
-                    } else {
-                        svg {
-                            width: "18",
-                            height: "18",
-                            view_box: "0 0 24 24",
-                            fill: "none",
-                            stroke: "currentColor",
-                            stroke_width: "1.8",
-                            stroke_linecap: "round",
-                            stroke_linejoin: "round",
-                            rect { x: "3", y: "11", width: "18", height: "10", rx: "2" }
-                            path { d: "M7 11V7a5 5 0 0 1 10 0v4" }
-                        }
-                    }
-                }
-                button {
-                    r#type: "button",
-                    class: "lang-toggle",
-                    aria_label: t.to_other_lang(),
-                    title: t.to_other_lang(),
-                    onclick: move |_| {
-                        let next = lang.read().toggled();
-                        lang.set(next);
-                    },
-                    {t.lang_button()}
-                }
-                button {
-                    r#type: "button",
-                    class: "theme-toggle",
-                    aria_label: if *theme.read() == Theme::Dark { t.to_light_theme() } else { t.to_dark_theme() },
-                    title: if *theme.read() == Theme::Dark { t.to_light_theme() } else { t.to_dark_theme() },
-                    onclick: move |_| {
-                        let next = theme.read().toggled();
-                        theme.set(next);
-                    },
-                    if *theme.read() == Theme::Dark {
-                        svg {
-                            width: "18",
-                            height: "18",
-                            view_box: "0 0 24 24",
-                            fill: "none",
-                            stroke: "currentColor",
-                            stroke_width: "1.8",
-                            stroke_linecap: "round",
-                            stroke_linejoin: "round",
-                            circle { cx: "12", cy: "12", r: "5" }
-                            path { d: "M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42" }
-                        }
-                    } else {
-                        svg {
-                            width: "18",
-                            height: "18",
-                            view_box: "0 0 24 24",
-                            fill: "none",
-                            stroke: "currentColor",
-                            stroke_width: "1.8",
-                            stroke_linecap: "round",
-                            stroke_linejoin: "round",
-                            path { d: "M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" }
-                        }
-                    }
-                }
-                }
-                div { class: "brand-block",
-                    h1 { "IKIK" }
-                    p { {t.tagline()} }
-                }
-
-                if let AppView::Board = current_view.read().clone() {
-                    div { class: "header-actions",
-                        form {
-                            class: "search-form",
-                            onsubmit: move |evt: FormEvent| {
-                                evt.prevent_default();
-                                spawn(async move { store.search().await });
-                            },
-                            input {
-                                r#type: "text",
-                                placeholder: t.search_placeholder(),
-                                value: "{search_query}",
-                                oninput: move |evt| search_query.set(evt.value())
-                            }
-                            button { r#type: "submit", class: "btn btn-secondary", {t.search()} }
-                            if !search_query.read().trim().is_empty() {
-                                button {
-                                    r#type: "button",
-                                    class: "btn btn-secondary",
-                                    onclick: move |_| {
-                                        spawn(async move { store.clear_search().await });
-                                    },
-                                    {t.reset()}
-                                }
-                            }
-                        }
-                        if is_manage {
-                            button {
-                                class: "btn btn-primary",
-                                onclick: move |_| {
-                                    store.clear_error();
-                                    // 단계 탭을 보고 있었다면 그 단계를 기본 선택한다.
-                                    let kind = active_tab.read().parse::<ItemKind>().unwrap_or(ItemKind::Identity);
-                                    current_view.set(AppView::Add(Box::new(AddPreset { kind, parent: None, title: String::new() })));
-                                },
-                                {t.new_item()}
-                            }
-                        }
-                    }
+            AppHeader {
+                lang,
+                mode,
+                theme,
+                is_board: matches!(*current_view.read(), AppView::Board),
+                search_query,
+                on_search: move |_| {
+                    spawn(async move { store.search().await });
+                },
+                on_clear_search: move |_| {
+                    spawn(async move { store.clear_search().await });
+                },
+                on_new: move |_| {
+                    store.clear_error();
+                    // 단계 탭을 보고 있었다면 그 단계를 기본 선택한다.
+                    let kind = active_tab.read().parse::<ItemKind>().unwrap_or(ItemKind::Identity);
+                    current_view.set(AppView::Add(Box::new(AddPreset { kind, parent: None, title: String::new() })));
                 }
             }
 
@@ -357,33 +243,22 @@ pub fn App() -> Element {
             }
 
             if let Some(item) = pending_delete.read().clone() {
-                div { class: "confirm-backdrop",
-                    div { class: "confirm-dialog", role: "dialog", aria_label: t.confirm_delete_aria(),
-                        h2 { {t.confirm_delete_title()} }
-                        p { {t.confirm_delete_body(&item.title)} }
-                        div { class: "confirm-actions",
-                            button {
-                                r#type: "button",
-                                class: "btn btn-secondary",
-                                onclick: move |_| pending_delete.set(None),
-                                {t.cancel()}
+                ConfirmDialog {
+                    aria_label: t.confirm_delete_aria().to_string(),
+                    title: t.confirm_delete_title().to_string(),
+                    body: t.confirm_delete_body(&item.title),
+                    confirm_label: t.delete().to_string(),
+                    cancel_label: t.cancel().to_string(),
+                    on_cancel: move |_| pending_delete.set(None),
+                    on_confirm: {
+                        let item_id = item.id.clone();
+                        move |_| {
+                            pending_delete.set(None);
+                            // 상세 화면에서 그 항목을 지우면 보드로 돌아간다.
+                            if matches!(current_view.read().clone(), AppView::Detail(id) if id == item_id) {
+                                current_view.set(AppView::Board);
                             }
-                            button {
-                                r#type: "button",
-                                class: "btn btn-danger",
-                                onclick: {
-                                    let item_id = item.id.clone();
-                                    move |_| {
-                                        pending_delete.set(None);
-                                        // 상세 화면에서 그 항목을 지우면 보드로 돌아간다.
-                                        if matches!(current_view.read().clone(), AppView::Detail(id) if id == item_id) {
-                                            current_view.set(AppView::Board);
-                                        }
-                                        handle_delete_item(item_id.clone());
-                                    }
-                                },
-                                {t.delete()}
-                            }
+                            handle_delete_item(item_id.clone());
                         }
                     }
                 }

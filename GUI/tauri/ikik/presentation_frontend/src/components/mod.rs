@@ -1,6 +1,9 @@
+pub mod app_header;
 pub mod board;
 pub mod breadcrumb;
+pub mod confirm_dialog;
 pub mod dashboard;
+pub mod icons;
 pub mod item_detail;
 pub mod item_form;
 pub mod kind_view;
@@ -13,7 +16,9 @@ pub mod record_toast;
 pub mod tree;
 pub mod tree_drag;
 
+pub use app_header::*;
 pub use board::*;
+pub use confirm_dialog::*;
 pub use item_detail::*;
 pub use item_form::*;
 pub use quick_add::*;
