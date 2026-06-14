@@ -21,6 +21,8 @@ pub struct AppHeaderProps {
     /// 보드 화면일 때만 검색·신규 동작을 보여 준다.
     pub is_board: bool,
     pub search_query: Signal<String>,
+    /// 브랜드 타이틀 클릭 시 홈(보드)으로 이동한다.
+    pub on_home: EventHandler<()>,
     pub on_search: EventHandler<()>,
     pub on_clear_search: EventHandler<()>,
     pub on_new: EventHandler<()>,
@@ -79,7 +81,16 @@ pub fn AppHeader(props: AppHeaderProps) -> Element {
                 }
             }
             div { class: "brand-block",
-                h1 { "IKIK" }
+                h1 {
+                    button {
+                        r#type: "button",
+                        class: "brand-home",
+                        aria_label: t.to_home(),
+                        title: t.to_home(),
+                        onclick: move |_| props.on_home.call(()),
+                        "IKIK"
+                    }
+                }
                 p { {t.tagline()} }
             }
 

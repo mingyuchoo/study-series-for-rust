@@ -28,6 +28,15 @@ fi
 log "Clean build artifacts"
 cargo clean
 
+# The Tauri backend's `generate_context!()` macro validates, at compile time,
+# that `frontendDist` (../target/dx/.../web/public) exists. That path lives
+# under target/ (just wiped by `cargo clean`) and is only produced by `dx
+# build`. So the frontend bundle MUST be built before any `cargo build`/`test`
+# touches presentation_backend, otherwise the proc-macro panics with
+# "frontendDist ... but this path doesn't exist".
+log "Build frontend bundle (required before compiling the Tauri backend)"
+(cd presentation_frontend && dx build --release --platform web --debug-symbols false)
+
 log "Build workspace"
 cargo build --workspace
 

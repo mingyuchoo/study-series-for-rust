@@ -159,6 +159,29 @@ body {
   line-height: 1.11;
 }
 
+/* 타이틀을 홈(보드) 이동 버튼으로 쓰되, 시각적으로는 h1 그대로 보이게 한다. */
+.brand-home {
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: none;
+  color: inherit;
+  font: inherit;
+  letter-spacing: inherit;
+  line-height: inherit;
+  cursor: pointer;
+}
+
+.brand-home:hover {
+  color: var(--color-primary);
+}
+
+.brand-home:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 4px;
+  border-radius: 4px;
+}
+
 .brand-block p {
   margin: 8px 0 0;
   color: var(--color-body);
@@ -318,9 +341,8 @@ textarea:focus {
   text-align: center;
 }
 
-/* 항목 상세 보기: 기준 문서를 읽는 화면. 폼과 같은 카드 틀을 쓴다. */
+/* 항목 상세 보기: 기준 문서를 읽는 화면. 목록 화면과 같은 폭으로 채운다. */
 .item-detail {
-  max-width: 640px;
   margin: 0 auto;
   padding: 32px;
   border: 1px solid var(--color-hairline);

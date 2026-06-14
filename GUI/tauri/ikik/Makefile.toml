@@ -6,17 +6,25 @@
   description = "Clean all build artifacts"
   workspace   = false
 
+# The presentation_backend's `generate_context!()` validates `frontendDist`
+# (../target/dx/presentation_frontend/release/web/public) at compile time. That
+# path is produced only by `dx build`, so every task that compiles the backend
+# (clippy/check/build/release/test on the whole workspace) must build the
+# frontend bundle first; otherwise the proc-macro panics with
+# "frontendDist ... but this path doesn't exist" on a freshly cleaned tree.
 [tasks.clippy]
-  args        = ["clippy", "--workspace", "--all-targets", "--", "-D", "warnings"]
-  command     = "cargo"
-  description = "Run clippy on all workspace crates"
-  workspace   = false
+  args         = ["clippy", "--workspace", "--all-targets", "--", "-D", "warnings"]
+  command      = "cargo"
+  dependencies = ["build-frontend"]
+  description  = "Run clippy on all workspace crates"
+  workspace    = false
 
 [tasks.check]
-  args        = ["check", "--workspace"]
-  command     = "cargo"
-  description = "Check all workspace crates"
-  workspace   = false
+  args         = ["check", "--workspace"]
+  command      = "cargo"
+  dependencies = ["build-frontend"]
+  description  = "Check all workspace crates"
+  workspace    = false
 
 [tasks.format]
   args        = ["fmt", "--all"]
@@ -31,23 +39,26 @@
   workspace   = false
 
 [tasks.build]
-  args        = ["build", "--workspace"]
-  command     = "cargo"
-  description = "Build all workspace crates"
-  workspace   = false
+  args         = ["build", "--workspace"]
+  command      = "cargo"
+  dependencies = ["build-frontend"]
+  description  = "Build all workspace crates"
+  workspace    = false
 
 [tasks.release]
-  args        = ["build", "--workspace", "--release"]
-  command     = "cargo"
-  description = "Build all workspace crates in release mode"
-  workspace   = false
+  args         = ["build", "--workspace", "--release"]
+  command      = "cargo"
+  dependencies = ["build-frontend"]
+  description  = "Build all workspace crates in release mode"
+  workspace    = false
 
 # Testing tasks per layer
 [tasks.test]
-  args        = ["test", "--workspace"]
-  command     = "cargo"
-  description = "Run all tests in workspace"
-  workspace   = false
+  args         = ["test", "--workspace"]
+  command      = "cargo"
+  dependencies = ["build-frontend"]
+  description  = "Run all tests in workspace"
+  workspace    = false
 
 [tasks.test-domain]
   args        = ["test", "-p", "domain"]
@@ -104,8 +115,11 @@
   description = "Build presentation backend only"
   workspace   = false
 
+# Must match the profile/path in tauri.conf.json's `frontendDist`
+# (release/web/public). A plain `dx build --platform web` would emit to
+# debug/web/public and leave frontendDist missing.
 [tasks.build-frontend]
-  args        = ["build", "--platform", "web"]
+  args        = ["build", "--release", "--platform", "web", "--debug-symbols", "false"]
   command     = "dx"
   cwd         = "presentation_frontend"
   description = "Build presentation frontend (web) only"

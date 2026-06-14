@@ -5,8 +5,10 @@
 /Cargo.lock
 
 # Dioxus/Tauri frontend distribution output.
-# Keep the directory itself present so Tauri's generate_context! can compile
-# before the frontend has been built.
+# NOTE: the active frontendDist (see presentation_backend/tauri.conf.json)
+# points into target/dx/.../web/public, produced by `dx build`. This dist/
+# placeholder does NOT satisfy generate_context!; the frontend must be built
+# (dx build) before the backend is compiled. See Makefile.toml / scripts.
 /presentation_frontend/dist/*
 !/presentation_frontend/dist/.gitignore
 !/presentation_frontend/dist/.gitkeep

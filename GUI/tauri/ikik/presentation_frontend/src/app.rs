@@ -127,6 +127,10 @@ pub fn App() -> Element {
                 theme,
                 is_board: matches!(*current_view.read(), AppView::Board),
                 search_query,
+                on_home: move |_| {
+                    store.clear_error();
+                    current_view.set(AppView::Board);
+                },
                 on_search: move |_| {
                     spawn(async move { store.search().await });
                 },

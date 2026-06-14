@@ -66,6 +66,9 @@ impl Lang {
         )
     }
 
+    /// 브랜드 타이틀을 누르면 홈(보드)으로 돌아간다.
+    pub fn to_home(self) -> &'static str { pick(self, "홈으로 이동", "Go to home") }
+
     pub fn search(self) -> &'static str { pick(self, "검색", "Search") }
 
     pub fn search_placeholder(self) -> &'static str {
