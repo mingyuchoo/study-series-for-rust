@@ -1,4 +1,5 @@
-use plugin_interface::{Plugin, PluginContext};
+use plugin_interface::{Plugin,
+                       PluginContext};
 use std::error::Error;
 
 /// A simple plugin that generates greeting messages.

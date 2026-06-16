@@ -1,5 +1,8 @@
-use libloading::{Library, Symbol};
-use plugin_interface::{Plugin, PluginContext, PluginCreate};
+use libloading::{Library,
+                 Symbol};
+use plugin_interface::{Plugin,
+                       PluginContext,
+                       PluginCreate};
 use std::error::Error;
 use std::fs;
 use std::path::Path;

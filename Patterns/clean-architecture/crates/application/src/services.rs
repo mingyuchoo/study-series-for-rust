@@ -1,8 +1,8 @@
 // application/services.rs - 애플리케이션 서비스 (유스케이스)
 
-use domain::models::User;
-use domain::repositories::UserRepository;
-use domain::services::UserService;
+use domain::{models::User,
+             repositories::UserRepository,
+             services::UserService};
 
 pub struct UserApplicationService<R: UserRepository> {
     user_service: UserService<R>,
@@ -44,7 +44,8 @@ impl<R: UserRepository> UserApplicationService<R> {
 }
 
 // DTO (Data Transfer Object)
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize,
+            Serialize};
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct UserDto {
     pub id: Option<i64>,

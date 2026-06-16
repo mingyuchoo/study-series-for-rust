@@ -1,6 +1,7 @@
 // infrastructure/controllers.rs - DB Controller 구현
 
-use application::services::{UserApplicationService, UserDto};
+use application::services::{UserApplicationService,
+                            UserDto};
 use domain::repositories::UserRepository;
 
 pub struct UserDbController<R: UserRepository> {

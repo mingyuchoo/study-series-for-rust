@@ -1,9 +1,11 @@
 // infrastructure/repositories.rs - 저장소 구현
 
-use domain::models::User;
-use domain::repositories::UserRepository;
-use rusqlite::{Connection, params};
-use std::sync::{Arc, Mutex};
+use domain::{models::User,
+             repositories::UserRepository};
+use rusqlite::{Connection,
+               params};
+use std::sync::{Arc,
+                Mutex};
 
 // SQLite 저장소 구현 (추가)
 pub struct UserDbRepository {

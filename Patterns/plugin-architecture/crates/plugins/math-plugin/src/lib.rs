@@ -1,4 +1,5 @@
-use plugin_interface::{Plugin, PluginContext};
+use plugin_interface::{Plugin,
+                       PluginContext};
 use std::error::Error;
 
 /// A plugin that performs mathematical calculations.

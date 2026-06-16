@@ -1,7 +1,7 @@
 // domain/services.rs - 도메인 서비스
 
-use crate::models::User;
-use crate::repositories::UserRepository;
+use crate::{models::User,
+            repositories::UserRepository};
 
 pub struct UserService<R: UserRepository> {
     repository: R,
