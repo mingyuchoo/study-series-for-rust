@@ -1,0 +1,14 @@
+[package]
+name = "cli"
+version.workspace = true
+edition.workspace = true
+
+[[bin]]
+name = "vanilla-rnn"
+path = "src/main.rs"
+
+[dependencies]
+linalg.workspace = true
+rnn.workspace = true
+trainer.workspace = true
+rand.workspace = true

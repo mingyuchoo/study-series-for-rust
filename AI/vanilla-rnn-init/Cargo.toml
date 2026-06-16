@@ -1,7 +1,24 @@
-[package]
-name = "vanilla-rnn-init"
+[workspace]
+resolver = "3"
+members = [
+  "crates/linalg",
+  "crates/nn-core",
+  "crates/rnn",
+  "crates/trainer",
+  "apps/cli",
+]
+default-members = ["apps/cli"]
+
+[workspace.package]
 version = "0.1.0"
 edition = "2024"
 
-[dependencies]
+[workspace.dependencies]
+# 외부 의존성
 rand = "0.9.2"
+
+# 내부 crate (계층 단방향: linalg <- nn-core <- rnn <- trainer <- cli)
+linalg = { path = "crates/linalg" }
+nn-core = { path = "crates/nn-core" }
+rnn = { path = "crates/rnn" }
+trainer = { path = "crates/trainer" }

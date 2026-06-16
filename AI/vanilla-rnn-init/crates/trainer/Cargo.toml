@@ -1,0 +1,12 @@
+[package]
+name = "trainer"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+linalg.workspace = true
+nn-core.workspace = true
+rnn.workspace = true
+
+[dev-dependencies]
+rand.workspace = true

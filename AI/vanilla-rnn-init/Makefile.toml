@@ -3,7 +3,7 @@
   command = "cargo"
 
 [tasks.clippy]
-  args    = ["clippy"]
+  args    = ["clippy", "--workspace", "--all-targets"]
   command = "cargo"
 
 [tasks.check]
@@ -27,7 +27,7 @@
   dependencies = ["format"]
 
 [tasks.test]
-  args         = ["test"]
+  args         = ["test", "--workspace"]
   command      = "cargo"
   dependencies = ["format"]
 

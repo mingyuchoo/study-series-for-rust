@@ -1,0 +1,9 @@
+[package]
+name = "rnn"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+linalg.workspace = true
+nn-core.workspace = true
+rand.workspace = true

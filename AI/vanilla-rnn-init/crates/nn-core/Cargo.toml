@@ -1,0 +1,7 @@
+[package]
+name = "nn-core"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+linalg.workspace = true
