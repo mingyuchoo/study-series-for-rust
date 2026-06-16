@@ -10,6 +10,7 @@ pub mod registry;
 
 // Re-export commonly used types
 pub use engine::ConversionEngine;
-pub use error::{ConversionError, ConversionResult};
+pub use error::{ConversionError,
+                ConversionResult};
 pub use loader::PluginLoader;
 pub use registry::PluginRegistry;

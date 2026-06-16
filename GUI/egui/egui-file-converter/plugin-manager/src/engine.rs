@@ -1,9 +1,14 @@
-use crate::error::{ConversionError, ConversionResult};
-use crate::registry::PluginRegistry;
-use log::{error, info, warn};
-use plugin_interface::{ConversionOptions, ConversionResult as PluginConversionResult, FileFormat};
-use std::path::Path;
-use std::sync::Arc;
+use crate::{error::{ConversionError,
+                    ConversionResult},
+            registry::PluginRegistry};
+use log::{error,
+          info,
+          warn};
+use plugin_interface::{ConversionOptions,
+                       ConversionResult as PluginConversionResult,
+                       FileFormat};
+use std::{path::Path,
+          sync::Arc};
 
 /// Conversion Engine handles file conversion operations using registered
 /// plugins
@@ -160,9 +165,7 @@ impl ConversionEngine {
         for plugin_meta in plugins {
             if let Some(plugin) = self.registry.get_plugin(&plugin_meta.name) {
                 for output_format in plugin.supported_output_formats() {
-                    if plugin.can_convert(&input_format, &output_format)
-                        && !formats.iter().any(|f: &FileFormat| f.extension == output_format.extension)
-                    {
+                    if plugin.can_convert(&input_format, &output_format) && !formats.iter().any(|f: &FileFormat| f.extension == output_format.extension) {
                         formats.push(output_format);
                     }
                 }
@@ -176,10 +179,11 @@ impl ConversionEngine {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use plugin_interface::{Plugin, PluginMetadata};
-    use std::error::Error;
-    use std::fs;
-    use std::io::Write;
+    use plugin_interface::{Plugin,
+                           PluginMetadata};
+    use std::{error::Error,
+              fs,
+              io::Write};
 
     struct MockPlugin;
 

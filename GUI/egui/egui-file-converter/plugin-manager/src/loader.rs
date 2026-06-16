@@ -7,7 +7,8 @@
 //! # Example
 //!
 //! ```no_run
-//! use plugin_manager::{PluginLoader, PluginRegistry};
+//! use plugin_manager::{PluginLoader,
+//!                      PluginRegistry};
 //!
 //! // Create a plugin registry
 //! let registry = PluginRegistry::new();
@@ -51,12 +52,16 @@
 //! - `.dylib` files on macOS
 //! - `.dll` files on Windows
 
-use crate::error::{ConversionError, ConversionResult};
-use crate::registry::PluginRegistry;
-use libloading::{Library, Symbol};
-use plugin_interface::{Plugin, PluginConstructor};
-use std::fs;
-use std::path::{Path, PathBuf};
+use crate::{error::{ConversionError,
+                    ConversionResult},
+            registry::PluginRegistry};
+use libloading::{Library,
+                 Symbol};
+use plugin_interface::{Plugin,
+                       PluginConstructor};
+use std::{fs,
+          path::{Path,
+                 PathBuf}};
 
 /// Plugin loader handles dynamic loading of plugins from shared libraries
 pub struct PluginLoader {

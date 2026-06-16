@@ -1,4 +1,5 @@
-use rusqlite::{Connection, Result};
+use rusqlite::{Connection,
+               Result};
 
 /// 데이터베이스 스키마 초기화
 pub fn initialize_database(conn: &Connection) -> Result<()> {

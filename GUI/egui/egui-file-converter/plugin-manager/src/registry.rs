@@ -1,6 +1,9 @@
-use plugin_interface::{FileFormat, Plugin, PluginMetadata};
-use std::collections::HashMap;
-use std::sync::{Arc, RwLock};
+use plugin_interface::{FileFormat,
+                       Plugin,
+                       PluginMetadata};
+use std::{collections::HashMap,
+          sync::{Arc,
+                 RwLock}};
 
 /// Plugin Registry manages all registered plugins
 /// Provides thread-safe access to plugins using Arc<RwLock>
@@ -58,9 +61,10 @@ impl Default for PluginRegistry {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use plugin_interface::{ConversionOptions, ConversionResult};
-    use std::error::Error;
-    use std::path::Path;
+    use plugin_interface::{ConversionOptions,
+                           ConversionResult};
+    use std::{error::Error,
+              path::Path};
 
     struct MockPlugin {
         name: String,

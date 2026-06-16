@@ -6,9 +6,10 @@
 
 use encoding_rs::Encoding;
 use plugin_interface::*;
-use std::error::Error;
-use std::fs;
-use std::path::{Path, PathBuf};
+use std::{error::Error,
+          fs,
+          path::{Path,
+                 PathBuf}};
 
 /// Text converter plugin that handles text file encoding conversions.
 ///
@@ -186,5 +187,5 @@ fn generate_output_path(input_path: &Path, encoding_name: &str) -> Result<PathBu
 ///
 /// This function is exported with C linkage to allow the plugin to be
 /// dynamically loaded by the core system.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub fn create_plugin() -> Box<dyn Plugin> { Box::new(TextConverterPlugin::new()) }

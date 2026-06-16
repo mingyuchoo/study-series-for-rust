@@ -1,5 +1,8 @@
-use chrono::{DateTime, Utc};
-use rusqlite::{Connection, Result, params};
+use chrono::{DateTime,
+             Utc};
+use rusqlite::{Connection,
+               Result,
+               params};
 
 /// 변환 이력 항목
 #[derive(Debug, Clone)]

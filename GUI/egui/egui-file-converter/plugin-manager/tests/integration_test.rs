@@ -1,9 +1,14 @@
-use plugin_interface::{ConversionOptions, FileFormat, Plugin, PluginMetadata};
-use plugin_manager::{ConversionEngine, PluginRegistry};
-use std::collections::HashMap;
-use std::fs;
-use std::path::{Path, PathBuf};
-use std::sync::Arc;
+use plugin_interface::{ConversionOptions,
+                       FileFormat,
+                       Plugin,
+                       PluginMetadata};
+use plugin_manager::{ConversionEngine,
+                     PluginRegistry};
+use std::{collections::HashMap,
+          fs,
+          path::{Path,
+                 PathBuf},
+          sync::Arc};
 use tempfile::TempDir;
 
 // Mock plugin for testing

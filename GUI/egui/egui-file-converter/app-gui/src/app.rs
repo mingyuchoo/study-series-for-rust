@@ -1,10 +1,17 @@
-use database_manager::{ConversionHistoryEntry, HistoryManager, SettingsManager};
+use database_manager::{ConversionHistoryEntry,
+                       HistoryManager,
+                       SettingsManager};
 use eframe::egui;
-use plugin_interface::{ConversionOptions, FileFormat, PluginMetadata};
-use plugin_manager::{ConversionEngine, PluginRegistry};
-use std::sync::Arc;
-use std::sync::mpsc::{Receiver, Sender, channel};
-use std::thread;
+use plugin_interface::{ConversionOptions,
+                       FileFormat,
+                       PluginMetadata};
+use plugin_manager::{ConversionEngine,
+                     PluginRegistry};
+use std::{sync::{Arc,
+                 mpsc::{Receiver,
+                        Sender,
+                        channel}},
+          thread};
 
 /// Main application tabs
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -975,7 +982,7 @@ impl FileConverterApp {
 
     /// Select plugin matching the selected output format
     fn update_selected_plugin(&mut self) {
-        if let (Some(ref input_format), Some(ref output_format)) = (&self.detected_input_format, &self.selected_output_format) {
+        if let (Some(input_format), Some(output_format)) = (&self.detected_input_format, &self.selected_output_format) {
             // Find plugin that supports the conversion
             let plugins = self.plugin_registry.find_plugins_for_conversion(input_format, output_format);
 

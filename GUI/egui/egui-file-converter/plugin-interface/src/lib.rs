@@ -53,9 +53,9 @@
 //! }
 //! ```
 
-use std::collections::HashMap;
-use std::error::Error;
-use std::path::Path;
+use std::{collections::HashMap,
+          error::Error,
+          path::Path};
 
 /// Metadata describing a plugin's identity and purpose.
 ///
@@ -321,7 +321,7 @@ pub trait Plugin: Send + Sync {
 /// # Example
 ///
 /// ```rust,ignore
-/// #[no_mangle]
+/// #[unsafe(no_mangle)]
 /// pub fn create_plugin() -> Box<dyn Plugin> {
 ///     Box::new(MyPlugin::new())
 /// }
