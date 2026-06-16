@@ -1,4 +1,4 @@
-use ratatui_diary::markdown::render_to_text;
+use markdown_render::render_to_text;
 
 fn main() {
     let markdown = r#"# Markdown Demo

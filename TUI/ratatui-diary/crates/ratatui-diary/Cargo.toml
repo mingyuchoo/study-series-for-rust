@@ -1,0 +1,19 @@
+[package]
+  name    = "ratatui-diary"
+  edition.workspace = true
+  version.workspace = true
+
+# TUI 애플리케이션 (TEA: model / message / update / view).
+# 추출된 라이브러리 크레이트를 조립하고 다이어리 고유 규칙을 보유한다.
+[dependencies]
+  chrono              = { workspace = true }
+  crossterm           = { workspace = true }
+  ratatui             = { workspace = true }
+  unicode-width       = { workspace = true }
+
+  diary-storage   = { workspace = true }
+  markdown-render = { workspace = true }
+  text-editor     = { workspace = true }
+
+[dev-dependencies]
+  tempfile = { workspace = true }

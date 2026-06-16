@@ -3,11 +3,11 @@
   command = "cargo"
 
 [tasks.clippy]
-  args    = ["clippy"]
+  args    = ["clippy", "--workspace"]
   command = "cargo"
 
 [tasks.check]
-  args    = ["check"]
+  args    = ["check", "--workspace"]
   command = "cargo"
 
 [tasks.format]
@@ -17,17 +17,17 @@
   install_crate = "rustfmt"
 
 [tasks.build]
-  args         = ["build", "--profile", "dev"]
+  args         = ["build", "--workspace", "--profile", "dev"]
   command      = "cargo"
   dependencies = ["format"]
 
 [tasks.release]
-  args         = ["build", "--profile", "release"]
+  args         = ["build", "--workspace", "--profile", "release"]
   command      = "cargo"
   dependencies = ["format"]
 
 [tasks.test]
-  args         = ["test"]
+  args         = ["test", "--workspace"]
   command      = "cargo"
   dependencies = ["format"]
 

@@ -1,23 +1,7 @@
-use crate::storage::Storage;
-use chrono::{Datelike,
-             NaiveDate};
-use std::collections::HashSet;
-
-pub struct Model {
-    pub screen: Screen,
-    pub calendar_state: CalendarState,
-    pub editor_state: EditorState,
-    pub diary_entries: DiaryIndex,
-    pub error_message: Option<String>,
-    pub show_error_popup: bool,
-    pub storage: Storage,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Screen {
-    Calendar,
-    Editor,
-}
+//! 날짜·UI·저장소와 무관한 순수 멀티라인 텍스트 에디터 엔진.
+//!
+//! 커서 이동, 편집, 선택(selection), undo/redo, 검색을 제공한다.
+//! 외부 의존성이 없으며 어떤 애플리케이션에서도 재사용 가능하다.
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Selection {
@@ -27,125 +11,52 @@ pub struct Selection {
     pub cursor_col: usize,
 }
 
-pub struct EditorSnapshot {
+pub struct Snapshot {
     pub content: Vec<String>,
     pub cursor_line: usize,
     pub cursor_col: usize,
     pub selection: Option<Selection>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum EditorSubMode {
-    CtrlX,
-    Search,
-}
-
-pub struct CalendarState {
-    pub current_year: i32,
-    pub current_month: u32,
-    pub selected_date: NaiveDate,
-    pub cursor_pos: usize,
-}
-
-pub struct EditorState {
-    pub date: NaiveDate,
+pub struct TextEditor {
     pub content: Vec<String>,
     pub cursor_line: usize,
     pub cursor_col: usize,
     pub is_modified: bool,
     pub selection: Option<Selection>,
-    pub edit_history: Vec<EditorSnapshot>,
+    pub edit_history: Vec<Snapshot>,
     pub history_index: usize,
     pub clipboard: String,
-    pub submode: Option<EditorSubMode>,
     pub search_pattern: String,
     pub search_matches: Vec<(usize, usize)>,
     pub current_match_index: usize,
 }
 
-pub struct DiaryIndex {
-    pub entries: HashSet<NaiveDate>,
+impl Default for TextEditor {
+    fn default() -> Self { Self::new() }
 }
 
-impl Model {
-    pub fn new(entries: HashSet<NaiveDate>, storage: Storage) -> Self {
-        let today = chrono::Local::now().date_naive();
+impl TextEditor {
+    pub fn new() -> Self {
+        let mut state = Self {
+            content: vec![String::new()],
+            cursor_line: 0,
+            cursor_col: 0,
+            is_modified: false,
+            selection: None,
+            edit_history: Vec::new(),
+            history_index: 0,
+            clipboard: String::new(),
+            search_pattern: String::new(),
+            search_matches: Vec::new(),
+            current_match_index: 0,
+        };
 
-        Self {
-            screen: Screen::Calendar,
-            calendar_state: CalendarState::new(today.year(), today.month()),
-            editor_state: EditorState::new(today),
-            diary_entries: DiaryIndex {
-                entries,
-            },
-            error_message: None,
-            show_error_popup: false,
-            storage,
-        }
-    }
-}
-
-impl CalendarState {
-    pub fn new(year: i32, month: u32) -> Self {
-        let selected_date = NaiveDate::from_ymd_opt(year, month, 1).unwrap();
-        Self {
-            current_year: year,
-            current_month: month,
-            selected_date,
-            cursor_pos: 0,
-        }
+        // 초기 스냅샷 저장
+        state.save_snapshot();
+        state
     }
 
-    pub fn next_month(&mut self) {
-        if self.current_month == 12 {
-            self.current_month = 1;
-            self.current_year += 1;
-        } else {
-            self.current_month += 1;
-        }
-        self.adjust_selected_date();
-    }
-
-    pub fn prev_month(&mut self) {
-        if self.current_month == 1 {
-            self.current_month = 12;
-            self.current_year -= 1;
-        } else {
-            self.current_month -= 1;
-        }
-        self.adjust_selected_date();
-    }
-
-    pub fn next_year(&mut self) {
-        self.current_year += 1;
-        self.adjust_selected_date();
-    }
-
-    pub fn prev_year(&mut self) {
-        self.current_year -= 1;
-        self.adjust_selected_date();
-    }
-
-    pub fn move_cursor_left(&mut self) { self.selected_date = self.selected_date.pred_opt().unwrap_or(self.selected_date); }
-
-    pub fn move_cursor_right(&mut self) { self.selected_date = self.selected_date.succ_opt().unwrap_or(self.selected_date); }
-
-    pub fn move_cursor_up(&mut self) { self.selected_date = self.selected_date.checked_sub_days(chrono::Days::new(7)).unwrap_or(self.selected_date); }
-
-    pub fn move_cursor_down(&mut self) { self.selected_date = self.selected_date.checked_add_days(chrono::Days::new(7)).unwrap_or(self.selected_date); }
-
-    fn adjust_selected_date(&mut self) {
-        let day = self.selected_date.day();
-        self.selected_date = NaiveDate::from_ymd_opt(
-            self.current_year,
-            self.current_month,
-            day.min(days_in_month(self.current_year, self.current_month)),
-        )
-        .unwrap();
-    }
-}
-
-impl EditorState {
     /// 문자 인덱스를 바이트 인덱스로 변환
     pub fn char_idx_to_byte_idx(&self, line: usize, char_idx: usize) -> usize {
         if line >= self.content.len() {
@@ -168,34 +79,12 @@ impl EditorState {
         self.content[line][.. byte_idx.min(self.content[line].len())].chars().count()
     }
 
-    pub fn new(date: NaiveDate) -> Self {
-        let mut state = Self {
-            date,
-            content: vec![String::new()],
-            cursor_line: 0,
-            cursor_col: 0,
-            is_modified: false,
-            selection: None,
-            edit_history: Vec::new(),
-            history_index: 0,
-            clipboard: String::new(),
-            submode: None,
-            search_pattern: String::new(),
-            search_matches: Vec::new(),
-            current_match_index: 0,
-        };
-
-        // 초기 스냅샷 저장
-        state.save_snapshot();
-        state
-    }
-
     pub fn save_snapshot(&mut self) {
         // 현재 index 이후의 히스토리 제거 (분기된 히스토리 삭제)
         self.edit_history.truncate(self.history_index + 1);
 
         // 현재 상태 저장
-        let snapshot = EditorSnapshot {
+        let snapshot = Snapshot {
             content: self.content.clone(),
             cursor_line: self.cursor_line,
             cursor_col: self.cursor_col,
@@ -569,12 +458,4 @@ impl EditorState {
             cursor_col: col + pattern_char_len,
         });
     }
-}
-
-fn days_in_month(year: i32, month: u32) -> u32 {
-    NaiveDate::from_ymd_opt(year, month + 1, 1)
-        .unwrap_or_else(|| NaiveDate::from_ymd_opt(year + 1, 1, 1).unwrap())
-        .pred_opt()
-        .unwrap()
-        .day()
 }

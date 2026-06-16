@@ -1,16 +1,23 @@
-[package]
+[workspace]
+  members         = ["crates/*"]
+  default-members = ["crates/ratatui-diary"]
+  resolver        = "2"
+
+[workspace.package]
   edition = "2024"
-  name    = "ratatui-diary"
   version = "0.1.0"
 
-[dependencies]
+[workspace.dependencies]
   chrono              = "0.4"
   crossterm           = "0.27"
   dirs                = "5.0"
   ratatui             = "0.27"
   strip-ansi-escapes  = "0.2"
   termimad            = "0.34"
+  tempfile            = "3.8"
   unicode-width       = "0.1"
 
-[dev-dependencies]
-  tempfile = "3.8"
+  # 워크스페이스 내부 크레이트
+  diary-storage   = { path = "crates/diary-storage" }
+  markdown-render = { path = "crates/markdown-render" }
+  text-editor     = { path = "crates/text-editor" }

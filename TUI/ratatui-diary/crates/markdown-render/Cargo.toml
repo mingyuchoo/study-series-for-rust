@@ -1,0 +1,10 @@
+[package]
+  name    = "markdown-render"
+  edition.workspace = true
+  version.workspace = true
+
+# Markdown 문자열을 ratatui Text로 변환 (termimad 기반).
+[dependencies]
+  ratatui             = { workspace = true }
+  strip-ansi-escapes  = { workspace = true }
+  termimad            = { workspace = true }

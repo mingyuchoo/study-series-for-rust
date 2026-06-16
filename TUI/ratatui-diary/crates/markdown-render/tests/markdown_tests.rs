@@ -1,6 +1,6 @@
+use markdown_render::{render_to_text,
+                      to_ratatui_color};
 use ratatui::style::Color;
-use ratatui_diary::markdown::{render_to_text,
-                              to_ratatui_color};
 use termimad::crossterm::style::Color as TermColor;
 
 #[test]

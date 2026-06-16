@@ -1,5 +1,5 @@
 use chrono::NaiveDate;
-use ratatui_diary::storage::Storage;
+use diary_storage::Storage;
 use tempfile::TempDir;
 
 #[test]

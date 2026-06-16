@@ -1,0 +1,8 @@
+[package]
+  name    = "text-editor"
+  edition.workspace = true
+  version.workspace = true
+
+# 날짜·UI·저장소와 무관한 순수 멀티라인 텍스트 에디터 엔진.
+# 외부 의존성 없음 (std만 사용).
+[dependencies]

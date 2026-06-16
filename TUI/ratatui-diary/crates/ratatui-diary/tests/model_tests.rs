@@ -272,7 +272,7 @@ mod update_selection_tests {
         update::update(&mut model, Msg::EditorToggleSelection);
 
         assert!(model.editor_state.selection.is_some());
-        let sel = model.editor_state.selection.unwrap();
+        let sel = model.editor_state.selection.as_ref().unwrap();
         assert_eq!(sel.anchor_line, 0);
         assert_eq!(sel.anchor_col, 5);
     }
@@ -308,7 +308,7 @@ mod update_selection_tests {
         update::update(&mut model, Msg::EditorSelectLine);
 
         assert!(model.editor_state.selection.is_some());
-        let sel = model.editor_state.selection.unwrap();
+        let sel = model.editor_state.selection.as_ref().unwrap();
         assert_eq!(sel.anchor_line, 0);
         assert_eq!(sel.anchor_col, 0);
         assert_eq!(sel.cursor_line, 0);

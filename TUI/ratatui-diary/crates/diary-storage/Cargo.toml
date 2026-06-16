@@ -1,0 +1,12 @@
+[package]
+  name    = "diary-storage"
+  edition.workspace = true
+  version.workspace = true
+
+# 다이어리 항목의 파일 시스템 영속화 (날짜 ↔ .md 파일).
+[dependencies]
+  chrono  = { workspace = true }
+  dirs    = { workspace = true }
+
+[dev-dependencies]
+  tempfile = { workspace = true }
