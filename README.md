@@ -65,6 +65,7 @@ cargo install cargo-udepts
 cargo install cargo-deps
 cargo install cargo-tree
 cargo install cargo-watch
+cargo install sccache
 ```
 
 ### Nix
@@ -115,8 +116,20 @@ rustup target add aarch64-unknown-linux-gnu
 `$HOME/.cargo/config.toml` 생성:
 
 ```toml
+# For Linux/macOS
+
+# > cargo install mold
+[target.x86_64-unknown-linux-gnu]
+  linker    = "clang"
+  rustflags = ["-C", "link-arg=-fuse-ld=mold"]
+
+# For Windows
+[target.x86_64-pc-windows-msvc]
+  rustflags = ["-C", "link-arg=-fuse-ld=lld"]
+
 [build]
-target = "aarch64-unknown-linux-gnu"
+  target = "aarch64-unknown-linux-gnu"
+  rustc-wrapper = "sccache"
 ```
 
 프로젝트 빌드:
