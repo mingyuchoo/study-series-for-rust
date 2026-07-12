@@ -1,0 +1,9 @@
+[package]
+  edition = "2024"
+  name    = "application"
+  version = "0.1.0"
+
+[dependencies]
+  async-trait = "0.1"
+  domain      = {path = "../domain"}
+  uuid        = {features = ["v4"], version = "1.0"}

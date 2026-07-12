@@ -1,0 +1,22 @@
+[workspace]
+  members = [
+    "domain",
+    "application",
+    "infrastructure",
+    "presentation_backend",
+    "presentation_frontend",
+    "tauri-entrypoint",
+  ]
+  resolver = "2"
+
+[profile]
+
+  [profile.wasm-dev]
+    inherits  = "dev"
+    opt-level = 1
+
+  [profile.server-dev]
+    inherits = "dev"
+
+  [profile.android-dev]
+    inherits = "dev"

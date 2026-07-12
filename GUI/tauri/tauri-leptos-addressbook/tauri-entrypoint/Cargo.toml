@@ -1,0 +1,24 @@
+[package]
+  authors     = ["you"]
+  description = "A Tauri App"
+  edition     = "2024"
+  name        = "tauri-leptos-app"
+  version     = "0.1.0"
+
+  # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[lib]
+  # The `_lib` suffix may seem redundant but it is necessary
+  # to make the lib name unique and wouldn't conflict with the bin name.
+  # This seems to be only an issue on Windows, see https://github.com/rust-lang/cargo/issues/8519
+  crate-type = ["staticlib", "cdylib", "rlib"]
+  name       = "tauri_leptos_app_lib"
+
+[build-dependencies]
+  tauri-build = {features = [], version = "2"}
+
+[dependencies]
+  presentation_backend = {path = "../presentation_backend"}
+  tauri                = {features = [], version = "2"}
+  tauri-plugin-opener  = "2"
+  tokio                = {features = ["full"], version = "1.0"}

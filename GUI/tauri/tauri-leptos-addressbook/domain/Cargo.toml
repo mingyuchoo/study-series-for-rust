@@ -1,0 +1,9 @@
+[package]
+  edition = "2024"
+  name    = "domain"
+  version = "0.1.0"
+
+[dependencies]
+  async-trait = "0.1"
+  serde       = {features = ["derive"], version = "1.0"}
+  uuid        = {features = ["v4", "serde"], version = "1.0"}
