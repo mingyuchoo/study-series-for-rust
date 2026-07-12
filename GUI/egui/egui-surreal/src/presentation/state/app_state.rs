@@ -1,5 +1,5 @@
-use crate::domain::AppMessage;
-use crate::presentation::ui::AppTab;
+use crate::{domain::AppMessage,
+            presentation::ui::AppTab};
 
 pub struct AppState {
     // UI State

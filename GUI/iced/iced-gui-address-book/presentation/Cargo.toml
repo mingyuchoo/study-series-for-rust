@@ -7,4 +7,4 @@ edition = "2024"
 domain = { path = "../domain" }
 application = { path = "../application" }
 infrastructure = { path = "../infrastructure" }
-iced = { version = "0.14.0", default-features = false, features = ["tiny-skia", "advanced", "thread-pool"] }
+iced = { version = "0.14.0", default-features = false, features = ["tiny-skia", "advanced", "thread-pool", "x11", "wayland"] }

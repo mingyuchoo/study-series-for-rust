@@ -1,7 +1,9 @@
-use crate::application::services::Command;
-use crate::domain::{AppMessage, MessageType};
-use crate::presentation::state::AppState;
-use std::sync::mpsc::{Receiver, Sender};
+use crate::{application::services::Command,
+            domain::{AppMessage,
+                     MessageType},
+            presentation::state::AppState};
+use std::sync::mpsc::{Receiver,
+                      Sender};
 
 pub struct AppController {
     pub state: AppState,

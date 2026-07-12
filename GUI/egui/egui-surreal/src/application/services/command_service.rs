@@ -1,4 +1,6 @@
-use crate::application::use_cases::{AuthUseCases, PersonUseCases, QueryUseCases};
+use crate::application::use_cases::{AuthUseCases,
+                                    PersonUseCases,
+                                    QueryUseCases};
 use anyhow::Result;
 use std::sync::Arc;
 

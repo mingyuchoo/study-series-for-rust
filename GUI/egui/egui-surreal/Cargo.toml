@@ -6,8 +6,8 @@
 [dependencies]
   anyhow      = "1.0.100"
   async-trait = "0.1.83"
-  eframe      = "0.32.3"
-  egui        = "0.32.3"
+  eframe      = "0.35.0"
+  egui        = "0.35.0"
   faker_rand  = "0.1.1"
   rand        = "0.8.5"
   serde       = {version = "1.0.228", features = ["derive"]}

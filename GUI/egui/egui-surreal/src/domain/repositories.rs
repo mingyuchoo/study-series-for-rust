@@ -1,4 +1,6 @@
-use super::entities::{AuthParams, Person, PersonData};
+use super::entities::{AuthParams,
+                      Person,
+                      PersonData};
 use anyhow::Result;
 use async_trait::async_trait;
 

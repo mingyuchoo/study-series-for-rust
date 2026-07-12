@@ -1,7 +1,12 @@
-use crate::domain::MessageType;
-use crate::presentation::controllers::AppController;
-use crate::presentation::ui::{AppTab, show_auth_tab, show_people_tab, show_query_tab, show_session_tab};
-use egui::{Color32, RichText};
+use crate::{domain::MessageType,
+            presentation::{controllers::AppController,
+                           ui::{AppTab,
+                                show_auth_tab,
+                                show_people_tab,
+                                show_query_tab,
+                                show_session_tab}}};
+use egui::{Color32,
+           RichText};
 
 pub struct SurrealDbApp {
     controller: AppController,
@@ -36,12 +41,19 @@ impl SurrealDbApp {
 }
 
 impl eframe::App for SurrealDbApp {
-    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        // Handle responses
+    fn logic(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        // Poll DB responses without painting
         self.controller.handle_response();
 
+        // Keep UI responsive while async work is in flight
+        if self.controller.state.is_loading {
+            ctx.request_repaint();
+        }
+    }
+
+    fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         // Top panel with tabs and status
-        egui::TopBottomPanel::top("top_panel").show(ctx, |ui| {
+        egui::Panel::top("top_panel").show(ui, |ui| {
             ui.horizontal(|ui| {
                 ui.heading("SurrealDB Manager");
 
@@ -80,17 +92,18 @@ impl eframe::App for SurrealDbApp {
             });
         });
 
+        // Bottom panel for messages (before CentralPanel — panels must be added before
+        // central)
+        egui::Panel::bottom("bottom_panel").show(ui, |ui| {
+            self.show_messages(ui);
+        });
+
         // Main content area
-        egui::CentralPanel::default().show(ctx, |ui| match self.controller.state.current_tab {
+        egui::CentralPanel::default().show(ui, |ui| match self.controller.state.current_tab {
             | AppTab::People => show_people_tab(&mut self.controller, ui),
             | AppTab::Authentication => show_auth_tab(&mut self.controller, ui),
             | AppTab::Query => show_query_tab(&mut self.controller, ui),
             | AppTab::Session => show_session_tab(&mut self.controller, ui),
-        });
-
-        // Bottom panel for messages
-        egui::TopBottomPanel::bottom("bottom_panel").show(ctx, |ui| {
-            self.show_messages(ui);
         });
     }
 }

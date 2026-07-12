@@ -60,10 +60,10 @@ Visual Studio Build Tools 또는 Visual Studio Community를 C++ 개발 도구와
    source ~/.cargo/env
    ```
 
-2. **Dioxus CLI 설치**:
+2. **Dioxus CLI 설치** (프로젝트 Dioxus 버전과 동일하게 맞출 것):
    ```bash
    cargo install cargo-binstall
-   cargo binstall dioxus-cli
+   cargo binstall dioxus-cli@0.8.0-alpha.0
    ```
 
 3. **프로젝트 클론 및 설정**:
@@ -76,10 +76,12 @@ Visual Studio Build Tools 또는 Visual Studio Community를 C++ 개발 도구와
 
 `Cargo.toml` 기준 주요 의존성:
 
-- **Dioxus 0.6.3**: 라우터 및 풀스택 기능을 지원하는 메인 프레임워크
-- **Reqwest 0.12**: JSON 지원 HTTP 클라이언트 (API 연동용)
-- **Rusqlite 0.37**: SQLite 데이터베이스 (`native-db` 피처 활성화 시)
-- **Serde 1.0**: 직렬화/역직렬화 (derive 매크로 포함)
+- **Dioxus 0.8.0-alpha.0**: 라우터·풀스택 기능을 지원하는 메인 프레임워크 (`router`, `fullstack` 피처; 플랫폼별 `web` / `desktop` / `mobile`)
+- **Dioxus CLI (dx) 0.8.0-alpha.0**: 빌드·서빙·번들용 CLI (라이브러리와 동일 버전 권장)
+- **Reqwest 0.13.4**: JSON 지원 HTTP 클라이언트 (API 연동용)
+- **Rusqlite 0.40.1**: SQLite 데이터베이스 (`native-db` 피처 활성화 시, desktop/mobile에 포함)
+- **Serde 1.0**: 직렬화/역직렬화 (`derive` 매크로 포함)
+- **Serde JSON 1.0**: JSON 직렬화/역직렬화
 - **Async-trait 0.1.89**: 비동기 트레이트 지원
 - **Dirs 6.0**: 크로스 플랫폼 디렉터리 경로
 - **Futures 0.3**: 비동기 유틸리티

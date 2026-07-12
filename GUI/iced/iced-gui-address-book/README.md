@@ -32,7 +32,7 @@ iced-app/
 - **rusqlite 0.32**: SQLite 데이터베이스 (bundled 피처)
 - **serde 1.0**: 직렬화/역직렬화
 
-> iced는 `default-features = false` + `tiny-skia, advanced, thread-pool` 피처 조합으로 사용합니다. Windows 환경에서 기본 wgpu(DX12) 백엔드가 일부 드라이버에서 `STATUS_ACCESS_VIOLATION`을 일으키는 이슈를 회피하기 위해 CPU 기반 `tiny-skia` 렌더러를 채택했으며, 0.14부터는 executor 피처(`thread-pool`)를 명시적으로 지정해야 합니다.
+> iced는 `default-features = false` + `tiny-skia, advanced, thread-pool, x11, wayland` 피처 조합으로 사용합니다. Windows 환경에서 기본 wgpu(DX12) 백엔드가 일부 드라이버에서 `STATUS_ACCESS_VIOLATION`을 일으키는 이슈를 회피하기 위해 CPU 기반 `tiny-skia` 렌더러를 채택했으며, 0.14부터는 executor 피처(`thread-pool`)와 Linux 윈도우 시스템 피처(`x11`, `wayland`)를 명시적으로 지정해야 합니다.
 
 ## 사전 준비사항
 
@@ -84,7 +84,7 @@ Iced 0.14는 Tab 포커스 순회를 자동으로 처리하지 않습니다. 각
 
 ### Windows: `STATUS_ACCESS_VIOLATION (0xc0000005)` 크래시
 
-wgpu(DX12/Vulkan) 기본 백엔드가 일부 GPU 드라이버와 충돌하여 실행 직후 크래시가 발생하는 경우가 있습니다. 본 프로젝트는 `presentation/Cargo.toml`에서 iced 피처를 `tiny-skia`로 고정해 이 문제를 회피합니다. 다른 백엔드로 복귀하려면 `iced = "0.13.1"` 기본 설정으로 되돌린 뒤 환경변수 `WGPU_BACKEND=gl`로 우회할 수 있습니다.
+wgpu(DX12/Vulkan) 기본 백엔드가 일부 GPU 드라이버와 충돌하여 실행 직후 크래시가 발생하는 경우가 있습니다. 본 프로젝트는 `presentation/Cargo.toml`에서 iced 피처를 `tiny-skia`로 고정해 이 문제를 회피합니다. GPU 백엔드를 쓰려면 `wgpu` 피처를 추가한 뒤 환경변수 `WGPU_BACKEND=gl` 등으로 우회할 수 있습니다.
 
 ## 참고 자료
 

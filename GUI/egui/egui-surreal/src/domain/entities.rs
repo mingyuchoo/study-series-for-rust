@@ -1,4 +1,5 @@
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize,
+            Serialize};
 use surrealdb::RecordId;
 
 #[derive(Serialize, Deserialize, Clone, Default, Debug)]

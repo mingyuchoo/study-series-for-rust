@@ -1,5 +1,6 @@
 use crate::presentation::controllers::AppController;
-use egui::{Color32, RichText};
+use egui::{Color32,
+           RichText};
 
 pub fn show_people_tab(controller: &mut AppController, ui: &mut egui::Ui) {
     ui.heading("People Management");

@@ -356,7 +356,7 @@ impl FileConverterApp {
 }
 
 impl eframe::App for FileConverterApp {
-    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+    fn logic(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         // Process progress messages from worker thread
         self.process_progress_messages();
 
@@ -367,6 +367,10 @@ impl eframe::App for FileConverterApp {
 
         // Apply theme (apply every frame for consistency)
         self.apply_theme(ctx);
+    }
+
+    fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
+        let ctx = ui.ctx().clone();
 
         // Show error dialog
         let mut close_dialog = false;
@@ -376,7 +380,7 @@ impl eframe::App for FileConverterApp {
                 .collapsible(false)
                 .resizable(true)
                 .default_width(400.0)
-                .show(ctx, |ui| {
+                .show(&ctx, |ui| {
                     ui.vertical(|ui| {
                         ui.label(egui::RichText::new(&error_clone.message).color(egui::Color32::RED));
 
@@ -405,7 +409,7 @@ impl eframe::App for FileConverterApp {
             self.error_dialog = None;
         }
 
-        egui::CentralPanel::default().show(ctx, |ui| {
+        egui::CentralPanel::default().show(ui, |ui| {
             // Top tab menu
             ui.horizontal(|ui| {
                 ui.selectable_value(&mut self.active_tab, AppTab::Converter, "🔄 Converter");
@@ -523,7 +527,7 @@ impl FileConverterApp {
                     let mut format_changed = false;
                     let mut new_format = None;
 
-                    egui::ComboBox::from_id_source("output_format_combo")
+                    egui::ComboBox::from_id_salt("output_format_combo")
                         .selected_text(selected_text)
                         .width(250.0)
                         .show_ui(ui, |ui| {
@@ -1387,7 +1391,7 @@ impl FileConverterApp {
 
             let old_language = self.language.clone();
 
-            egui::ComboBox::from_id_source("language_combo")
+            egui::ComboBox::from_id_salt("language_combo")
                 .selected_text(match self.language.as_str() {
                     | "ko" => "🇰🇷 한국어",
                     | "en" => "🇺🇸 English",

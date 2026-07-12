@@ -1,3 +1,4 @@
 pub mod command_service;
 
-pub use command_service::{Command, CommandService};
+pub use command_service::{Command,
+                          CommandService};

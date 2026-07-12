@@ -1,4 +1,5 @@
-use crate::domain::{AuthParams, AuthRepository};
+use crate::domain::{AuthParams,
+                    AuthRepository};
 use anyhow::Result;
 use std::sync::Arc;
 

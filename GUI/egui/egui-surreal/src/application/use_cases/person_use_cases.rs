@@ -1,4 +1,5 @@
-use crate::domain::{PersonData, PersonRepository};
+use crate::domain::{PersonData,
+                    PersonRepository};
 use anyhow::Result;
 use std::sync::Arc;
 

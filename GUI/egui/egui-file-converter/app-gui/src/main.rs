@@ -1,6 +1,8 @@
 use eframe::egui;
 
 mod app;
+mod fonts;
+
 use app::FileConverterApp;
 
 fn main() -> Result<(), eframe::Error> {
@@ -21,6 +23,9 @@ fn main() -> Result<(), eframe::Error> {
         "Egui File Converter",
         options,
         Box::new(|cc| {
+            // 한글/CJK 글리프 표시·IME 입력 렌더링을 위한 시스템 폰트 등록
+            fonts::configure_cjk_fonts(&cc.egui_ctx);
+
             // egui 스타일 설정
             cc.egui_ctx.set_visuals(egui::Visuals::default());
 

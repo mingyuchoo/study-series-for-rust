@@ -1,15 +1,20 @@
 use anyhow::Result;
-use std::sync::Arc;
-use std::sync::mpsc::channel;
+use std::sync::{Arc,
+                mpsc::channel};
 
 mod application;
 mod domain;
 mod infrastructure;
 mod presentation;
 
-use application::{AuthUseCases, CommandService, PersonUseCases, QueryUseCases};
+use application::{AuthUseCases,
+                  CommandService,
+                  PersonUseCases,
+                  QueryUseCases};
 use infrastructure::SurrealRepository;
-use presentation::{AppController, SurrealDbApp};
+use presentation::{AppController,
+                   SurrealDbApp,
+                   install_korean_fonts};
 
 fn main() -> Result<()> {
     let (command_sender, command_receiver) = channel();
@@ -56,10 +61,6 @@ fn main() -> Result<()> {
         })
     });
 
-    // Initialize UI controller and app
-    let controller = AppController::new(command_sender, response_receiver);
-    let app = SurrealDbApp::new(controller);
-
     // Run the application
     let native_options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
@@ -68,5 +69,17 @@ fn main() -> Result<()> {
         ..Default::default()
     };
 
-    eframe::run_native("SurrealDB App", native_options, Box::new(|_cc| Ok(Box::new(app)))).map_err(|e| anyhow::anyhow!("Failed to run application: {}", e))
+    eframe::run_native(
+        "SurrealDB App",
+        native_options,
+        Box::new(|cc| {
+            // 한글 IME 입력/표시를 위해 CJK 폰트 등록
+            install_korean_fonts(&cc.egui_ctx);
+
+            let controller = AppController::new(command_sender, response_receiver);
+            let app = SurrealDbApp::new(controller);
+            Ok(Box::new(app))
+        }),
+    )
+    .map_err(|e| anyhow::anyhow!("Failed to run application: {}", e))
 }

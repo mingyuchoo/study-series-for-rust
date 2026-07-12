@@ -165,7 +165,7 @@ pub fn DocsTab() -> Element {
             // Error message
             {error().map(|err| rsx! {
                 div { class: "notice",
-                    p { "{err}" }
+                    p { {err} }
                 }
             })}
 

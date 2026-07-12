@@ -29,10 +29,11 @@ impl DocDbRepository {
         println!("Opening SQLite database at: {}", db_path);
 
         // Ensure the directory exists
-        if let Some(parent) = std::path::Path::new(db_path).parent() {
-            if !parent.exists() {
-                std::fs::create_dir_all(parent).map_err(|e| format!("Failed to create directory for database: {}", e))?;
-            }
+        if let Some(parent) = std::path::Path::new(db_path).parent()
+            && !parent.exists()
+        {
+            std::fs::create_dir_all(parent)
+                .map_err(|e| format!("Failed to create directory for database: {}", e))?;
         }
 
         let conn = Connection::open(db_path).map_err(|e| format!("Failed to open database: {}", e))?;

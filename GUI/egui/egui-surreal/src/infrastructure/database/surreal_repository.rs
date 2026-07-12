@@ -1,12 +1,22 @@
-use crate::domain::{AuthParams, AuthRepository, Person, PersonData, PersonRepository, QueryRepository};
-use anyhow::{Error, Result};
+use crate::domain::{AuthParams,
+                    AuthRepository,
+                    Person,
+                    PersonData,
+                    PersonRepository,
+                    QueryRepository};
+use anyhow::{Error,
+             Result};
 use async_trait::async_trait;
 use faker_rand::en_us::names::FirstName;
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize,
+            Serialize};
 use std::ops::Deref;
-use surrealdb::engine::remote::ws::{Client, Ws};
-use surrealdb::opt::auth::{Record, Root};
-use surrealdb::{RecordIdKey, Surreal};
+use surrealdb::{RecordIdKey,
+                Surreal,
+                engine::remote::ws::{Client,
+                                     Ws},
+                opt::auth::{Record,
+                            Root}};
 
 const PERSON: &str = "person";
 
