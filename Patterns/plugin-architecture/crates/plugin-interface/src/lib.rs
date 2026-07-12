@@ -163,8 +163,9 @@ pub trait Plugin: Send + Sync {
 /// Type alias for the plugin constructor function.
 ///
 /// This function pointer type is used for the dynamic loading of plugins.
-/// Plugins must export a function with this signature using `#[no_mangle]`
-/// and `extern "C"` to ensure the symbol is available for dynamic loading.
+/// Plugins must export a function with this signature using
+/// `#[unsafe(no_mangle)]` and `extern "C"` to ensure the symbol is available
+/// for dynamic loading.
 ///
 /// # Safety
 ///
@@ -192,7 +193,7 @@ pub trait Plugin: Send + Sync {
 /// #   fn on_unload(&mut self) -> Result<(), Box<dyn Error>> { Ok(()) }
 /// }
 ///
-/// #[no_mangle]
+/// #[unsafe(no_mangle)]
 /// pub extern "C" fn _plugin_create() -> *mut dyn Plugin {
 ///     Box::into_raw(Box::new(MyPlugin))
 /// }

@@ -4,7 +4,7 @@
   version = "0.1.0"
 
 [dependencies]
-  libloading       = "0.8"
+  libloading       = "0.9"
   plugin-interface = {path = "../plugin-interface"}
 
 [lib]
