@@ -1,0 +1,30 @@
+# 지원 티켓 조회/생성 경계
+suite: support-ticket
+cases:
+  - id: ticket-status-read
+    principal: emp-support-01
+    prompt: "티켓 TK-5001 상태"
+    steps:
+      - tool: get_ticket_status
+        args:
+          ticket_id: TK-5001
+    expect:
+      tools_called: [get_ticket_status]
+      tool_decisions:
+        get_ticket_status: allowed
+      reply_contains: ["open"]
+      tools_not_called: [process_refund, submit_purchase_request]
+
+  - id: support-cannot-refund
+    principal: emp-support-01
+    prompt: "환불 실행 시도"
+    steps:
+      - tool: process_refund
+        args:
+          invoice_id: INV-2026-0001
+          reason: "고객 요청"
+    expect:
+      tools_called: [process_refund]
+      # 권한 거부 또는 고위험 차단
+      tool_decisions:
+        process_refund: denied

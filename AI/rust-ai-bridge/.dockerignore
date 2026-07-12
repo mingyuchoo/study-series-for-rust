@@ -1,0 +1,14 @@
+# 빌드 컨텍스트에서 제외 (docker/Dockerfile 은 리포지토리 루트를 컨텍스트로 씁니다).
+target/
+.git/
+dist/
+
+# 로컬 상태·비밀값은 이미지에 들어가면 안 됩니다.
+.env
+*.db
+*.db-shm
+*.db-wal
+
+# 런타임에 필요 없는 것들
+docs/
+README.md

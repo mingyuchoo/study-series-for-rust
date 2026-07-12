@@ -1,0 +1,30 @@
+# ERP 조회 골든셋 — LLM 없이 게이트웨이에 도구 호출을 스크립트합니다.
+suite: erp-read
+cases:
+  - id: invoice-paid
+    principal: emp-sales-01
+    prompt: "INV-2026-0001 결제됐어?"
+    steps:
+      - tool: get_invoice_status
+        args:
+          invoice_id: INV-2026-0001
+    expect:
+      tools_called: [get_invoice_status]
+      tools_not_called: [process_refund]
+      tool_decisions:
+        get_invoice_status: allowed
+      reply_contains: ["paid"]
+      outcome: completed
+
+  - id: invoice-not-found
+    principal: emp-sales-01
+    prompt: "없는 송장"
+    steps:
+      - tool: get_invoice_status
+        args:
+          invoice_id: INV-DOES-NOT-EXIST
+    expect:
+      tools_called: [get_invoice_status]
+      tool_decisions:
+        get_invoice_status: denied
+      outcome: completed

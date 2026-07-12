@@ -1,0 +1,42 @@
+# 핫 등록 가능한 remote 도구 카탈로그
+#
+# 게이트웨이가 -tools-catalog 로 이 파일을 읽습니다(기본: config/tools-dynamic.yaml).
+# 파일이 비어 있거나 tools: [] 이면 동적 도구가 없습니다.
+# SIGHUP 시 인벤토리 재로드 후 이 카탈로그를 다시 읽어 레지스트리·MCP 에 반영합니다.
+#
+# 각 도구는 POST {base_url}/tools/{name} 으로 호출됩니다(X-User-Id 전달).
+# base_url 이 비면 인벤토리에서 같은 system 의 rest/soap base_url 을 씁니다.
+#
+# 예시 (주석 해제 후 사용):
+#
+# version: "1"
+# tools:
+#   - name: get_order_status
+#     description: 주문 상태 조회
+#     system: order
+#     base_url: "http://localhost:9100"
+#     access: read
+#     risk_level: L1
+#     sensitivity: internal
+#     required_permissions: [order.read]
+#     rate_limit_per_min: 60
+#     log_retention_days: 180
+#     timeout_ms: 3000
+#     max_retries: 2
+#     fallback: 주문 포털을 이용하세요
+#     input_schema:
+#       type: object
+#       properties:
+#         order_id: { type: string, description: "주문 ID" }
+#       required: [order_id]
+#       additionalProperties: false
+#     output_schema:
+#       type: object
+#       properties:
+#         order_id: { type: string }
+#         status: { type: string }
+#       required: [order_id, status]
+#       additionalProperties: false
+
+version: "1"
+tools: []

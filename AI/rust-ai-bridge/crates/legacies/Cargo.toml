@@ -1,0 +1,31 @@
+[package]
+name = "legacies"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "레거시 시스템 어댑터 구현과 Transport (REST · SOAP · DB · File)"
+
+[lints]
+workspace = true
+
+[dependencies]
+ai-bridge.workspace = true
+
+tokio.workspace = true
+async-trait.workspace = true
+futures.workspace = true
+
+serde.workspace = true
+serde_json.workspace = true
+
+reqwest.workspace = true
+sqlx.workspace = true
+
+sha2.workspace = true
+hex.workspace = true
+regex.workspace = true
+chrono.workspace = true
+thiserror.workspace = true
+anyhow.workspace = true
+tracing.workspace = true

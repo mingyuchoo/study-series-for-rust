@@ -1,0 +1,76 @@
+[workspace]
+resolver = "3"
+members = ["crates/ai-bridge", "crates/legacies", "crates/bridge-cli"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.90"
+license = "MIT"
+
+[workspace.dependencies]
+ai-bridge = { path = "crates/ai-bridge" }
+legacies = { path = "crates/legacies" }
+
+# --- async / runtime ---
+tokio = { version = "1.52", features = ["full"] }
+async-trait = "0.1"
+futures = "0.3"
+
+# --- serialization ---
+serde = { version = "1", features = ["derive"] }
+# NOTE: preserve_order 를 켜면 안 됩니다. Go encoding/json 은 맵 키를 사전순으로
+# 정렬하며, 감사 해시 체인·승인 지문이 그 순서에 의존합니다. serde_json 의 기본
+# BTreeMap 백엔드가 정확히 같은 순서를 냅니다.
+serde_json = "1"
+serde_norway = "0.9"
+
+# --- MCP ---
+rmcp = { version = "=2.2.0", features = [
+    "server",
+    "transport-io",
+    "transport-streamable-http-server",
+] }
+
+# --- HTTP ---
+axum = "0.8"
+tower = "0.5"
+tower-http = { version = "0.6", features = ["trace"] }
+http = "1"
+reqwest = { version = "0.13", features = ["json"] }
+maud = "0.27"
+
+# --- storage ---
+sqlx = { version = "0.9", features = [
+    "runtime-tokio",
+    "sqlite",
+    "postgres",
+    "chrono",
+] }
+redis = { version = "1", features = ["tokio-comp", "script"] }
+
+# --- validation / crypto / util ---
+jsonschema = "0.47"
+sha2 = "0.11"
+hex = "0.4"
+rand = "0.10"
+regex = "1"
+chrono = { version = "0.4", features = ["serde"] }
+ipnet = "2"
+clap = { version = "4", features = ["derive"] }
+thiserror = "2"
+anyhow = "1"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+arc-swap = "1"
+tempfile = "3"
+
+# --- telemetry ---
+opentelemetry = { version = "0.32", features = ["metrics", "trace"] }
+opentelemetry_sdk = { version = "0.32", features = ["metrics", "trace"] }
+opentelemetry-prometheus = "0.32"
+prometheus = "0.14"
+
+[workspace.lints.clippy]
+uninlined_format_args = "allow"
+too_many_arguments = "allow"

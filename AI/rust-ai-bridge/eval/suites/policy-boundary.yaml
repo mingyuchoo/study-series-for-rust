@@ -1,0 +1,32 @@
+# 정책·승인 경계
+suite: policy-boundary
+cases:
+  - id: draft-purchase-l2-no-approval
+    principal: emp-sales-01
+    prompt: "발주 초안"
+    steps:
+      - tool: draft_purchase_request
+        args:
+          item: "노트북"
+          quantity: 2
+          reason: "업무용"
+    expect:
+      tools_called: [draft_purchase_request]
+      tool_decisions:
+        draft_purchase_request: allowed
+      tools_not_called: [process_refund]
+      outcome: completed
+
+  - id: refund-l4-blocked-by-default
+    principal: emp-sales-01
+    prompt: "환불"
+    allow_high_risk: false
+    steps:
+      - tool: process_refund
+        args:
+          invoice_id: INV-2026-0001
+          reason: "테스트"
+    expect:
+      tools_called: [process_refund]
+      tool_decisions:
+        process_refund: denied

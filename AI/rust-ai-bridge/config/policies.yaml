@@ -1,0 +1,191 @@
+# AI Integration Gateway 정책 파일
+#
+# RBAC(역할→권한)와 ABAC(속성/인자 조건 기반 규칙)를 함께 정의합니다.
+# 판단 순서: RBAC 권한 확인 → ABAC 규칙 → 승인 필요 여부 결정.
+#
+# 규칙 하나는 적용 범위(applies_to_tools / applies_to_roles / applies_to_systems)와
+# 술어 목록(when)을 가집니다. 술어는 모두 참일 때만(AND) 규칙이 발동합니다.
+# OR가 필요하면 규칙을 둘로 나누세요.
+#
+# effect:
+#   deny                   — 호출을 거부합니다(생략 시 기본값).
+#   require_approval       — 허용하되 사람의 승인을 요구합니다. 낮은 위험 등급의
+#                            도구를 조건부로 승인 대상으로 올릴 때 씁니다.
+#   allow_with_obligations — 허용하되 출력을 좁힙니다. 허용/거부로 표현할 수 없는
+#                            "요약만 가능", "마스킹 후 전달" 같은 정책에 씁니다.
+#                            deny/require_approval 과 달리 when 을 생략할 수 있습니다.
+#
+# obligations (allow_with_obligations 전용):
+#   mask_fields   출력에서 추가로 마스킹할 필드. 도구 명세의 MaskFields 와 합집합.
+#   redact_fields 출력에서 아예 제거할 필드. 마스킹해도 의미 없는 것에 씁니다.
+#   max_rows      배열 필드에서 남길 최대 원소 수. 잘리면 truncated: true 가 붙습니다.
+#
+# 연산자(술어당 정확히 하나):
+#   equals / not_equals / in / not_in       — 문자열 비교
+#   gt / gte / lt / lte                     — 숫자 비교
+#   in_attribute / not_in_attribute         — 인자 값을 주체 속성 목록과 대조
+
+version: "2026-07-11.1"
+
+# --- RBAC: 역할별 권한 ---
+roles:
+  sales: # 영업팀
+    permissions:
+      - crm.customer.read
+      - crm.contract.read
+      - ticket.read
+      - ticket.write
+      - docs.read
+  finance: # 재무팀
+    permissions:
+      - erp.invoice.read
+      - purchase.draft # L2: 발주 초안 작성 (승인 불필요)
+      - purchase.submit # L3: 발주 제출 (승인 필요)
+      - refund.execute # L4: 환불 집행 (보안 심사 + 승인 필요)
+      - workflow.read # 업무 흐름 실행 상태 조회
+      - docs.read
+  support: # 고객지원팀
+    permissions:
+      - ticket.read
+      - ticket.write
+      - crm.customer.read
+      - docs.read
+  hr: # 인사팀 — 임원 보상 등 인사 문서 열람
+    permissions:
+      - docs.read
+  admin: # 관리자 — 모든 권한
+    permissions:
+      - "*"
+
+# --- ABAC: 규칙 ---
+rules:
+  # 외부 LLM 목적지에는 고객 직접식별정보를 전달하지 않습니다.
+  - id: external-llm-customer-data-redacted
+    description: 외부 LLM에는 고객 직접식별정보를 전달하지 않습니다.
+    effect: allow_with_obligations
+    applies_to_tools: [get_customer_profile]
+    when:
+      - attribute: llm_destination
+        equals: external
+    obligations:
+      redact_fields: [rrn, phone, email]
+
+  # 고객 조회에는 인증 프록시가 검증한 업무 목적 코드가 필요합니다.
+  - id: customer-access-requires-purpose
+    description: 고객 조회에는 승인된 업무 목적이 필요합니다.
+    effect: deny
+    applies_to_tools: [get_customer_profile, get_customer_invoices]
+    when:
+      - attribute: business_purpose
+        not_in: [customer_support, sales_followup, finance_review]
+
+  # 사내망에서만 접근할 수 있습니다. network_zone 속성이 없는 주체도
+  # 거부됩니다(not_equals는 결측값을 참으로 봅니다).
+  - id: internal-network-only
+    description: 사내망(internal)에서만 접근할 수 있습니다.
+    effect: deny
+    when:
+      - attribute: network_zone
+        not_equals: internal
+
+  # 업무시간에만 조회할 수 있습니다.
+  - id: business-hours-only
+    description: 업무시간에만 조회할 수 있습니다.
+    effect: deny
+    when:
+      - attribute: business_hours
+        equals: "false"
+
+  # 영업팀에만 적용됩니다. 재무팀은 담당 고객 개념이 없으므로 이 규칙에
+  # 걸리지 않고 전사 송장을 조회할 수 있습니다.
+  - id: sales-own-customers-only
+    description: 영업팀은 담당 고객만 조회할 수 있습니다.
+    effect: deny
+    applies_to_roles:
+      - sales
+    applies_to_tools:
+      - get_customer_profile
+      - get_customer_invoices
+    when:
+      - arg: customer_id
+        not_in_attribute: managed_customers
+
+  # 금액 기반 승인 규칙. submit_purchase_request는 amount를 인자로 받으므로
+  # 정책 엔진이 금액을 근거로 판단할 수 있습니다(어댑터가 초안과 대조합니다).
+  - id: large-purchase-denied
+    description: 500만원 이상 발주는 도구로 처리할 수 없습니다. 구매팀 대면 결재가 필요합니다.
+    effect: deny
+    applies_to_tools:
+      - submit_purchase_request
+    when:
+      - arg: amount
+        gte: 5000000
+
+  # 승인 상향(escalation). draft_purchase_request는 L2라 원래 승인이 필요
+  # 없지만, 대량 발주 초안은 사전 검토를 받게 합니다. 두 술어가 AND로
+  # 결합되므로 "노트북을 10대 이상" 초안낼 때만 발동합니다.
+  - id: bulk-laptop-draft-needs-approval
+    description: 노트북 10대 이상 발주 초안은 관리자 사전 승인이 필요합니다.
+    effect: require_approval
+    applies_to_tools:
+      - draft_purchase_request
+    when:
+      - arg: item
+        equals: 노트북
+      - arg: quantity
+        gte: 10
+
+  # --- 의무(obligation) 규칙 ---
+  #
+  # 아래 두 규칙은 REQUIRE 5-C의 정책 예시를 그대로 옮긴 것입니다. 허용/거부
+  # 2분법으로는 표현할 수 없고, 출력을 좁혀야만 표현됩니다.
+
+  # "고객 개인정보는 마스킹 후 LLM에 전달"
+  #
+  # 고객지원팀은 티켓 처리를 위해 고객을 조회해야 하지만 연락처까지 볼 필요는
+  # 없습니다. 같은 도구, 같은 권한이어도 역할에 따라 결과가 달라집니다.
+  # when 을 생략했으므로 support 역할의 get_customer_profile 호출에 항상 걸립니다.
+  - id: support-sees-masked-contacts
+    description: 고객지원팀에게는 고객 연락처가 마스킹되어 전달됩니다.
+    effect: allow_with_obligations
+    applies_to_roles: [support]
+    applies_to_tools: [get_customer_profile]
+    obligations:
+      mask_fields: [phone, email]
+
+  # "재무 데이터는 요약만 가능하고 원본 다운로드 불가"
+  #
+  # 영업팀은 계약을 검색할 수 있지만, 계약 금액은 재무 정보이므로 마스킹하고
+  # 체결일 원본은 제거하며, 한 번에 3건까지만 봅니다. 대량 조회로 계약 원장을
+  # 통째로 퍼가는 것을 막습니다.
+  - id: sales-contract-summary-only
+    description: 영업팀의 계약 검색은 요약만 제공하며 한 번에 3건까지입니다.
+    effect: allow_with_obligations
+    applies_to_roles: [sales]
+    applies_to_tools: [search_contracts]
+    obligations:
+      mask_fields: [amount]
+      redact_fields: [signed_at]
+      max_rows: 3
+
+  # 키워드 없는 전체 조회는 더 좁힙니다. 같은 도구에 두 의무 규칙이 걸리면
+  # 필드 목록은 합집합으로 누적되고, max_rows 는 더 엄격한(작은) 쪽이 이깁니다.
+  - id: unfiltered-contract-search-narrowed
+    description: 키워드 없는 계약 전체 조회는 1건만 반환합니다.
+    effect: allow_with_obligations
+    applies_to_tools: [search_contracts]
+    when:
+      - arg: keyword
+        equals: ""
+    obligations:
+      max_rows: 1
+
+  # 수량 상한. 술어가 하나뿐이므로 품목과 무관하게 적용됩니다.
+  - id: excessive-quantity-denied
+    description: 한 번에 100개를 초과하는 발주는 도구로 처리할 수 없습니다.
+    effect: deny
+    applies_to_tools:
+      - draft_purchase_request
+    when:
+      - arg: quantity
+        gt: 100

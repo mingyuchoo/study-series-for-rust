@@ -1,0 +1,90 @@
+# 레거시 시스템 인벤토리
+#
+# "AI가 어디까지 해도 되는지"를 통제하려면 먼저 무엇이 있는지 알아야 합니다.
+# 이 파일은 문서가 아니라 코드가 읽는 설정입니다. 인벤토리와 코드가 어긋나면
+# 게이트웨이가 기동하지 않습니다.
+#
+#   - 권한 부족 시 게이트웨이가 owner_team/contact 을 안내합니다.
+#   - interface: rest 인 시스템은 base_url 로 실제 호출합니다.
+#   - 인벤토리에 없는 시스템의 도구는 등록되지 않습니다.
+#   - capabilities 에 쓰기 기능이 없으면 쓰기 도구를 붙일 수 없습니다.
+#
+# 필드 값:
+#   interface        rest | soap | db | file | batch | rpa | mainframe | memory
+#   capabilities     read | create | update | delete | approve
+#   data_sensitivity personal | financial | trade_secret | general
+#   auth_method      sso | api_key | db_account | vpn | none
+#   failure_impact   low | medium | high
+#   realtime         realtime | near_realtime | batch
+
+systems:
+  - name: erp
+    display_name: ERP (송장·결제)
+    interface: rest
+    # 비워두면 인메모리 백엔드를 씁니다(개발·테스트용).
+    # 운영에서는 실제 ERP REST base_url 을 넣으십시오.
+    base_url: ""
+    data_sensitivity: [financial]
+    capabilities: [read]
+    owner_team: 재무팀
+    contact: finance-help@example.com
+    auth_method: api_key
+    failure_impact: high
+    realtime: realtime
+
+  - name: crm
+    display_name: CRM (고객·계약)
+    interface: memory
+    data_sensitivity: [personal, trade_secret]
+    capabilities: [read]
+    owner_team: 영업지원팀
+    contact: sales-support@example.com
+    auth_method: sso
+    failure_impact: medium
+    realtime: realtime
+
+  - name: ticket
+    display_name: 헬프데스크 티켓
+    interface: memory
+    data_sensitivity: [general]
+    # create 가 선언되어 있으므로 create_support_ticket(쓰기)을 등록할 수 있습니다.
+    capabilities: [read, create]
+    owner_team: 고객지원팀
+    contact: helpdesk@example.com
+    auth_method: sso
+    failure_impact: low
+    realtime: realtime
+
+  - name: docs
+    display_name: 사내 문서 검색 (RAG)
+    interface: memory
+    data_sensitivity: [general, trade_secret]
+    capabilities: [read]
+    owner_team: IT운영팀
+    contact: it-ops@example.com
+    auth_method: sso
+    failure_impact: low
+    realtime: near_realtime
+
+  - name: purchase
+    display_name: 구매·발주
+    interface: memory
+    data_sensitivity: [financial]
+    capabilities: [read, create, approve]
+    owner_team: 구매팀
+    contact: procurement@example.com
+    auth_method: sso
+    failure_impact: medium
+    realtime: near_realtime
+
+  - name: refund
+    display_name: 환불 처리 (다단계 업무 흐름)
+    interface: memory
+    data_sensitivity: [financial, personal]
+    # update 가 선언되어 있으므로 process_refund(L4 쓰기)를 등록할 수 있습니다.
+    capabilities: [read, create, update]
+    owner_team: 재무팀
+    contact: finance-help@example.com
+    auth_method: sso
+    failure_impact: high
+    realtime: realtime

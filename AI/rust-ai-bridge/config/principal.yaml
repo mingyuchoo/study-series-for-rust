@@ -1,0 +1,77 @@
+# 호출 주체(principal) 정의
+#
+# 두 가지 형태를 씁니다.
+#
+#   user_id: ...      단일 주체. stdio 전송에서 게이트웨이가 "어떤 사용자로"
+#                     동작하는지 정의합니다.
+#   principals: [...] 여러 주체. -http 전송에서 X-User-Id 헤더로 골라집니다.
+#
+# 실제 운영에서는 SSO/JWT/세션에서 주체를 해석해 이 파일을 대체합니다.
+#
+# 환경 속성(business_hours, network_zone, request_time)은 여기 적지 마세요.
+# 게이트웨이가 요청 시점에 계산해 덮어씁니다. 주체가 "지금은 업무시간이고 나는
+# 사내망에 있다"고 스스로 주장하게 두면 ABAC 규칙이 통제하는 척만 하게 됩니다.
+
+principals:
+  # 데모 주체. 영업팀 + 재무팀 역할을 가지며 CUST-1001/1002를 담당합니다.
+  - user_id: emp-sales-01
+    department: 영업지원팀
+    roles:
+      - sales
+      - finance
+    attributes:
+      managed_customers:
+        - CUST-1001
+        - CUST-1002
+
+  # 담당 고객이 다른 영업사원. 같은 역할이어도 CUST-1001을 조회할 수 없습니다.
+  # -http 전송에서 X-User-Id: emp-sales-02 로 호출하면 확인할 수 있습니다.
+  - user_id: emp-sales-02
+    department: 영업지원팀
+    roles:
+      - sales
+    attributes:
+      managed_customers:
+        - CUST-2001
+
+  # 고객지원팀. 티켓과 고객 조회만 가능하고 발주·환불 권한은 없습니다.
+  - user_id: emp-support-01
+    department: 고객지원팀
+    roles:
+      - support
+
+  # 관리자. 운영 콘솔(-console) 접근에 admin 역할이 필요합니다.
+  # 승인 결정도 여기서 합니다 — 요청자와 달라야 하므로 업무 담당자와 분리합니다.
+  - user_id: manager-01
+    department: IT운영팀
+    roles:
+      - admin
+
+  # 자율 실행 AI 에이전트. kind: agent 로 사람과 구분합니다.
+  #
+  # roles 가 준 권한 중에서 allowed_tools / allowed_systems 로 스코프를 더
+  # 좁힙니다(넓히지는 못함). 아래 에이전트는 support 역할을 갖지만, 실제로는
+  # 티켓 조회·생성과 문서 검색 세 가지 도구, ticket·docs 두 시스템만 씁니다.
+  # 목록 밖 도구는 역할이 허용해도 게이트웨이가 permission_denied 로 막습니다.
+  #
+  # 인증: 사람과 달리 에이전트는 앞단 프록시가 신원을 보증하지 않으므로 자기
+  # 토큰으로 인증합니다(Authorization: Bearer). HTTP 전송에서 에이전트는
+  # X-User-Id 헤더만으로는 인증되지 않습니다 — 헤더 사칭을 막기 위함입니다.
+  # 토큰을 발급하려면:
+  #   scripts/run.sh agent-token -- -user agent-support-bot
+  # 출력된 AGENT_TOKEN 은 에이전트에만 전달하고, token_sha256 값만 아래에
+  # 넣으세요(평문 토큰은 이 파일이나 git 에 절대 두지 마십시오):
+  #   token_sha256: <64자리 hex>
+  # 토큰이 없으면 이 에이전트는 HTTP 로 인증할 수 없습니다(동시에 사칭도 불가).
+  - user_id: agent-support-bot
+    kind: agent
+    department: 고객지원팀
+    roles:
+      - support
+    allowed_tools:
+      - get_ticket_status
+      - create_support_ticket
+      - search_documents
+    allowed_systems:
+      - ticket
+      - docs

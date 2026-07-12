@@ -1,0 +1,85 @@
+name: rust-ai-bridge
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-gateway}
+      POSTGRES_USER: ${POSTGRES_USER:-gateway}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-gateway-dev-password}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+    restart: unless-stopped
+
+  gateway:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    image: ${IMAGE:-rust-ai-bridge}:${TAG:-latest}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    # Azure OpenAI 키 등은 리포지토리 루트 .env 에서 읽습니다 (없으면 건너뜁니다).
+    env_file:
+      - path: ../.env
+        required: false
+    environment:
+      RUST_LOG: ${RUST_LOG:-info}
+    # BUSINESS_START/END 기본값 0 은 업무시간 제한 해제입니다(개발용).
+    # 주의: business-hours-only 정책 규칙은 주말도 업무시간이 아님으로 보므로
+    # 토·일에는 이 값을 0 으로 둬도 해당 규칙이 호출을 거부합니다.
+    command:
+      - gateway
+      - --http=:8080
+      - --console=:8081
+      - --console-user=${CONSOLE_USER:-manager-01}
+      - --metrics=:9464
+      - --postgres-dsn=postgres://${POSTGRES_USER:-gateway}:${POSTGRES_PASSWORD:-gateway-dev-password}@postgres:5432/${POSTGRES_DB:-gateway}?sslmode=disable
+      - --redis-url=redis://redis:6379/0
+      - --allow-mock-backends
+      - --business-purpose=${BUSINESS_PURPOSE:-sales_followup}
+      - --llm-destination=${LLM_DESTINATION:-internal}
+      - --business-start=${BUSINESS_START:-0}
+      - --business-end=${BUSINESS_END:-0}
+    ports:
+      - "${HTTP_PORT:-8080}:8080"
+      - "${CONSOLE_PORT:-8081}:8081"
+      - "${METRICS_PORT:-9464}:9464"
+    volumes:
+      - gateway-data:/app/data
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "-o", "/dev/null", "http://localhost:8081/readyz"]
+      interval: 3s
+      timeout: 3s
+      retries: 40
+      start_period: 5s
+    init: true
+    restart: unless-stopped
+
+volumes:
+  postgres-data:
+  redis-data:
+  gateway-data:
