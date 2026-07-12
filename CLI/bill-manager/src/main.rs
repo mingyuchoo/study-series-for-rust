@@ -1,6 +1,6 @@
-use std::collections::HashMap;
-use std::io;
-use std::io::Write;
+use std::{collections::HashMap,
+          io,
+          io::Write};
 
 #[derive(Debug, Clone)]
 struct Bill {
@@ -53,13 +53,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 fn main_menu() {
     fn show() {
-        println!("");
+        println!();
         println!("== Manage Bills ==");
         println!("1. View   bills");
         println!("2. Add    bill");
         println!("3. Update bill");
         println!("4. Remove bill");
-        println!("");
+        println!();
         print!("Enter menu number which you want to do: ");
         let _ = io::stdout().flush();
     }
@@ -164,7 +164,7 @@ fn get_input() -> Option<String> {
     let input = buffer.trim().to_owned();
 
     match input {
-        | input if &input == "" => None,
+        | input if input.is_empty() => None,
         | _ => Some(input),
     }
 }
@@ -175,7 +175,7 @@ fn get_bill_amount() -> Option<f64> {
 
     loop {
         let input: String = match get_input() {
-            | Some(input) if &input == "" => return None,
+            | Some(input) if input.is_empty() => return None,
             | Some(input) => input,
             | None => "".to_owned(),
         };

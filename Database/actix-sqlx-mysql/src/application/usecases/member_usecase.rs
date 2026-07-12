@@ -1,4 +1,5 @@
-use crate::domain::{Member, MemberRepository};
+use crate::domain::{Member,
+                    MemberRepository};
 use std::sync::Arc;
 
 /// Member 유스케이스

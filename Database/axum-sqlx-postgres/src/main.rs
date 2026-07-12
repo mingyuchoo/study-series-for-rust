@@ -1,5 +1,5 @@
-use axum_sqlx_postgres::infra::app::create_app;
-use axum_sqlx_postgres::infra::setup::init_app_state;
+use axum_sqlx_postgres::infra::{app::create_app,
+                                setup::init_app_state};
 use dotenvy::dotenv;
 use tracing::info;
 

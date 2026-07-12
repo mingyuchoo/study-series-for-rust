@@ -1,4 +1,5 @@
-use sqlx::{MySql, Pool};
+use sqlx::{MySql,
+           Pool};
 
 /// 데이터베이스 초기화: 테이블 생성 및 샘플 데이터 삽입
 pub async fn initialize_database(pool: &Pool<MySql>) -> Result<(), sqlx::Error> {

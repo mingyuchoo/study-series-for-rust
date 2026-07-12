@@ -1,8 +1,10 @@
-use crate::app_error::{AppError, AppResult};
-use crate::use_cases::user::UserCredentialsHasher;
-use argon2::Argon2;
-use argon2::password_hash::rand_core::OsRng;
-use argon2::password_hash::{PasswordHasher, SaltString};
+use crate::{app_error::{AppError,
+                        AppResult},
+            use_cases::user::UserCredentialsHasher};
+use argon2::{Argon2,
+             password_hash::{PasswordHasher,
+                             SaltString,
+                             rand_core::OsRng}};
 
 #[derive(Default)]
 pub struct ArgonPasswordHasher {

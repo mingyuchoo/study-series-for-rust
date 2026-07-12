@@ -1,6 +1,6 @@
-use crate::adapters::crypto::argon2::ArgonPasswordHasher;
-use crate::adapters::persistence::PostgresPersistence;
-use crate::infra::db::init_db;
+use crate::{adapters::{crypto::argon2::ArgonPasswordHasher,
+                       persistence::PostgresPersistence},
+            infra::db::init_db};
 
 pub mod app;
 pub mod config;

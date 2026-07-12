@@ -1,4 +1,5 @@
-use sqlx::{MySql, Pool};
+use sqlx::{MySql,
+           Pool};
 
 /// MySQL 데이터베이스 연결 풀을 생성합니다.
 pub async fn create_pool(database_url: &str) -> Result<Pool<MySql>, sqlx::Error> { sqlx::MySqlPool::connect(database_url).await }

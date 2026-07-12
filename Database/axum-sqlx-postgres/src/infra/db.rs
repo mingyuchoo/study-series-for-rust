@@ -1,5 +1,5 @@
-use sqlx::PgPool;
-use sqlx::postgres::PgPoolOptions;
+use sqlx::{PgPool,
+           postgres::PgPoolOptions};
 use std::env;
 use tracing::info;
 

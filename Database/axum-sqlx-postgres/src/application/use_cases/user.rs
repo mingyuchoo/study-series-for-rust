@@ -1,9 +1,11 @@
 use crate::app_error::AppResult;
 use async_trait::async_trait;
 use chrono::NaiveDateTime;
-use secrecy::{ExposeSecret, SecretString};
+use secrecy::{ExposeSecret,
+              SecretString};
 use std::sync::Arc;
-use tracing::{info, instrument};
+use tracing::{info,
+              instrument};
 use uuid::Uuid;
 #[async_trait]
 pub trait UserPersistence: Send + Sync {

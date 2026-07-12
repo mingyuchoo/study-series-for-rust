@@ -1,15 +1,23 @@
-use crate::adapters::http::app_state::AppState;
-use crate::app_error::AppResult;
-use crate::use_cases::user::{UserListItem, UserUseCases};
-use axum::extract::{Path, State};
-use axum::http::StatusCode;
-use axum::response::IntoResponse;
-use axum::routing::{delete, get, post, put};
-use axum::{Json, Router};
+use crate::{adapters::http::app_state::AppState,
+            app_error::AppResult,
+            use_cases::user::{UserListItem,
+                              UserUseCases}};
+use axum::{Json,
+           Router,
+           extract::{Path,
+                     State},
+           http::StatusCode,
+           response::IntoResponse,
+           routing::{delete,
+                     get,
+                     post,
+                     put}};
 use secrecy::SecretString;
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize,
+            Serialize};
 use std::sync::Arc;
-use tracing::{info, instrument};
+use tracing::{info,
+              instrument};
 use utoipa::ToSchema;
 
 pub fn router() -> Router<AppState> {

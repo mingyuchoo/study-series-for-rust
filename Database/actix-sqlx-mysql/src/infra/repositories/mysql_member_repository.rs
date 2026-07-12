@@ -1,6 +1,9 @@
-use crate::domain::{Member, MemberRepository};
+use crate::domain::{Member,
+                    MemberRepository};
 use async_trait::async_trait;
-use sqlx::{MySql, Pool, Row};
+use sqlx::{MySql,
+           Pool,
+           Row};
 
 /// MySQL을 사용하는 MemberRepository 구현체
 /// 도메인 계층의 MemberRepository 트레이트를 구현합니다.

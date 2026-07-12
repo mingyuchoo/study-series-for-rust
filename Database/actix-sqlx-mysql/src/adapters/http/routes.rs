@@ -1,4 +1,10 @@
-use super::handlers::{create_member, delete_member, get_all_members, get_member, get_member_count, health_check, update_member};
+use super::handlers::{create_member,
+                      delete_member,
+                      get_all_members,
+                      get_member,
+                      get_member_count,
+                      health_check,
+                      update_member};
 use actix_web::web;
 
 /// HTTP 라우트를 구성합니다.

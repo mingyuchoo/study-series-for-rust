@@ -1,11 +1,13 @@
-use crate::adapters::http::app_state::AppState;
-use crate::adapters::{self};
-use crate::infra::openapi::ApiDoc;
-use crate::infra::setup::init_tracing;
-use axum::{Router, http};
-use http::header::{AUTHORIZATION, CONTENT_TYPE};
-use tower_http::cors::CorsLayer;
-use tower_http::trace::TraceLayer;
+use crate::{adapters::{http::app_state::AppState,
+                       {self}},
+            infra::{openapi::ApiDoc,
+                    setup::init_tracing}};
+use axum::{Router,
+           http};
+use http::header::{AUTHORIZATION,
+                   CONTENT_TYPE};
+use tower_http::{cors::CorsLayer,
+                 trace::TraceLayer};
 use utoipa::OpenApi;
 use utoipa_swagger_ui::SwaggerUi;
 use uuid::Uuid;

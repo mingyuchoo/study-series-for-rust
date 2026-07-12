@@ -31,17 +31,53 @@
   command      = "cargo"
   dependencies = ["format"]
 
+# 로컬 개발용 PostgreSQL (호스트 5433)
+[tasks.postgres-up]
+  script = '''
+  #!/usr/bin/env bash
+  set -euo pipefail
+  COMPOSE_FILE="docker/docker-compose.yaml"
+  CONTAINER="axum-sqlx-postgres-db"
+  TIMEOUT="${POSTGRES_WAIT_TIMEOUT:-60}"
+
+  if ! command -v docker >/dev/null 2>&1; then
+    echo "❌ Docker 가 필요합니다. PostgreSQL 컨테이너를 기동할 수 없습니다."
+    exit 1
+  fi
+  if ! docker info >/dev/null 2>&1; then
+    echo "❌ Docker 데몬에 연결할 수 없습니다."
+    exit 1
+  fi
+
+  docker compose -f "${COMPOSE_FILE}" up -d postgres
+
+  elapsed=0
+  while (( elapsed < TIMEOUT )); do
+    if docker inspect -f '{{.State.Health.Status}}' "${CONTAINER}" 2>/dev/null | grep -qx healthy; then
+      echo "✅ PostgreSQL ready (${CONTAINER}, host port 5433)"
+      exit 0
+    fi
+    sleep 1
+    elapsed=$((elapsed + 1))
+  done
+
+  echo "❌ PostgreSQL 이 ${TIMEOUT}s 내에 healthy 가 되지 않았습니다"
+  docker compose -f "${COMPOSE_FILE}" ps || true
+  docker compose -f "${COMPOSE_FILE}" logs --tail=50 postgres || true
+  exit 1
+  '''
+
 [tasks.watch-run]
   # `cargo install cargo-watch`로 설치
   args          = ["watch", "-x", "run"]
   command       = "cargo"
-  dependencies  = ["format"]
+  dependencies  = ["format", "postgres-up"]
   install_crate = "cargo-watch"
 
 [tasks.run]
   args         = ["run"]
   command      = "cargo"
-  dependencies = ["format"]
+  dependencies = ["format", "postgres-up"]
 
 # Docker Compose helpers
 [tasks.docker-compose-up]

@@ -1,5 +1,5 @@
-use crate::infra::config::AppConfig;
-use crate::use_cases::user::UserUseCases;
+use crate::{infra::config::AppConfig,
+            use_cases::user::UserUseCases};
 use axum::extract::FromRef;
 use std::sync::Arc;
 

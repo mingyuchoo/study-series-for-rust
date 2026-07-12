@@ -1,5 +1,6 @@
 use crate::domain::Member;
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize,
+            Serialize};
 
 /// Member 생성 요청 DTO
 #[derive(Debug, Deserialize)]

@@ -1,8 +1,12 @@
-use actix_sqlx_mysql::adapters::http::configure_routes;
-use actix_sqlx_mysql::application::MemberUseCase;
-use actix_sqlx_mysql::infra::database::{create_pool, get_database_url, initialize_database};
-use actix_sqlx_mysql::infra::repositories::MySqlMemberRepository;
-use actix_web::{App, HttpServer, web};
+use actix_sqlx_mysql::{adapters::http::configure_routes,
+                       application::MemberUseCase,
+                       infra::{database::{create_pool,
+                                          get_database_url,
+                                          initialize_database},
+                               repositories::MySqlMemberRepository}};
+use actix_web::{App,
+                HttpServer,
+                web};
 use std::sync::Arc;
 
 #[actix_web::main]

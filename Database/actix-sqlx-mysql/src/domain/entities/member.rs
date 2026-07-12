@@ -1,4 +1,5 @@
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize,
+            Serialize};
 
 /// Member 도메인 엔티티
 /// 비즈니스 로직의 핵심 개념을 표현하며 외부 프레임워크에 독립적입니다.

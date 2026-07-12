@@ -1,7 +1,10 @@
-use crate::adapters::persistence::PostgresPersistence;
-use crate::app_error::{AppError, AppResult};
-use crate::entities::user::User;
-use crate::use_cases::user::{UserDetail, UserListItem, UserPersistence};
+use crate::{adapters::persistence::PostgresPersistence,
+            app_error::{AppError,
+                        AppResult},
+            entities::user::User,
+            use_cases::user::{UserDetail,
+                              UserListItem,
+                              UserPersistence}};
 use async_trait::async_trait;
 use chrono::NaiveDateTime;
 use serde::Serialize;

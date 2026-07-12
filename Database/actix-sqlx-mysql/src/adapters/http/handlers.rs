@@ -1,6 +1,13 @@
-use super::models::{CreateMemberRequest, ErrorResponse, MemberResponse, MembersResponse, SuccessResponse, UpdateMemberRequest};
+use super::models::{CreateMemberRequest,
+                    ErrorResponse,
+                    MemberResponse,
+                    MembersResponse,
+                    SuccessResponse,
+                    UpdateMemberRequest};
 use crate::application::MemberUseCase;
-use actix_web::{HttpResponse, Responder, web};
+use actix_web::{HttpResponse,
+                Responder,
+                web};
 use std::sync::Arc;
 
 /// 헬스 체크 핸들러
