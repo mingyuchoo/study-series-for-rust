@@ -175,3 +175,63 @@ fn address_card(addr: &Address) -> Element<'_, Message> {
         .width(Length::Fill)
         .into()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use application::usecases::AddressUseCases;
+    use domain::{error::RepositoryError,
+                 repositories::AddressRepository};
+    use std::sync::Arc;
+
+    struct EmptyRepository;
+    impl AddressRepository for EmptyRepository {
+        fn create(&self, address: Address) -> Result<Address, RepositoryError> { Ok(address) }
+
+        fn read(&self, _id: i64) -> Result<Option<Address>, RepositoryError> { Ok(None) }
+
+        fn read_all(&self) -> Result<Vec<Address>, RepositoryError> { Ok(Vec::new()) }
+
+        fn update(&self, address: Address) -> Result<Address, RepositoryError> { Ok(address) }
+
+        fn delete(&self, _id: i64) -> Result<(), RepositoryError> { Ok(()) }
+    }
+
+    fn app() -> AddressBook {
+        AddressBook {
+            usecases: Arc::new(AddressUseCases::new(Arc::new(EmptyRepository))),
+            addresses: Vec::new(),
+            name_input: String::new(),
+            phone_input: String::new(),
+            email_input: String::new(),
+            address_input: String::new(),
+            editing_id: None,
+            error_message: None,
+        }
+    }
+
+    #[test]
+    fn view_builds_for_empty_error_and_editing_states() {
+        let mut app = app();
+        drop(app.view());
+        app.error_message = Some("failed".into());
+        app.editing_id = Some(1);
+        app.addresses = vec![
+            Address {
+                id: Some(1),
+                name: "Alice".into(),
+                phone: "010".into(),
+                email: "a@b.com".into(),
+                address: "Seoul".into(),
+            },
+            Address {
+                id: None,
+                name: "Draft".into(),
+                phone: "011".into(),
+                email: "d@b.com".into(),
+                address: "Busan".into(),
+            },
+        ];
+        drop(app.view());
+    }
+}

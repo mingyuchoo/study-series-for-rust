@@ -238,3 +238,49 @@ pub fn input(_theme: &Theme, status: text_input::Status) -> text_input::Style {
         selection: SELECTION,
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn container_and_application_styles_use_design_tokens() {
+        let theme = Theme::Light;
+        let app = crate::update::tests::app_for_theme_test();
+        assert_eq!(application(&app, &theme).background_color, CANVAS);
+        assert_eq!(card(&theme).background, Some(Background::Color(SURFACE)));
+        assert_eq!(error_banner(&theme).text_color, Some(ACCENT_ORANGE_DEEP));
+        assert_eq!(badge(&theme).text_color, Some(PRIMARY));
+    }
+
+    #[test]
+    fn button_styles_cover_active_and_idle_states() {
+        let theme = Theme::Light;
+        assert_eq!(primary_button(&theme, button::Status::Active).background, Some(Background::Color(PRIMARY)));
+        assert_eq!(
+            primary_button(&theme, button::Status::Hovered).background,
+            Some(Background::Color(PRIMARY_ACTIVE))
+        );
+        assert_eq!(secondary_button(&theme, button::Status::Active).background, Some(Background::Color(SURFACE)));
+        assert_eq!(secondary_button(&theme, button::Status::Pressed).background, Some(Background::Color(CANVAS)));
+        assert_eq!(utility_button(&theme, button::Status::Active).background, Some(Background::Color(SURFACE)));
+        assert_eq!(utility_button(&theme, button::Status::Hovered).background, Some(Background::Color(CANVAS)));
+    }
+
+    #[test]
+    fn input_style_highlights_focus() {
+        let theme = Theme::Light;
+        assert_eq!(input(&theme, text_input::Status::Active).border.color, HAIRLINE);
+        assert_eq!(
+            input(
+                &theme,
+                text_input::Status::Focused {
+                    is_hovered: false
+                }
+            )
+            .border
+            .color,
+            PRIMARY
+        );
+    }
+}

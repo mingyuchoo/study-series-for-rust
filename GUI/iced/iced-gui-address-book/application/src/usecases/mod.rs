@@ -122,4 +122,39 @@ mod tests {
         uc.delete_address(created.id.unwrap()).expect("delete should succeed");
         assert!(uc.get_all_addresses().unwrap().is_empty());
     }
+
+    struct FailingRepository;
+
+    impl AddressRepository for FailingRepository {
+        fn create(&self, _address: Address) -> Result<Address, RepositoryError> { Err(RepositoryError::Backend("create failed".into())) }
+
+        fn read(&self, _id: i64) -> Result<Option<Address>, RepositoryError> { Err(RepositoryError::Backend("read failed".into())) }
+
+        fn read_all(&self) -> Result<Vec<Address>, RepositoryError> { Err(RepositoryError::Backend("read all failed".into())) }
+
+        fn update(&self, _address: Address) -> Result<Address, RepositoryError> { Err(RepositoryError::Backend("update failed".into())) }
+
+        fn delete(&self, _id: i64) -> Result<(), RepositoryError> { Err(RepositoryError::Backend("delete failed".into())) }
+    }
+
+    #[test]
+    fn repository_errors_are_propagated_by_every_usecase() {
+        let uc = AddressUseCases::new(Arc::new(FailingRepository));
+        let address = Address {
+            id: Some(1),
+            name: "Alice".into(),
+            phone: "010".into(),
+            email: "alice@example.com".into(),
+            address: "Seoul".into(),
+        };
+
+        assert!(matches!(
+            uc.create_address(address.name.clone(), address.phone.clone(), address.email.clone(), address.address.clone()),
+            Err(AppError::Repository(_))
+        ));
+        assert!(matches!(uc.get_address(1), Err(AppError::Repository(_))));
+        assert!(matches!(uc.get_all_addresses(), Err(AppError::Repository(_))));
+        assert!(matches!(uc.update_address(address), Err(AppError::Repository(_))));
+        assert!(matches!(uc.delete_address(1), Err(AppError::Repository(_))));
+    }
 }

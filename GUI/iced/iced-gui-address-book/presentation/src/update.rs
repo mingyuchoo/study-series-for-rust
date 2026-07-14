@@ -133,3 +133,128 @@ impl AddressBook {
         })
     }
 }
+
+#[cfg(test)]
+pub(crate) mod tests {
+    use super::*;
+    use application::{error::AppError,
+                      usecases::AddressUseCases};
+    use domain::{error::{RepositoryError,
+                         ValidationError},
+                 repositories::AddressRepository};
+    use std::sync::Arc;
+
+    struct EmptyRepository;
+
+    impl AddressRepository for EmptyRepository {
+        fn create(&self, mut address: Address) -> Result<Address, RepositoryError> {
+            address.id = Some(1);
+            Ok(address)
+        }
+
+        fn read(&self, _id: i64) -> Result<Option<Address>, RepositoryError> { Ok(None) }
+
+        fn read_all(&self) -> Result<Vec<Address>, RepositoryError> { Ok(Vec::new()) }
+
+        fn update(&self, address: Address) -> Result<Address, RepositoryError> { Ok(address) }
+
+        fn delete(&self, _id: i64) -> Result<(), RepositoryError> { Ok(()) }
+    }
+
+    pub(crate) fn app_for_theme_test() -> AddressBook {
+        AddressBook {
+            usecases: Arc::new(AddressUseCases::new(Arc::new(EmptyRepository))),
+            addresses: Vec::new(),
+            name_input: String::new(),
+            phone_input: String::new(),
+            email_input: String::new(),
+            address_input: String::new(),
+            editing_id: None,
+            error_message: None,
+        }
+    }
+
+    fn app() -> AddressBook { app_for_theme_test() }
+
+    fn address(id: Option<i64>) -> Address {
+        Address {
+            id,
+            name: "Alice".into(),
+            phone: "010".into(),
+            email: "a@b.com".into(),
+            address: "Seoul".into(),
+        }
+    }
+
+    #[test]
+    fn input_messages_update_each_field() {
+        let mut app = app();
+        drop(app.update(Message::NameChanged("Alice".into())));
+        drop(app.update(Message::PhoneChanged("010".into())));
+        drop(app.update(Message::EmailChanged("a@b.com".into())));
+        drop(app.update(Message::AddressChanged("Seoul".into())));
+        assert_eq!(
+            (&app.name_input, &app.phone_input, &app.email_input, &app.address_input),
+            (&"Alice".into(), &"010".into(), &"a@b.com".into(), &"Seoul".into())
+        );
+    }
+
+    #[test]
+    fn edit_cancel_and_update_without_selection_manage_form_state() {
+        let mut app = app();
+        drop(app.update(Message::EditAddress(address(Some(7)))));
+        assert_eq!(app.editing_id, Some(7));
+        assert_eq!(app.name_input, "Alice");
+
+        drop(app.update(Message::CancelEdit));
+        assert_eq!(app.editing_id, None);
+        assert!(app.name_input.is_empty());
+
+        drop(app.update(Message::UpdateAddress));
+        assert_eq!(app.editing_id, None);
+    }
+
+    #[test]
+    fn create_and_selected_update_clear_inputs_immediately() {
+        let mut app = app();
+        app.name_input = "Alice".into();
+        app.phone_input = "010".into();
+        app.email_input = "a@b.com".into();
+        app.address_input = "Seoul".into();
+        drop(app.update(Message::CreateAddress));
+        assert!(app.name_input.is_empty());
+
+        app.editing_id = Some(3);
+        app.name_input = "Bob".into();
+        drop(app.update(Message::UpdateAddress));
+        assert_eq!(app.editing_id, None);
+        assert!(app.name_input.is_empty());
+    }
+
+    #[test]
+    fn loaded_result_replaces_data_or_records_error() {
+        let mut app = app();
+        drop(app.update(Message::AddressesLoaded(Ok(vec![address(Some(1))]))));
+        assert_eq!(app.addresses.len(), 1);
+        assert_eq!(app.error_message, None);
+
+        let error = AppError::Validation(ValidationError::EmptyName);
+        drop(app.update(Message::AddressesLoaded(Err(error))));
+        assert_eq!(app.error_message.as_deref(), Some("name must not be empty"));
+        assert_eq!(app.addresses.len(), 1);
+    }
+
+    #[test]
+    fn task_producing_messages_and_subscription_do_not_panic() {
+        let mut app = app();
+        drop(app.update(Message::LoadAddresses));
+        drop(app.update(Message::DeleteAddress(1)));
+        drop(app.update(Message::TabPressed {
+            shift: false,
+        }));
+        drop(app.update(Message::TabPressed {
+            shift: true,
+        }));
+        drop(app.subscription());
+    }
+}
