@@ -7,7 +7,9 @@ PROJECT_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
 cd "${PROJECT_ROOT}"
 
-clear
+if [[ -t 1 ]] && [[ -n "${TERM:-}" ]] && [[ "${TERM}" != "dumb" ]]; then
+    clear
+fi
 
 echo "==> Cleaning project"
 cargo clean
@@ -18,5 +20,5 @@ cargo build --package presentation
 echo "==> Running workspace tests"
 cargo test --workspace
 
-echo "==> Running presentation app"
-cargo run --package presentation -- "$@"
+echo "==> Starting presentation app"
+exec cargo run --package presentation -- "$@"

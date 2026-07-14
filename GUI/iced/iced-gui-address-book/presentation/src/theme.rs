@@ -63,12 +63,10 @@ pub const CAPTION: f32 = 14.0;
 pub const EYEBROW: f32 = 12.0;
 
 /// 디자인 시스템 폰트 패밀리(NotionInter ≈ Inter, 한글은 Noto Sans KR 로 대체).
-pub const FONT_FAMILY: &str = "Noto Sans KR";
-
 /// 주어진 weight 로 패밀리 폰트를 만든다.
 const fn font(weight: Weight) -> iced::Font {
     iced::Font {
-        family: Family::Name(FONT_FAMILY),
+        family: Family::SansSerif,
         weight,
         stretch: Stretch::Normal,
         style: FontStyle::Normal,

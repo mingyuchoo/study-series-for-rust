@@ -15,13 +15,10 @@ mod view;
 
 use app::AddressBook;
 
-const NOTO_SANS_KR: &[u8] = include_bytes!("../fonts/NotoSansKR-Regular.ttf");
-
 fn main() -> iced::Result {
     iced::application(AddressBook::new, AddressBook::update, AddressBook::view)
         .subscription(AddressBook::subscription)
         .title("Address Book")
-        .font(NOTO_SANS_KR)
         .default_font(theme::REGULAR)
         .theme(iced::Theme::Light)
         .style(theme::application)
