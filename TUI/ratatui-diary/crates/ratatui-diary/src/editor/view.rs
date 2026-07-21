@@ -40,7 +40,7 @@ pub fn render(f: &mut Frame, model: &Model) {
             Constraint::Percentage(50), // 왼쪽: 에디터
             Constraint::Percentage(50), // 오른쪽: Markdown 미리보기
         ])
-        .split(f.size());
+        .split(f.area());
 
     // 왼쪽: 에디터 영역 (기존 레이아웃)
     let editor_chunks = Layout::default()
@@ -75,7 +75,7 @@ pub fn render(f: &mut Frame, model: &Model) {
     };
     let cursor_x = editor_chunks[1].x + display_width;
     let cursor_y = editor_chunks[1].y + model.editor_state.cursor_line as u16;
-    f.set_cursor(cursor_x, cursor_y);
+    f.set_cursor_position((cursor_x, cursor_y));
 
     // 하단바: 상태 정보와 키바인딩 표시
     let mode_text = build_status_text(&model.editor_state);

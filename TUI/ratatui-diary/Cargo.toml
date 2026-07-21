@@ -8,14 +8,14 @@
   version = "0.1.0"
 
 [workspace.dependencies]
-  chrono              = "0.4"
-  crossterm           = "0.27"
-  dirs                = "5.0"
-  ratatui             = "0.27"
-  strip-ansi-escapes  = "0.2"
-  termimad            = "0.34"
-  tempfile            = "3.8"
-  unicode-width       = "0.1"
+  chrono              = "0.4.45"
+  crossterm           = "0.29"
+  dirs                = "6.0"
+  ratatui             = "0.30"
+  strip-ansi-escapes  = "0.2.1"
+  termimad            = "0.35"
+  tempfile            = "3.27"
+  unicode-width       = "0.2"
 
   # 워크스페이스 내부 크레이트
   diary-storage   = { path = "crates/diary-storage" }

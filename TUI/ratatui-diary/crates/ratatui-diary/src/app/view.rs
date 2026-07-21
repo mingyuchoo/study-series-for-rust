@@ -30,7 +30,7 @@ pub fn view(f: &mut Frame, model: &Model) {
 }
 
 fn render_error_popup(f: &mut Frame, model: &Model) {
-    let area = centered_rect(60, 20, f.size());
+    let area = centered_rect(60, 20, f.area());
 
     let error_msg = model.error_message.as_deref().unwrap_or("알 수 없는 에러");
     let popup = Paragraph::new(error_msg)

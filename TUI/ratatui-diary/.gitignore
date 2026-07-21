@@ -3,6 +3,9 @@
 
 # Rust
 /target/
+
+# 릴리스 산출물 (scripts/release.ps1)
+/dist/
 **/*.rs.bk
 *.pdb
 Cargo.lock

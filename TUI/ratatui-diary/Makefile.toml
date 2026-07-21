@@ -26,6 +26,11 @@
   command      = "cargo"
   dependencies = ["format"]
 
+[tasks.dist]
+  # Windows 설치 파일 생성. 자세한 옵션은 scripts/release.ps1 참고.
+  args    = ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "scripts/release.ps1"]
+  command = "powershell"
+
 [tasks.test]
   args         = ["test", "--workspace"]
   command      = "cargo"

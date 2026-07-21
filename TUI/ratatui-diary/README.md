@@ -22,10 +22,40 @@
 
 ## 설치
 
+### 소스에서 설치
+
 ```bash
 cargo build --release
-cargo install --path .
+cargo install --path crates/ratatui-diary
 ```
+
+### Windows 설치 파일 만들기
+
+`scripts/release.ps1`이 검증 → 릴리스 빌드 → Inno Setup 컴파일을 수행해
+`dist/ratatui-diary-<버전>-<아키텍처>-setup.exe`를 만듭니다.
+
+```powershell
+# Inno Setup이 없으면 -InstallInno로 winget 자동 설치
+./scripts/release.ps1 -InstallInno
+
+# 검증 단계를 건너뛰고 빠르게 패키징만
+./scripts/release.ps1 -SkipTest
+```
+
+생성된 설치 파일은 다음과 같이 동작합니다.
+
+- `%LOCALAPPDATA%\Programs\Ratatui Diary`에 **사용자 단위**로 설치 (관리자 권한 불필요)
+- 설치 마법사에서 **PATH 등록**과 **시작 메뉴 바로가기**를 선택 가능
+- 제어판 '앱 및 기능'에서 제거하며, 제거 시 PATH 항목도 함께 정리
+
+| 옵션 | 설명 |
+|---|---|
+| `-SkipTest` | fmt/clippy/test 검증 생략 |
+| `-SkipBuild` | 기존 릴리스 바이너리를 그대로 패키징 |
+| `-Version <ver>` | 설치 파일에 표기할 버전 (기본: Cargo.toml) |
+| `-Target <triple>` | 크로스 빌드 대상 (기본: 호스트) |
+| `-OutDir <path>` | 산출물 디렉터리 (기본: `dist/`) |
+| `-InstallInno` | Inno Setup을 winget으로 자동 설치 |
 
 ## 사용법
 

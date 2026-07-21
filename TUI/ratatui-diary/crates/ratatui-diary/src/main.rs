@@ -42,7 +42,9 @@ fn main() -> std::io::Result<()> {
     result
 }
 
-fn run_app<B: Backend>(terminal: &mut Terminal<B>, model: &mut Model) -> std::io::Result<()> {
+// ratatui 0.30부터 Backend는 연관 타입 `Error`를 가진다. `?`로 io::Result에
+// 합치기 위해 io::Error를 쓰는 백엔드로 한정한다 (CrosstermBackend가 해당).
+fn run_app<B: Backend<Error = io::Error>>(terminal: &mut Terminal<B>, model: &mut Model) -> std::io::Result<()> {
     loop {
         // 렌더링
         terminal.draw(|f| app::view(f, model))?;

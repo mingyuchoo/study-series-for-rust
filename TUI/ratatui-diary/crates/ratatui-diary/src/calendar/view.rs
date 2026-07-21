@@ -29,7 +29,7 @@ pub fn render(f: &mut Frame, model: &Model) {
             Constraint::Percentage(50), // 왼쪽: 달력
             Constraint::Percentage(50), // 오른쪽: 미리보기
         ])
-        .split(f.size());
+        .split(f.area());
 
     // 왼쪽: 달력 영역 (기존 레이아웃)
     let calendar_chunks = Layout::default()
