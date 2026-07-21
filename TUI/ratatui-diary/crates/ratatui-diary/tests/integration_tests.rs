@@ -1,8 +1,15 @@
 use chrono::NaiveDate;
+use crossterm::event::{KeyCode,
+                       KeyEvent,
+                       KeyEventKind,
+                       KeyModifiers};
 use ratatui::{Terminal,
               backend::TestBackend};
 use ratatui_diary::{Model,
                     Msg,
+                    app::{Command,
+                          execute_command,
+                          handle_key},
                     model::Screen,
                     storage::Storage,
                     update,
@@ -25,6 +32,42 @@ fn test_application_startup() {
     assert_eq!(model.screen, Screen::Calendar);
     assert!(!model.show_error_popup);
     assert!(model.error_message.is_none());
+}
+
+#[test]
+fn test_opening_missing_diary_starts_with_empty_content() {
+    let temp = TempDir::new().unwrap();
+    let storage = Storage::with_dir(temp.path()).unwrap();
+    let mut model = Model::new(HashSet::new(), storage);
+    let date = NaiveDate::from_ymd_opt(2026, 7, 1).unwrap();
+    model.screen = Screen::Editor;
+
+    execute_command(Command::LoadDiary(date), &mut model).unwrap();
+
+    assert_eq!(model.editor_state.date, date);
+    assert_eq!(model.editor_state.content, vec![String::new()]);
+    assert!(!model.show_error_popup);
+    assert!(model.error_message.is_none());
+}
+
+#[test]
+fn test_key_release_does_not_insert_character_twice() {
+    let temp = TempDir::new().unwrap();
+    let storage = Storage::with_dir(temp.path()).unwrap();
+    let mut model = Model::new(HashSet::new(), storage);
+    model.screen = Screen::Editor;
+
+    let press = KeyEvent::new_with_kind(KeyCode::Char('#'), KeyModifiers::NONE, KeyEventKind::Press);
+    let release = KeyEvent::new_with_kind(KeyCode::Char('#'), KeyModifiers::NONE, KeyEventKind::Release);
+
+    if let Some(msg) = handle_key(press, &model) {
+        update::update(&mut model, msg);
+    }
+    if let Some(msg) = handle_key(release, &model) {
+        update::update(&mut model, msg);
+    }
+
+    assert_eq!(model.editor_state.content, vec!["#".to_string()]);
 }
 
 // 전체 일기 작성 워크플로우 테스트

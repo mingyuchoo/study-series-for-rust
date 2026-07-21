@@ -40,10 +40,8 @@ pub fn update(model: &mut Model, msg: Msg) -> Option<Command> {
             None
         },
         | Msg::LoadDiaryFailed(error) => {
-            if !error.contains("No such file") {
-                model.error_message = Some(format!("로드 실패: {}", error));
-                model.show_error_popup = true;
-            }
+            model.error_message = Some(format!("로드 실패: {}", error));
+            model.show_error_popup = true;
             None
         },
         | Msg::SaveDiarySuccess => {

@@ -12,6 +12,10 @@ pub fn execute_command(cmd: Command, model: &mut Model) -> std::io::Result<()> {
             | Ok(content) => {
                 update::update(model, Msg::LoadDiarySuccess(date, content));
             },
+            | Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+                // A date without a file is a new diary, not a load failure.
+                update::update(model, Msg::LoadDiarySuccess(date, String::new()));
+            },
             | Err(e) => {
                 update::update(model, Msg::LoadDiaryFailed(e.to_string()));
             },

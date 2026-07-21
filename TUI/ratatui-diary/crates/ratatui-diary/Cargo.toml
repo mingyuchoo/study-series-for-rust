@@ -17,3 +17,8 @@
 
 [dev-dependencies]
   tempfile = { workspace = true }
+
+# Avoid Windows installer detection for an executable named `update_tests.exe`.
+[[test]]
+  name = "diary_behavior_tests"
+  path = "tests/update_tests.rs"

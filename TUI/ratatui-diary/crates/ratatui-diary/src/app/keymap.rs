@@ -9,9 +9,16 @@ use crate::{app::{Model,
             editor,
             message::Msg};
 use crossterm::event::{KeyCode,
-                       KeyEvent};
+                       KeyEvent,
+                       KeyEventKind};
 
 pub fn handle_key(key: KeyEvent, model: &Model) -> Option<Msg> {
+    // Windows reports both key press and key release events. Handling the
+    // release as input would insert every character twice.
+    if key.kind == KeyEventKind::Release {
+        return None;
+    }
+
     // 에러 팝업이 표시 중이면 Esc로 닫기
     if model.show_error_popup && key.code == KeyCode::Esc {
         return Some(Msg::DismissError);
