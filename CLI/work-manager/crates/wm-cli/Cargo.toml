@@ -1,0 +1,22 @@
+[package]
+name = "wm-cli"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Worktree-to-generation development lifecycle manager"
+
+[[bin]]
+name = "wm"
+path = "src/main.rs"
+
+[dependencies]
+wm-core.workspace = true
+wm-store.workspace = true
+wm-runner.workspace = true
+
+anyhow.workspace = true
+chrono.workspace = true
+clap.workspace = true
+
+[dev-dependencies]
+serde_json.workspace = true

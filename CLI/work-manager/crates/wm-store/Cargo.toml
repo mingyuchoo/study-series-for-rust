@@ -1,0 +1,12 @@
+[package]
+name = "wm-store"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+wm-core.workspace = true
+
+chrono.workspace = true
+fs2.workspace = true
+serde_json.workspace = true
