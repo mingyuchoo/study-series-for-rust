@@ -1,0 +1,44 @@
+[tasks.clean]
+  args    = ["clean"]
+  command = "cargo"
+
+[tasks.clippy]
+  args    = ["clippy"]
+  command = "cargo"
+
+[tasks.check]
+  args    = ["check"]
+  command = "cargo"
+
+[tasks.format]
+  args          = ["fmt"]
+  command       = "cargo"
+  dependencies  = ["check", "clippy"]
+  install_crate = "rustfmt"
+
+[tasks.build]
+  args         = ["build", "--profile", "dev"]
+  command      = "cargo"
+  dependencies = ["format"]
+
+[tasks.release]
+  args         = ["build", "--profile", "release"]
+  command      = "cargo"
+  dependencies = ["format"]
+
+[tasks.test]
+  args         = ["test"]
+  command      = "cargo"
+  dependencies = ["format"]
+
+[tasks.watch-run]
+  # `cargo install cargo-watch`로 설치
+  command       = "cargo"
+  args          = ["watch", "-x", "run"]
+  install_crate = "cargo-watch"
+  dependencies  = ["format"]
+
+[tasks.run]
+  args         = ["run"]
+  command      = "cargo"
+  dependencies = ["format"]
