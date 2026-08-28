@@ -1,5 +1,4 @@
 use crate::error::{Error,
-                   IoContext,
                    Result};
 use serde::{Deserialize,
             Serialize};
@@ -98,19 +97,8 @@ impl HealthCheck {
     pub fn is_configured(&self) -> bool { self.http.is_some() || self.tcp.is_some() || self.cmd.is_some() }
 }
 
-/// The outcome of locating a project: which manifest applies, where its root
-/// is, and whether the command was invoked from inside a managed worktree.
-#[derive(Debug, Clone)]
-pub struct Discovery {
-    pub config: Config,
-    pub root: PathBuf,
-    /// `Some(name)` when the current directory lies inside
-    /// `<root>/.gm/worktrees/<name>`.
-    pub worktree: Option<String>,
-}
-
 /// Recognise `<root>/.gm/worktrees/<name>/...`, innermost match first.
-fn worktree_context(start: &Path) -> Option<(PathBuf, String)> {
+pub fn worktree_context(start: &Path) -> Option<(PathBuf, String)> {
     for dir in start.ancestors() {
         let parent = dir.parent()?;
         if parent.file_name()?.to_str()? != WORKTREES {
@@ -128,51 +116,20 @@ fn worktree_context(start: &Path) -> Option<(PathBuf, String)> {
 }
 
 impl Config {
-    /// Locate the project from `start`, resolving worktree context.
-    pub fn discover(start: &Path) -> Result<Discovery> {
-        let start = start.canonicalize().ctx(format!("resolving {}", start.display()))?;
-
-        // A worktree is a full checkout, so it carries its own copy of the
-        // manifest. Walking up naively would take the worktree for the project
-        // root and open a second, empty generation store inside it — the real
-        // project's generations would simply vanish from view.
-        if let Some((root, name)) = worktree_context(&start) {
-            let manifest = root.join(MANIFEST);
-            if manifest.is_file() {
-                return Ok(Discovery {
-                    config: Config::load(&manifest)?,
-                    root,
-                    worktree: Some(name),
-                });
-            }
-        }
-
-        for dir in start.ancestors() {
-            let candidate = dir.join(MANIFEST);
-            if candidate.is_file() {
-                return Ok(Discovery {
-                    config: Config::load(&candidate)?,
-                    root: dir.to_path_buf(),
-                    worktree: None,
-                });
-            }
-        }
-        Err(Error::ProjectNotFound(start))
-    }
-
-    pub fn load(path: &Path) -> Result<Config> {
-        let text = std::fs::read_to_string(path).ctx(format!("reading {}", path.display()))?;
-        let config: Config = toml::from_str(&text)?;
+    /// Parse and validate a manifest without performing any I/O.
+    pub fn parse(text: &str) -> Result<Config> {
+        let config: Config = toml::from_str(text).map_err(|error| Error::Config(error.to_string()))?;
         config.validate()?;
         Ok(config)
     }
 
-    pub fn save(&self, path: &Path) -> Result<()> {
-        let text = toml::to_string_pretty(self)?;
-        std::fs::write(path, text).ctx(format!("writing {}", path.display()))
+    /// Render a manifest without performing any I/O.
+    pub fn to_toml(&self) -> Result<String> {
+        self.validate()?;
+        toml::to_string_pretty(self).map_err(|error| Error::Config(error.to_string()))
     }
 
-    fn validate(&self) -> Result<()> {
+    pub fn validate(&self) -> Result<()> {
         if self.project.name.trim().is_empty() {
             return Err(Error::Config("project.name must not be empty".into()));
         }
@@ -218,15 +175,15 @@ impl std::str::FromStr for Preset {
 }
 
 impl Preset {
-    /// Guess from the files present in `dir`.
-    pub fn detect(dir: &Path) -> Preset {
-        if dir.join("Cargo.toml").is_file() {
+    /// Choose a preset from a side-effect-free snapshot of marker files.
+    pub fn detect(files: DetectedFiles) -> Preset {
+        if files.cargo_toml {
             Preset::Rust
-        } else if dir.join("package.json").is_file() {
+        } else if files.package_json {
             Preset::Node
-        } else if dir.join("go.mod").is_file() {
+        } else if files.go_mod {
             Preset::Go
-        } else if dir.join("pyproject.toml").is_file() || dir.join("requirements.txt").is_file() {
+        } else if files.pyproject_toml || files.requirements_txt {
             Preset::Python
         } else {
             Preset::Generic
@@ -296,9 +253,21 @@ impl Preset {
     }
 }
 
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct DetectedFiles {
+    pub cargo_toml: bool,
+    pub package_json: bool,
+    pub go_mod: bool,
+    pub pyproject_toml: bool,
+    pub requirements_txt: bool,
+}
+
 #[cfg(test)]
 mod tests {
-    use super::worktree_context;
+    use super::{Config,
+                DetectedFiles,
+                Preset,
+                worktree_context};
     use std::path::{Path,
                     PathBuf};
 
@@ -338,5 +307,32 @@ mod tests {
         let (root, name) = context("/srv/demo/.gm/worktrees/outer/.gm/worktrees/inner/src").unwrap();
         assert_eq!(root, Path::new("/srv/demo/.gm/worktrees/outer"));
         assert_eq!(name, "inner");
+    }
+
+    #[test]
+    fn parses_and_validates_configuration_without_io() {
+        let rendered = Preset::Rust.template("demo").to_toml().unwrap();
+        let parsed = Config::parse(&rendered).unwrap();
+
+        assert_eq!(parsed.project.name, "demo");
+        assert_eq!(parsed.run.cmd, "./demo");
+    }
+
+    #[test]
+    fn rejects_an_artifact_path_that_escapes_the_build_directory() {
+        let mut config = Preset::Generic.template("demo");
+        config.artifacts.include = vec![PathBuf::from("../secret")];
+
+        assert!(config.validate().is_err());
+    }
+
+    #[test]
+    fn detects_a_preset_from_a_pure_file_snapshot() {
+        let preset = Preset::detect(DetectedFiles {
+            package_json: true,
+            ..DetectedFiles::default()
+        });
+
+        assert_eq!(preset, Preset::Node);
     }
 }

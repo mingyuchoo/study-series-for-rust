@@ -29,7 +29,7 @@ impl Project {
     /// the worktree.
     pub fn open() -> Result<Project> {
         let cwd = std::env::current_dir()?;
-        let found = Config::discover(&cwd)?;
+        let found = gm_store::discover_project(&cwd)?;
         let store = Store::open(Layout::new(&found.root))?;
         Ok(Project {
             config: found.config,
@@ -41,7 +41,7 @@ impl Project {
 
     /// Which worktree a command should act on: an explicit `--from` wins,
     /// otherwise the one the developer is standing in.
-    pub fn select_worktree(&self, from: Option<&str>) -> Option<String> { from.map(str::to_string).or_else(|| self.worktree.clone()) }
+    pub fn select_worktree(&self, from: Option<&str>) -> Option<String> { gm_core::select_worktree(from, self.worktree.as_deref()) }
 
     /// Resolve a worktree name to its path, failing if it does not exist.
     pub fn worktree_path(&self, name: &str) -> Result<PathBuf> {

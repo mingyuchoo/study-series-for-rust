@@ -1,6 +1,6 @@
-use gm_core::{config::HealthCheck,
-              error::{Error,
-                      Result}};
+use crate::error::{Error,
+                   Result};
+use gm_core::config::HealthCheck;
 use std::{io::{Read,
                Write},
           net::{TcpStream,
@@ -32,6 +32,13 @@ pub fn wait_until_healthy(check: &HealthCheck, cwd: &Path) -> Result<()> {
         }
         std::thread::sleep(interval);
     }
+}
+
+#[derive(Debug, Clone, Copy, Default)]
+pub struct LocalHealthVerifier;
+
+impl gm_application::HealthVerifier for LocalHealthVerifier {
+    fn verify(&self, check: &HealthCheck, cwd: &Path) -> gm_application::PortResult<()> { Ok(wait_until_healthy(check, cwd)?) }
 }
 
 fn probe_once(check: &HealthCheck, cwd: &Path) -> bool {

@@ -1,7 +1,7 @@
-use crate::exec::capture;
-use gm_core::error::{Error,
-                     IoContext,
-                     Result};
+use crate::{error::{Error,
+                    IoContext,
+                    Result},
+            exec::capture};
 use std::{path::Path,
           process::Command};
 
@@ -65,3 +65,12 @@ pub fn worktree_remove(repo: &Path, path: &Path, force: bool) -> Result<()> {
 
 /// Drop administrative entries for worktrees whose directories are gone.
 pub fn worktree_prune(repo: &Path) { let _ = Command::new("git").args(["worktree", "prune"]).current_dir(repo).status(); }
+
+#[derive(Debug, Clone, Copy, Default)]
+pub struct GitSourceControl;
+
+impl gm_application::SourceControl for GitSourceControl {
+    fn head_commit(&self, cwd: &Path) -> Option<String> { head_commit(cwd) }
+
+    fn is_dirty(&self, cwd: &Path) -> bool { is_dirty(cwd) }
+}

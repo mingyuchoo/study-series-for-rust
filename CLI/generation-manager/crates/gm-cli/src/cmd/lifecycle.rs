@@ -6,12 +6,13 @@ use gm_core::generation::{GenerationId,
 use gm_runner::{Activation,
                 Pipeline,
                 artifacts::dir_size};
+use gm_store::ProjectLock;
 use std::process::ExitCode;
 
 /// Stage 2: build, test, freeze.
 pub fn build(from: Option<&str>, note: Option<String>, switch_after: bool) -> Result<ExitCode> {
     let project = Project::open()?;
-    let _lock = project.store.lock()?;
+    let lock = project.store.lock()?;
 
     // Standing inside a worktree makes it the default build source, so the
     // common case needs no flag.
@@ -26,7 +27,7 @@ pub fn build(from: Option<&str>, note: Option<String>, switch_after: bool) -> Re
         | None => println!("building from project root ({})", source.display()),
     }
     let pipeline = Pipeline::new(&project.store, &project.config);
-    let entry = pipeline.build(&source, selected.as_deref(), note)?;
+    let entry = pipeline.build(&source, selected.as_deref(), note, &lock)?;
 
     println!();
     println!(
@@ -34,7 +35,7 @@ pub fn build(from: Option<&str>, note: Option<String>, switch_after: bool) -> Re
         ui::OK,
         entry.meta.id,
         entry.meta.describe_source(),
-        ui::human_size(dir_size(&entry.payload()))
+        ui::human_size(dir_size(&entry.payload))
     );
 
     if !switch_after {
@@ -43,13 +44,13 @@ pub fn build(from: Option<&str>, note: Option<String>, switch_after: bool) -> Re
     }
 
     println!();
-    activate(&project, entry.meta.id, "gm build --switch")
+    activate(&project, entry.meta.id, "gm build --switch", &lock)
 }
 
 /// Activate a generation, honouring the health check.
 pub fn switch(target: Option<u64>) -> Result<ExitCode> {
     let project = Project::open()?;
-    let _lock = project.store.lock()?;
+    let lock = project.store.lock()?;
 
     let id = match target {
         | Some(n) => GenerationId(n),
@@ -60,22 +61,22 @@ pub fn switch(target: Option<u64>) -> Result<ExitCode> {
             .map(|e| e.meta.id)
             .ok_or_else(|| anyhow::anyhow!("no generations yet — run `gm build` first"))?,
     };
-    activate(&project, id, "gm switch")
+    activate(&project, id, "gm switch", &lock)
 }
 
 /// Stage 3: back out to an older generation.
 pub fn rollback(target: Option<u64>) -> Result<ExitCode> {
     let project = Project::open()?;
-    let _lock = project.store.lock()?;
+    let lock = project.store.lock()?;
 
     let id = match target {
         | Some(n) => GenerationId(n),
         | None => project.store.rollback_target()?,
     };
-    activate(&project, id, "gm rollback")
+    activate(&project, id, "gm rollback", &lock)
 }
 
-fn activate(project: &Project, id: GenerationId, reason: &str) -> Result<ExitCode> {
+fn activate(project: &Project, id: GenerationId, reason: &str, lock: &ProjectLock) -> Result<ExitCode> {
     let pipeline = Pipeline::new(&project.store, &project.config);
 
     // Taking the slot back from a development run is legitimate, but silently
@@ -88,7 +89,7 @@ fn activate(project: &Project, id: GenerationId, reason: &str) -> Result<ExitCod
 
     println!("activating generation {id}…");
 
-    match pipeline.activate(id, reason)? {
+    match pipeline.activate(id, reason, lock)? {
         | Activation::Healthy {
             id,
             pid,
@@ -180,9 +181,9 @@ pub fn history() -> Result<ExitCode> {
 
 pub fn gc(keep: usize) -> Result<ExitCode> {
     let project = Project::open()?;
-    let _lock = project.store.lock()?;
+    let lock = project.store.lock()?;
 
-    let removed = project.store.gc(keep)?;
+    let removed = project.store.gc(&lock, keep)?;
     if removed.is_empty() {
         println!("nothing to collect (keeping {keep})");
     } else {

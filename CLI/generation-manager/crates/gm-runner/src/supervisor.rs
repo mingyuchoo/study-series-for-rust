@@ -1,8 +1,8 @@
+use crate::error::{Error,
+                   IoContext,
+                   Result};
 use chrono::Utc;
 use gm_core::{config::RunStage,
-              error::{Error,
-                      IoContext,
-                      Result},
               run::{RunSource,
                     RunState}};
 use gm_store::Layout;
@@ -31,6 +31,14 @@ use std::{fs::{File,
 pub struct Supervisor {
     state_file: PathBuf,
     log_file: PathBuf,
+}
+
+impl gm_application::ServiceRuntime for Supervisor {
+    fn stop_if_running(&self, timeout: Duration) -> gm_application::PortResult<Option<RunState>> { Ok(Supervisor::stop_if_running(self, timeout)?) }
+
+    fn start_detached(&self, run: &RunStage, cwd: &Path, source: RunSource) -> gm_application::PortResult<RunState> {
+        Ok(Supervisor::start_detached(self, run, cwd, source)?)
+    }
 }
 
 #[derive(Debug, Clone)]

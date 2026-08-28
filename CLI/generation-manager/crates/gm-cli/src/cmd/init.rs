@@ -3,6 +3,8 @@ use anyhow::{Result,
              bail};
 use gm_core::config::{MANIFEST,
                       Preset};
+use gm_store::{detect_preset,
+               save_config};
 use std::{process::ExitCode,
           str::FromStr};
 
@@ -15,12 +17,12 @@ pub fn run(preset: Option<String>, name: Option<String>, force: bool) -> Result<
 
     let preset = match preset {
         | Some(raw) => Preset::from_str(&raw).map_err(anyhow::Error::msg)?,
-        | None => Preset::detect(&cwd),
+        | None => detect_preset(&cwd),
     };
     let name = name.unwrap_or_else(|| cwd.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| "app".to_string()));
 
     let config = preset.template(&name);
-    config.save(&manifest)?;
+    save_config(&config, &manifest)?;
 
     println!("{} wrote {}", ui::OK, manifest.display());
     println!();

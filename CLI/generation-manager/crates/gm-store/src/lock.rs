@@ -1,7 +1,7 @@
+use crate::error::{Error,
+                   IoContext,
+                   Result};
 use fs2::FileExt;
-use gm_core::error::{Error,
-                     IoContext,
-                     Result};
 use std::{fs::{File,
                OpenOptions},
           path::{Path,
@@ -19,7 +19,7 @@ pub struct ProjectLock {
 
 impl ProjectLock {
     /// Fail immediately if another process holds the lock.
-    pub fn acquire(path: &Path) -> Result<ProjectLock> {
+    pub(crate) fn acquire(path: &Path) -> Result<ProjectLock> {
         let file = OpenOptions::new()
             .create(true)
             .read(true)

@@ -1,17 +1,25 @@
-use crate::{layout::Layout,
+use crate::{error::{Error,
+                    IoContext,
+                    Result},
+            layout::Layout,
             lock::ProjectLock};
 use chrono::Utc;
-use gm_core::{error::{Error,
-                      IoContext,
-                      Result},
+use gm_core::{gc_candidates,
               generation::{Generation,
                            GenerationId,
                            GenerationStatus,
-                           SwitchEvent}};
+                           SwitchEvent},
+              next_generation_id,
+              rollback_target};
 use std::{fs,
           os::unix::fs::symlink,
           path::{Path,
                  PathBuf}};
+
+pub struct StoreRepository<'a> {
+    store: &'a Store,
+    lock: &'a ProjectLock,
+}
 
 /// A generation as found on disk.
 #[derive(Debug, Clone)]
@@ -44,7 +52,23 @@ impl Store {
 
     pub fn layout(&self) -> &Layout { &self.layout }
 
+    pub fn repository<'a>(&'a self, lock: &'a ProjectLock) -> Result<StoreRepository<'a>> {
+        self.ensure_locked(lock)?;
+        Ok(StoreRepository {
+            store: self,
+            lock,
+        })
+    }
+
     pub fn lock(&self) -> Result<ProjectLock> { ProjectLock::acquire(&self.layout.lock_file()) }
+
+    fn ensure_locked(&self, lock: &ProjectLock) -> Result<()> {
+        if lock.path() == self.layout.lock_file() {
+            Ok(())
+        } else {
+            Err(Error::InvalidLock)
+        }
+    }
 
     // ---------------------------------------------------------------- reading
 
@@ -117,26 +141,27 @@ impl Store {
     /// The generation a bare `gm rollback` would select: the highest id below
     /// the active one, mirroring `nixos-rebuild --rollback`.
     pub fn rollback_target(&self) -> Result<GenerationId> {
-        let current = self.current_id()?.ok_or(Error::NoCurrentGeneration)?;
-        self.list()?
-            .into_iter()
-            .map(|e| e.meta.id)
-            .filter(|id| *id < current)
-            .max()
-            .ok_or(Error::NoPreviousGeneration)
+        let current = self.current_id()?;
+        let ids: Vec<_> = self.list()?.into_iter().map(|entry| entry.meta.id).collect();
+        rollback_target(current, &ids).map_err(|error| match error {
+            | gm_core::Error::NoCurrentGeneration => Error::NoCurrentGeneration,
+            | gm_core::Error::NoPreviousGeneration => Error::NoPreviousGeneration,
+            | other => Error::Core(other),
+        })
     }
 
     // ---------------------------------------------------------------- writing
 
     fn next_id(&self) -> Result<GenerationId> {
-        let highest = self.list()?.into_iter().map(|e| e.meta.id).max();
-        Ok(highest.map(|id| id.next()).unwrap_or(GenerationId(1)))
+        let ids: Vec<_> = self.list()?.into_iter().map(|entry| entry.meta.id).collect();
+        Ok(next_generation_id(&ids))
     }
 
     /// Create the store directory for the next generation and hand back the
     /// payload directory to populate. Nothing is visible as a generation until
     /// [`Store::commit`] runs, so a failed build leaves no numbered entry.
-    pub fn stage(&self, commit: Option<&str>) -> Result<StagedGeneration> {
+    pub fn stage(&self, lock: &ProjectLock, commit: Option<&str>) -> Result<StagedGeneration> {
+        self.ensure_locked(lock)?;
         let id = self.next_id()?;
         let short: String = commit.unwrap_or("nocommit").chars().take(7).collect();
         let dir = self.layout.store().join(format!("{}-{}", id.dir_prefix(), short));
@@ -153,10 +178,11 @@ impl Store {
     }
 
     /// Write the metadata and publish `generations/NNNN`.
-    pub fn commit(&self, staged: StagedGeneration, meta: Generation) -> Result<GenerationEntry> {
+    pub fn commit(&self, lock: &ProjectLock, staged: StagedGeneration, meta: Generation) -> Result<GenerationEntry> {
+        self.ensure_locked(lock)?;
         let meta_path = Layout::generation_meta(&staged.dir);
         let text = serde_json::to_string_pretty(&meta)?;
-        fs::write(&meta_path, text).ctx(format!("writing {}", meta_path.display()))?;
+        write_atomic(&meta_path, text.as_bytes())?;
 
         let link = self.layout.generation_link(staged.id);
         let _ = fs::remove_file(&link);
@@ -170,21 +196,35 @@ impl Store {
     }
 
     /// Discard a staged generation that never made it to `commit`.
-    pub fn discard(&self, staged: StagedGeneration) { let _ = fs::remove_dir_all(&staged.dir); }
+    pub fn discard(&self, lock: &ProjectLock, staged: StagedGeneration) -> Result<()> {
+        self.ensure_locked(lock)?;
+        match fs::remove_dir_all(&staged.dir) {
+            | Ok(()) => Ok(()),
+            | Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+            | Err(error) => Err(Error::Io {
+                context: format!("discarding {}", staged.dir.display()),
+                source: error,
+            }),
+        }
+    }
 
-    pub fn set_status(&self, id: GenerationId, status: GenerationStatus) -> Result<()> {
+    pub fn set_status(&self, lock: &ProjectLock, id: GenerationId, status: GenerationStatus) -> Result<()> {
+        self.ensure_locked(lock)?;
         let entry = self.get(id)?;
         let mut meta = entry.meta;
         meta.status = status;
         let meta_path = Layout::generation_meta(&entry.dir);
         let text = serde_json::to_string_pretty(&meta)?;
-        fs::write(&meta_path, text).ctx(format!("writing {}", meta_path.display()))
+        write_atomic(&meta_path, text.as_bytes())
     }
 
     /// Repoint `current` at `id`. The temp-symlink-then-rename dance is what
     /// makes this atomic: `ln -sfn` unlinks first and leaves a window where the
     /// project has no active generation.
-    pub fn switch(&self, id: GenerationId, reason: &str) -> Result<()> {
+    pub fn switch(&self, lock: &ProjectLock, id: GenerationId, reason: &str) -> Result<()> { self.switch_at(lock, id, reason, Utc::now()) }
+
+    pub fn switch_at(&self, lock: &ProjectLock, id: GenerationId, reason: &str, at: chrono::DateTime<Utc>) -> Result<()> {
+        self.ensure_locked(lock)?;
         let previous = self.current_id()?;
         // Fail before touching anything if the target is not a real generation.
         self.get(id)?;
@@ -202,7 +242,7 @@ impl Store {
             .ctx(format!("activating generation {id}"))?;
 
         self.append_history(&SwitchEvent {
-            at: Utc::now(),
+            at,
             from: previous,
             to: id,
             reason: reason.to_string(),
@@ -235,19 +275,12 @@ impl Store {
 
     /// Delete all but the `keep` most recent generations. The active generation
     /// and its rollback target are always retained.
-    pub fn gc(&self, keep: usize) -> Result<Vec<GenerationId>> {
-        let keep = keep.max(1);
+    pub fn gc(&self, lock: &ProjectLock, keep: usize) -> Result<Vec<GenerationId>> {
+        self.ensure_locked(lock)?;
         let all = self.list()?;
-        if all.len() <= keep {
-            return Ok(Vec::new());
-        }
         let current = self.current_id()?;
-        let rollback = self.rollback_target().ok();
-        let doomed: Vec<_> = all[.. all.len() - keep]
-            .iter()
-            .map(|e| e.meta.id)
-            .filter(|id| Some(*id) != current && Some(*id) != rollback)
-            .collect();
+        let ids: Vec<_> = all.iter().map(|entry| entry.meta.id).collect();
+        let doomed = gc_candidates(&ids, current, keep);
 
         let mut removed = Vec::new();
         for id in doomed {
@@ -261,10 +294,78 @@ impl Store {
     }
 }
 
+impl gm_application::GenerationRepository for StoreRepository<'_> {
+    fn get(&self, id: GenerationId) -> gm_application::PortResult<gm_application::StoredGeneration> {
+        let entry = self.store.get(id)?;
+        Ok(gm_application::StoredGeneration {
+            payload: entry.payload(),
+            meta: entry.meta,
+        })
+    }
+
+    fn current_id(&self) -> gm_application::PortResult<Option<GenerationId>> { Ok(self.store.current_id()?) }
+
+    fn stage(&self, commit: Option<&str>) -> gm_application::PortResult<gm_application::StagedGeneration> {
+        let staged = self.store.stage(self.lock, commit)?;
+        Ok(gm_application::StagedGeneration {
+            id: staged.id,
+            payload: staged.payload,
+        })
+    }
+
+    fn discard(&self, staged: gm_application::StagedGeneration) -> gm_application::PortResult<()> {
+        let dir = staged.payload.parent().map(Path::to_path_buf).unwrap_or_else(|| staged.payload.clone());
+        Ok(self.store.discard(
+            self.lock,
+            StagedGeneration {
+                id: staged.id,
+                dir,
+                payload: staged.payload,
+            },
+        )?)
+    }
+
+    fn commit(&self, staged: gm_application::StagedGeneration, generation: Generation) -> gm_application::PortResult<gm_application::StoredGeneration> {
+        let dir = staged.payload.parent().map(Path::to_path_buf).unwrap_or_else(|| staged.payload.clone());
+        let entry = self.store.commit(
+            self.lock,
+            StagedGeneration {
+                id: staged.id,
+                dir,
+                payload: staged.payload,
+            },
+            generation,
+        )?;
+        Ok(gm_application::StoredGeneration {
+            payload: entry.payload(),
+            meta: entry.meta,
+        })
+    }
+
+    fn set_status(&self, id: GenerationId, status: GenerationStatus) -> gm_application::PortResult<()> { Ok(self.store.set_status(self.lock, id, status)?) }
+
+    fn switch(&self, id: GenerationId, reason: &str, at: chrono::DateTime<Utc>) -> gm_application::PortResult<()> {
+        Ok(self.store.switch_at(self.lock, id, reason, at)?)
+    }
+}
+
 /// A generation directory that exists on disk but is not yet numbered.
 #[derive(Debug)]
 pub struct StagedGeneration {
     pub id: GenerationId,
     pub dir: PathBuf,
     pub payload: PathBuf,
+}
+
+fn write_atomic(path: &Path, contents: &[u8]) -> Result<()> {
+    let parent = path.parent().unwrap_or(Path::new("."));
+    let name = path.file_name().unwrap_or_default().to_string_lossy();
+    let temporary = parent.join(format!(".{name}.tmp.{}", std::process::id()));
+    let _ = fs::remove_file(&temporary);
+    fs::write(&temporary, contents).ctx(format!("writing {}", temporary.display()))?;
+    fs::rename(&temporary, path)
+        .inspect_err(|_| {
+            let _ = fs::remove_file(&temporary);
+        })
+        .ctx(format!("replacing {}", path.display()))
 }

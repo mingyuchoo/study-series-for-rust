@@ -207,14 +207,17 @@ unlink와 symlink 사이에 활성 세대가 없는 구간이 생기므로 쓰�
 
 ## 크레이트 구성
 
-의존 방향은 `gm-cli → gm-runner → gm-store → gm-core` 단방향입니다.
+`gm-core`와 `gm-application`이 안쪽 계층을 이루고, 파일 시스템과 프로세스를
+다루는 어댑터가 바깥에서 애플리케이션 포트를 구현합니다. 의존성은 안쪽을 향하며
+순환하지 않습니다.
 
 | 크레이트 | 역할 |
 | --- | --- |
-| `gm-core` | 도메인 타입(`Config`, `Generation`, `RunSource`, `Error`). I/O 없음 |
-| `gm-store` | 세대 저장소, 원자적 전환, GC, 파일 잠금 |
-| `gm-runner` | git worktree, 빌드 실행, 산출물 수집, supervisor, 헬스체크 |
-| `gm-cli` | `gm` 바이너리 |
+| `gm-core` | 도메인 타입, 설정 검증, 세대 번호와 롤백 및 GC 순수 정책. I/O 없음 |
+| `gm-application` | 빌드와 활성화 유스케이스, 외부 기능을 위한 역할별 포트 |
+| `gm-store` | 설정 파일 어댑터, 세대 저장소, 원자적 전환, GC, 파일 잠금 |
+| `gm-runner` | 셸과 Git 및 프로세스, 산출물 수집, supervisor, 헬스체크 어댑터 |
+| `gm-cli` | 인자 파싱, 어댑터 조립, 결과 출력 |
 
 ## 설계상의 선택과 한계
 
@@ -245,8 +248,9 @@ cargo test --workspace
 
 | 대상 | 내용 |
 | --- | --- |
-| `gm-core` | worktree 경로 판별 |
-| `gm-store` | 세대 번호·원자적 전환·롤백 대상 선택·GC 보호·잠금 |
+| `gm-core` | worktree 경로 판별, 세대 번호, 롤백 및 GC 정책 |
+| `gm-application` | 가짜 포트를 사용한 정상 활성화와 자동 롤백 정책 |
+| `gm-store` | 원자적 전환, GC 실행, 잠금과 잠금 소유권 검사 |
 | `gm-runner` | 헬스체크 URL 파싱 |
 | `tests/worktree.rs` | `init`, `dev new/list/rm`, worktree 안에서의 발견 동작 |
 | `tests/dev_run.rs` | `dev run` — 전경 실행, 종료 코드, 빌드 단계, 대상 자동 선택, 슬롯 인계 |

@@ -1,6 +1,6 @@
-use gm_core::error::{Error,
-                     IoContext,
-                     Result};
+use crate::error::{Error,
+                   IoContext,
+                   Result};
 use std::{collections::BTreeMap,
           path::Path,
           process::Command};
@@ -26,6 +26,15 @@ pub fn run_stage(stage: &str, cmd: &str, dir: &Path, env: &BTreeMap<String, Stri
             stage: stage.to_string(),
             code: status.code().unwrap_or(-1),
         })
+    }
+}
+
+#[derive(Debug, Clone, Copy, Default)]
+pub struct ShellExecutor;
+
+impl gm_application::StageExecutor for ShellExecutor {
+    fn run(&self, name: &str, command: &str, cwd: &Path, env: &BTreeMap<String, String>) -> gm_application::PortResult<()> {
+        Ok(run_stage(name, command, cwd, env)?)
     }
 }
 

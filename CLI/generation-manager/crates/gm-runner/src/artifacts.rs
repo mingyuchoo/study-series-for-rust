@@ -1,6 +1,6 @@
-use gm_core::error::{Error,
-                     IoContext,
-                     Result};
+use crate::error::{Error,
+                   IoContext,
+                   Result};
 use std::{fs,
           path::{Path,
                  PathBuf}};
@@ -27,6 +27,15 @@ pub fn collect(src_root: &Path, includes: &[PathBuf], dest_root: &Path) -> Resul
         copied.push(rel.clone());
     }
     Ok(copied)
+}
+
+#[derive(Debug, Clone, Copy, Default)]
+pub struct FileArtifactCollector;
+
+impl gm_application::ArtifactCollector for FileArtifactCollector {
+    fn collect(&self, source: &Path, includes: &[PathBuf], destination: &Path) -> gm_application::PortResult<Vec<PathBuf>> {
+        Ok(collect(source, includes, destination)?)
+    }
 }
 
 fn copy_path(src: &Path, dest: &Path) -> Result<()> {

@@ -7,6 +7,7 @@ use gm_core::generation::{Generation,
                           GenerationId,
                           GenerationStatus};
 use gm_store::{Layout,
+               ProjectLock,
                Store};
 use std::{path::PathBuf,
           sync::atomic::{AtomicU32,
@@ -30,8 +31,8 @@ impl Drop for TempProject {
     fn drop(&mut self) { let _ = std::fs::remove_dir_all(&self.0); }
 }
 
-fn add_generation(store: &Store, commit: &str) -> GenerationId {
-    let staged = store.stage(Some(commit)).unwrap();
+fn add_generation(store: &Store, lock: &ProjectLock, commit: &str) -> GenerationId {
+    let staged = store.stage(lock, Some(commit)).unwrap();
     std::fs::write(staged.payload.join("marker"), commit).unwrap();
     let id = staged.id;
     let meta = Generation {
@@ -44,7 +45,7 @@ fn add_generation(store: &Store, commit: &str) -> GenerationId {
         artifacts: vec![PathBuf::from("marker")],
         note: None,
     };
-    store.commit(staged, meta).unwrap();
+    store.commit(lock, staged, meta).unwrap();
     id
 }
 
@@ -52,9 +53,10 @@ fn add_generation(store: &Store, commit: &str) -> GenerationId {
 fn generations_are_numbered_from_one() {
     let temp = TempProject::new();
     let store = Store::open(Layout::new(&temp.0)).unwrap();
+    let lock = store.lock().unwrap();
 
-    assert_eq!(add_generation(&store, "aaaaaaa"), GenerationId(1));
-    assert_eq!(add_generation(&store, "bbbbbbb"), GenerationId(2));
+    assert_eq!(add_generation(&store, &lock, "aaaaaaa"), GenerationId(1));
+    assert_eq!(add_generation(&store, &lock, "bbbbbbb"), GenerationId(2));
     assert_eq!(store.list().unwrap().len(), 2);
 }
 
@@ -62,7 +64,8 @@ fn generations_are_numbered_from_one() {
 fn nothing_is_active_before_the_first_switch() {
     let temp = TempProject::new();
     let store = Store::open(Layout::new(&temp.0)).unwrap();
-    add_generation(&store, "aaaaaaa");
+    let lock = store.lock().unwrap();
+    add_generation(&store, &lock, "aaaaaaa");
 
     assert_eq!(store.current_id().unwrap(), None);
     assert!(store.current().is_err());
@@ -72,13 +75,14 @@ fn nothing_is_active_before_the_first_switch() {
 fn switching_moves_the_current_pointer_and_records_history() {
     let temp = TempProject::new();
     let store = Store::open(Layout::new(&temp.0)).unwrap();
-    let first = add_generation(&store, "aaaaaaa");
-    let second = add_generation(&store, "bbbbbbb");
+    let lock = store.lock().unwrap();
+    let first = add_generation(&store, &lock, "aaaaaaa");
+    let second = add_generation(&store, &lock, "bbbbbbb");
 
-    store.switch(first, "test").unwrap();
+    store.switch(&lock, first, "test").unwrap();
     assert_eq!(store.current_id().unwrap(), Some(first));
 
-    store.switch(second, "test").unwrap();
+    store.switch(&lock, second, "test").unwrap();
     assert_eq!(store.current_id().unwrap(), Some(second));
     // The payload really follows the pointer.
     assert_eq!(std::fs::read_to_string(store.current().unwrap().payload().join("marker")).unwrap(), "bbbbbbb");
@@ -93,17 +97,18 @@ fn switching_moves_the_current_pointer_and_records_history() {
 fn rollback_target_is_the_highest_generation_below_current() {
     let temp = TempProject::new();
     let store = Store::open(Layout::new(&temp.0)).unwrap();
-    let first = add_generation(&store, "aaaaaaa");
-    let second = add_generation(&store, "bbbbbbb");
-    let third = add_generation(&store, "ccccccc");
+    let lock = store.lock().unwrap();
+    let first = add_generation(&store, &lock, "aaaaaaa");
+    let second = add_generation(&store, &lock, "bbbbbbb");
+    let third = add_generation(&store, &lock, "ccccccc");
 
-    store.switch(third, "test").unwrap();
+    store.switch(&lock, third, "test").unwrap();
     assert_eq!(store.rollback_target().unwrap(), second);
 
-    store.switch(second, "test").unwrap();
+    store.switch(&lock, second, "test").unwrap();
     assert_eq!(store.rollback_target().unwrap(), first);
 
-    store.switch(first, "test").unwrap();
+    store.switch(&lock, first, "test").unwrap();
     assert!(store.rollback_target().is_err());
 }
 
@@ -111,10 +116,11 @@ fn rollback_target_is_the_highest_generation_below_current() {
 fn switching_to_a_missing_generation_leaves_current_untouched() {
     let temp = TempProject::new();
     let store = Store::open(Layout::new(&temp.0)).unwrap();
-    let first = add_generation(&store, "aaaaaaa");
-    store.switch(first, "test").unwrap();
+    let lock = store.lock().unwrap();
+    let first = add_generation(&store, &lock, "aaaaaaa");
+    store.switch(&lock, first, "test").unwrap();
 
-    assert!(store.switch(GenerationId(99), "test").is_err());
+    assert!(store.switch(&lock, GenerationId(99), "test").is_err());
     assert_eq!(store.current_id().unwrap(), Some(first));
 }
 
@@ -122,13 +128,14 @@ fn switching_to_a_missing_generation_leaves_current_untouched() {
 fn gc_keeps_the_active_generation_and_its_rollback_target() {
     let temp = TempProject::new();
     let store = Store::open(Layout::new(&temp.0)).unwrap();
-    let first = add_generation(&store, "aaaaaaa");
-    let second = add_generation(&store, "bbbbbbb");
-    let third = add_generation(&store, "ccccccc");
-    let fourth = add_generation(&store, "ddddddd");
+    let lock = store.lock().unwrap();
+    let first = add_generation(&store, &lock, "aaaaaaa");
+    let second = add_generation(&store, &lock, "bbbbbbb");
+    let third = add_generation(&store, &lock, "ccccccc");
+    let fourth = add_generation(&store, &lock, "ddddddd");
 
-    store.switch(fourth, "test").unwrap();
-    let removed = store.gc(2).unwrap();
+    store.switch(&lock, fourth, "test").unwrap();
+    let removed = store.gc(&lock, 2).unwrap();
 
     assert_eq!(removed, vec![first, second]);
     let remaining: Vec<_> = store.list().unwrap().into_iter().map(|e| e.meta.id).collect();
@@ -145,4 +152,15 @@ fn a_second_lock_is_refused_while_the_first_is_held() {
     assert!(store.lock().is_err());
     drop(held);
     assert!(store.lock().is_ok());
+}
+
+#[test]
+fn a_lock_from_another_project_cannot_mutate_the_store() {
+    let first = TempProject::new();
+    let second = TempProject::new();
+    let store = Store::open(Layout::new(&first.0)).unwrap();
+    let other = Store::open(Layout::new(&second.0)).unwrap();
+    let wrong_lock = other.lock().unwrap();
+
+    assert!(store.stage(&wrong_lock, Some("aaaaaaa")).is_err());
 }
