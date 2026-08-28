@@ -10,7 +10,7 @@ use gm_store::ProjectLock;
 use std::process::ExitCode;
 
 /// Stage 2: build, test, freeze.
-pub fn build(from: Option<&str>, note: Option<String>, switch_after: bool) -> Result<ExitCode> {
+pub fn build(from: Option<&str>, note: Option<String>, activate_after: bool) -> Result<ExitCode> {
     let project = Project::open()?;
     let lock = project.store.lock()?;
 
@@ -38,17 +38,17 @@ pub fn build(from: Option<&str>, note: Option<String>, switch_after: bool) -> Re
         ui::human_size(dir_size(&entry.payload))
     );
 
-    if !switch_after {
-        println!("  activate it with `gm switch`");
+    if !activate_after {
+        println!("  activate it with `gm generation activate`");
         return Ok(ExitCode::SUCCESS);
     }
 
     println!();
-    activate(&project, entry.meta.id, "gm build --switch", &lock)
+    activate(&project, entry.meta.id, "gm generation build --activate", &lock)
 }
 
 /// Activate a generation, honouring the health check.
-pub fn switch(target: Option<u64>) -> Result<ExitCode> {
+pub fn activate_generation(target: Option<u64>) -> Result<ExitCode> {
     let project = Project::open()?;
     let lock = project.store.lock()?;
 
@@ -59,9 +59,9 @@ pub fn switch(target: Option<u64>) -> Result<ExitCode> {
             .list()?
             .last()
             .map(|e| e.meta.id)
-            .ok_or_else(|| anyhow::anyhow!("no generations yet — run `gm build` first"))?,
+            .ok_or_else(|| anyhow::anyhow!("no generations yet — run `gm generation build` first"))?,
     };
-    activate(&project, id, "gm switch", &lock)
+    activate(&project, id, "gm generation activate", &lock)
 }
 
 /// Stage 3: back out to an older generation.
@@ -73,14 +73,14 @@ pub fn rollback(target: Option<u64>) -> Result<ExitCode> {
         | Some(n) => GenerationId(n),
         | None => project.store.rollback_target()?,
     };
-    activate(&project, id, "gm rollback", &lock)
+    activate(&project, id, "gm generation rollback", &lock)
 }
 
 fn activate(project: &Project, id: GenerationId, reason: &str, lock: &ProjectLock) -> Result<ExitCode> {
     let pipeline = Pipeline::new(&project.store, &project.config);
 
     // Taking the slot back from a development run is legitimate, but silently
-    // killing someone's `gm dev run` is not.
+    // killing someone's `gm worktree run` is not.
     if let Some(state) = pipeline.supervisor().running()
         && state.source.is_dev()
     {
@@ -119,7 +119,7 @@ fn activate(project: &Project, id: GenerationId, reason: &str, lock: &ProjectLoc
                     eprintln!("  {} no earlier generation to restore; nothing is running", ui::ARROW);
                 },
             }
-            eprintln!("  inspect the failure with `gm logs`");
+            eprintln!("  inspect the failure with `gm service logs`");
             Ok(ExitCode::FAILURE)
         },
     }
@@ -129,7 +129,7 @@ pub fn generations() -> Result<ExitCode> {
     let project = Project::open()?;
     let entries = project.store.list()?;
     if entries.is_empty() {
-        println!("no generations yet (run `gm build`)");
+        println!("no generations yet (run `gm generation build`)");
         return Ok(ExitCode::SUCCESS);
     }
     let current = project.store.current_id()?;
@@ -179,7 +179,7 @@ pub fn history() -> Result<ExitCode> {
     Ok(ExitCode::SUCCESS)
 }
 
-pub fn gc(keep: usize) -> Result<ExitCode> {
+pub fn prune(keep: usize) -> Result<ExitCode> {
     let project = Project::open()?;
     let lock = project.store.lock()?;
 

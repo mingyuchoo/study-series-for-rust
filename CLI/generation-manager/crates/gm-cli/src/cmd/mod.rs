@@ -1,10 +1,14 @@
 mod dev;
 mod init;
 mod lifecycle;
+mod project;
 mod service;
 
 use crate::{Command,
-            DevCommand};
+            GenerationCommand,
+            ProjectCommand,
+            ServiceCommand,
+            WorktreeCommand};
 use anyhow::{Result,
              bail};
 use gm_core::config::Config;
@@ -39,15 +43,15 @@ impl Project {
         })
     }
 
-    /// Which worktree a command should act on: an explicit `--from` wins,
-    /// otherwise the one the developer is standing in.
+    /// Which worktree a command should act on: an explicit positional target
+    /// wins, otherwise the one the developer is standing in.
     pub fn select_worktree(&self, from: Option<&str>) -> Option<String> { gm_core::select_worktree(from, self.worktree.as_deref()) }
 
     /// Resolve a worktree name to its path, failing if it does not exist.
     pub fn worktree_path(&self, name: &str) -> Result<PathBuf> {
         let path = self.store.layout().worktree(name);
         if !path.is_dir() {
-            bail!("worktree `{name}` does not exist (see `gm dev list`)");
+            bail!("worktree `{name}` does not exist (see `gm worktree list`)");
         }
         Ok(path)
     }
@@ -55,51 +59,51 @@ impl Project {
 
 pub fn dispatch(command: Command) -> Result<ExitCode> {
     match command {
-        | Command::Init {
+        | Command::Project(ProjectCommand::Init {
             preset,
             name,
             force,
-        } => init::run(preset, name, force),
+        }) => init::run(preset, name, force),
+        | Command::Project(ProjectCommand::Status) => project::status(),
 
-        | Command::Status => service::status(),
-
-        | Command::Dev(DevCommand::New {
+        | Command::Worktree(WorktreeCommand::Create {
             name,
             base,
         }) => dev::new(&name, base.as_deref()),
-        | Command::Dev(DevCommand::List) => dev::list(),
-        | Command::Dev(DevCommand::Run {
-            from,
+        | Command::Worktree(WorktreeCommand::List) => dev::list(),
+        | Command::Worktree(WorktreeCommand::Run {
+            worktree,
             no_build,
             detach,
-        }) => dev::run(from.as_deref(), no_build, detach),
-        | Command::Dev(DevCommand::Rm {
+        }) => dev::run(worktree.as_deref(), no_build, detach),
+        | Command::Worktree(WorktreeCommand::Remove {
             name,
             force,
         }) => dev::remove(&name, force),
 
-        | Command::Build {
-            from,
+        | Command::Generation(GenerationCommand::Build {
+            worktree,
             note,
-            switch,
-        } => lifecycle::build(from.as_deref(), note, switch),
-        | Command::Switch {
+            activate,
+        }) => lifecycle::build(worktree.as_deref(), note, activate),
+        | Command::Generation(GenerationCommand::List) => lifecycle::generations(),
+        | Command::Generation(GenerationCommand::Activate {
             generation,
-        } => lifecycle::switch(generation),
-        | Command::Rollback {
-            to,
-        } => lifecycle::rollback(to),
-        | Command::Generations => lifecycle::generations(),
-        | Command::History => lifecycle::history(),
-        | Command::Gc {
+        }) => lifecycle::activate_generation(generation),
+        | Command::Generation(GenerationCommand::Rollback {
+            generation,
+        }) => lifecycle::rollback(generation),
+        | Command::Generation(GenerationCommand::History) => lifecycle::history(),
+        | Command::Generation(GenerationCommand::Prune {
             keep,
-        } => lifecycle::gc(keep),
+        }) => lifecycle::prune(keep),
 
-        | Command::Start => service::start(),
-        | Command::Stop => service::stop(),
-        | Command::Restart => service::restart(),
-        | Command::Logs {
+        | Command::Service(ServiceCommand::Status) => service::status(),
+        | Command::Service(ServiceCommand::Start) => service::start(),
+        | Command::Service(ServiceCommand::Stop) => service::stop(),
+        | Command::Service(ServiceCommand::Restart) => service::restart(),
+        | Command::Service(ServiceCommand::Logs {
             lines,
-        } => service::logs(lines),
+        }) => service::logs(lines),
     }
 }

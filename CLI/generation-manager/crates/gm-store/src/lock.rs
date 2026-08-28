@@ -9,8 +9,8 @@ use std::{fs::{File,
 
 /// Advisory exclusive lock over one project.
 ///
-/// Two concurrent `gm switch` runs would race on the `current` symlink and on
-/// the pid file, so every mutating command takes this first.
+/// Two concurrent `gm generation activate` runs would race on the `current`
+/// symlink and on the pid file, so every mutating command takes this first.
 #[derive(Debug)]
 pub struct ProjectLock {
     _file: File,

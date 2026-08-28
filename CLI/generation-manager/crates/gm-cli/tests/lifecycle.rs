@@ -1,5 +1,4 @@
-//! End-to-end tests for the generation lifecycle: `gm build`, `gm switch`,
-//! `gm rollback`, `gm generations`, `gm history` and `gm gc`.
+//! End-to-end tests for `gm generation` commands.
 
 mod common;
 
@@ -28,10 +27,10 @@ fn project() -> Fixture {
 fn build_creates_a_generation_without_activating_it() {
     let fixture = project();
 
-    let output = fixture.gm_ok(&["build"]);
+    let output = fixture.gm_ok(&["generation", "build"]);
     assert!(stdout(&output).contains("generation 1 built"), "stdout: {}", stdout(&output));
 
-    let listed = stdout(&fixture.gm_ok(&["generations"]));
+    let listed = stdout(&fixture.gm_ok(&["generation", "list"]));
     assert!(listed.contains("built"), "generations: {listed}");
     // Nothing is marked active, and nothing is running.
     assert!(!listed.contains('*'), "generations: {listed}");
@@ -42,37 +41,37 @@ fn build_creates_a_generation_without_activating_it() {
 fn a_failing_test_stage_consumes_no_generation_number() {
     let fixture = Fixture::with(Manifest::new("true").test("exit 1"));
 
-    let failed = fixture.gm(&["build"]);
+    let failed = fixture.gm(&["generation", "build"]);
     assert!(!failed.status.success());
     assert!(stderr(&failed).contains("`test` failed"), "stderr: {}", stderr(&failed));
 
-    let listed = stdout(&fixture.gm_ok(&["generations"]));
+    let listed = stdout(&fixture.gm_ok(&["generation", "list"]));
     assert!(listed.contains("no generations yet"), "generations: {listed}");
 
     // The next successful build still gets number 1.
     let ok = Fixture::with(Manifest::new("true"));
-    assert!(stdout(&ok.gm_ok(&["build"])).contains("generation 1 built"));
+    assert!(stdout(&ok.gm_ok(&["generation", "build"])).contains("generation 1 built"));
 }
 
 #[test]
 fn a_missing_artifact_creates_no_generation() {
     let fixture = Fixture::with(Manifest::new("true").artifacts(&["never-produced"]));
 
-    let failed = fixture.gm(&["build"]);
+    let failed = fixture.gm(&["generation", "build"]);
     assert!(!failed.status.success());
     assert!(stderr(&failed).contains("does not exist after the build"), "stderr: {}", stderr(&failed));
-    assert!(stdout(&fixture.gm_ok(&["generations"])).contains("no generations yet"));
+    assert!(stdout(&fixture.gm_ok(&["generation", "list"])).contains("no generations yet"));
 }
 
 #[test]
-fn switch_activates_the_newest_generation_and_marks_it_healthy() {
+fn activate_uses_the_newest_generation_and_marks_it_healthy() {
     let fixture = project();
-    fixture.gm_ok(&["build"]);
+    fixture.gm_ok(&["generation", "build"]);
 
-    let switched = fixture.gm_ok(&["switch"]);
+    let switched = fixture.gm_ok(&["generation", "activate"]);
     assert!(stdout(&switched).contains("generation 1 is live"), "stdout: {}", stdout(&switched));
 
-    let listed = stdout(&fixture.gm_ok(&["generations"]));
+    let listed = stdout(&fixture.gm_ok(&["generation", "list"]));
     assert!(listed.contains("healthy"), "generations: {listed}");
     assert!(listed.contains('*'), "generations: {listed}");
     assert_eq!(
@@ -84,11 +83,11 @@ fn switch_activates_the_newest_generation_and_marks_it_healthy() {
 }
 
 #[test]
-fn switching_to_an_unknown_generation_fails() {
+fn activating_an_unknown_generation_fails() {
     let fixture = project();
-    fixture.gm_ok(&["build"]);
+    fixture.gm_ok(&["generation", "build"]);
 
-    let output = fixture.gm(&["switch", "--gen", "99"]);
+    let output = fixture.gm(&["generation", "activate", "99"]);
 
     assert!(!output.status.success());
     assert!(stderr(&output).contains("generation 99 does not exist"), "stderr: {}", stderr(&output));
@@ -97,11 +96,11 @@ fn switching_to_an_unknown_generation_fails() {
 #[test]
 fn an_older_generation_keeps_the_artifacts_it_was_built_with() {
     let fixture = project();
-    fixture.gm_ok(&["build"]);
+    fixture.gm_ok(&["generation", "build"]);
 
     // Later development must not reach back into a frozen generation.
     fixture.write("source.txt", "good, but changed\n");
-    fixture.gm_ok(&["build"]);
+    fixture.gm_ok(&["generation", "build"]);
 
     assert_eq!(std::fs::read_to_string(fixture.generation_payload(1).join("payload.txt")).unwrap(), "good\n");
     assert_eq!(
@@ -113,11 +112,11 @@ fn an_older_generation_keeps_the_artifacts_it_was_built_with() {
 #[test]
 fn rollback_returns_to_the_previous_generation() {
     let fixture = project();
-    fixture.gm_ok(&["build", "--switch"]);
+    fixture.gm_ok(&["generation", "build", "--activate"]);
     fixture.write("source.txt", "good, second\n");
-    fixture.gm_ok(&["build", "--switch"]);
+    fixture.gm_ok(&["generation", "build", "--activate"]);
 
-    let rolled = fixture.gm_ok(&["rollback"]);
+    let rolled = fixture.gm_ok(&["generation", "rollback"]);
     assert!(stdout(&rolled).contains("generation 1 is live"), "stdout: {}", stdout(&rolled));
     assert_eq!(
         fixture.run_state().unwrap().source,
@@ -127,7 +126,7 @@ fn rollback_returns_to_the_previous_generation() {
     );
 
     // Rolling back again from generation 1 has nowhere to go.
-    let exhausted = fixture.gm(&["rollback"]);
+    let exhausted = fixture.gm(&["generation", "rollback"]);
     assert!(!exhausted.status.success());
     assert!(stderr(&exhausted).contains("no older generation"), "stderr: {}", stderr(&exhausted));
 }
@@ -136,11 +135,11 @@ fn rollback_returns_to_the_previous_generation() {
 fn rollback_can_target_a_specific_generation() {
     let fixture = project();
     for _ in 0 .. 3 {
-        fixture.gm_ok(&["build"]);
+        fixture.gm_ok(&["generation", "build"]);
     }
-    fixture.gm_ok(&["switch", "--gen", "3"]);
+    fixture.gm_ok(&["generation", "activate", "3"]);
 
-    fixture.gm_ok(&["rollback", "--to", "1"]);
+    fixture.gm_ok(&["generation", "rollback", "1"]);
 
     assert_eq!(
         fixture.run_state().unwrap().source,
@@ -153,18 +152,18 @@ fn rollback_can_target_a_specific_generation() {
 #[test]
 fn a_failed_health_check_rolls_back_automatically() {
     let fixture = project();
-    fixture.gm_ok(&["build", "--switch"]);
+    fixture.gm_ok(&["generation", "build", "--activate"]);
 
     // The next generation builds and tests fine but fails verification.
     fixture.write("source.txt", "bad\n");
-    let failed = fixture.gm(&["build", "--switch"]);
+    let failed = fixture.gm(&["generation", "build", "--activate"]);
 
     assert!(!failed.status.success(), "a rejected generation must not report success");
     let err = stderr(&failed);
     assert!(err.contains("generation 2 failed verification"), "stderr: {err}");
     assert!(err.contains("rolled back to generation 1, which is live again"), "stderr: {err}");
 
-    let listed = stdout(&fixture.gm_ok(&["generations"]));
+    let listed = stdout(&fixture.gm_ok(&["generation", "list"]));
     assert!(listed.contains("rejected"), "generations: {listed}");
     assert_eq!(
         fixture.run_state().unwrap().source,
@@ -176,34 +175,38 @@ fn a_failed_health_check_rolls_back_automatically() {
 }
 
 #[test]
-fn history_records_every_switch_with_its_reason() {
+fn history_records_every_activation_with_its_reason() {
     let fixture = project();
-    fixture.gm_ok(&["build", "--switch"]);
+    fixture.gm_ok(&["generation", "build", "--activate"]);
     fixture.write("source.txt", "good, second\n");
-    fixture.gm_ok(&["build", "--switch"]);
-    fixture.gm_ok(&["rollback"]);
+    fixture.gm_ok(&["generation", "build", "--activate"]);
+    fixture.gm_ok(&["generation", "rollback"]);
 
-    let history = stdout(&fixture.gm_ok(&["history"]));
+    let history = stdout(&fixture.gm_ok(&["generation", "history"]));
     let lines: Vec<&str> = history.lines().collect();
 
     assert_eq!(lines.len(), 3, "history: {history}");
-    assert!(lines[0].contains("- → 1") && lines[0].contains("gm build --switch"), "{}", lines[0]);
+    assert!(
+        lines[0].contains("- → 1") && lines[0].contains("gm generation build --activate"),
+        "{}",
+        lines[0]
+    );
     assert!(lines[1].contains("1 → 2"), "{}", lines[1]);
-    assert!(lines[2].contains("2 → 1") && lines[2].contains("gm rollback"), "{}", lines[2]);
+    assert!(lines[2].contains("2 → 1") && lines[2].contains("gm generation rollback"), "{}", lines[2]);
 }
 
 #[test]
-fn gc_keeps_the_active_generation_and_its_rollback_target() {
+fn prune_keeps_the_active_generation_and_its_rollback_target() {
     let fixture = project();
     for _ in 0 .. 4 {
-        fixture.gm_ok(&["build"]);
+        fixture.gm_ok(&["generation", "build"]);
     }
-    fixture.gm_ok(&["switch", "--gen", "4"]);
+    fixture.gm_ok(&["generation", "activate", "4"]);
 
-    let collected = fixture.gm_ok(&["gc", "--keep", "2"]);
+    let collected = fixture.gm_ok(&["generation", "prune", "--keep", "2"]);
     assert!(stdout(&collected).contains("removed generation(s) 1, 2"), "stdout: {}", stdout(&collected));
 
-    let listed = stdout(&fixture.gm_ok(&["generations"]));
+    let listed = stdout(&fixture.gm_ok(&["generation", "list"]));
     assert!(!listed.contains(" 1 ") && !listed.contains(" 2 "), "generations: {listed}");
     assert!(listed.contains(" 3 ") && listed.contains(" 4 "), "generations: {listed}");
     // The store directories are gone too, not just the numbered links.
@@ -212,11 +215,11 @@ fn gc_keeps_the_active_generation_and_its_rollback_target() {
 }
 
 #[test]
-fn gc_never_removes_the_last_generations_when_asked_to_keep_none() {
+fn prune_never_removes_the_last_generations_when_asked_to_keep_none() {
     let fixture = project();
-    fixture.gm_ok(&["build", "--switch"]);
+    fixture.gm_ok(&["generation", "build", "--activate"]);
 
-    fixture.gm_ok(&["gc", "--keep", "0"]);
+    fixture.gm_ok(&["generation", "prune", "--keep", "0"]);
 
     assert!(fixture.path(".gm/generations/0001").exists());
 }
@@ -225,8 +228,8 @@ fn gc_never_removes_the_last_generations_when_asked_to_keep_none() {
 fn a_note_is_stored_with_the_generation() {
     let fixture = project();
 
-    fixture.gm_ok(&["build", "--note", "tuned the cache"]);
+    fixture.gm_ok(&["generation", "build", "--note", "tuned the cache"]);
 
-    let listed = stdout(&fixture.gm_ok(&["generations"]));
+    let listed = stdout(&fixture.gm_ok(&["generation", "list"]));
     assert!(listed.contains("tuned the cache"), "generations: {listed}");
 }

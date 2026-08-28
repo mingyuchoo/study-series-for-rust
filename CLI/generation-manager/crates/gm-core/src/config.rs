@@ -149,7 +149,8 @@ impl Config {
     }
 }
 
-/// Starting points for `gm init`, so the multi-language case is a one-liner.
+/// Starting points for `gm project init`, so the multi-language case is a
+/// one-liner.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Preset {
     Rust,

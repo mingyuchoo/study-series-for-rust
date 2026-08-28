@@ -30,7 +30,7 @@ pub fn new(name: &str, base: Option<&str>) -> Result<ExitCode> {
     println!();
     println!("  cd {}", path.display());
     println!("  # …develop, commit…");
-    println!("  gm build --from {name} --switch");
+    println!("  gm generation build {name} --activate");
     Ok(ExitCode::SUCCESS)
 }
 
@@ -41,7 +41,7 @@ pub fn run(from: Option<&str>, no_build: bool, detach: bool) -> Result<ExitCode>
 
     let Some(name) = project.select_worktree(from) else {
         bail!(
-            "not inside a worktree — pass `--from <name>`, or use `gm start` to run the \
+            "not inside a worktree — pass `<worktree>`, or use `gm service start` to run the \
              active generation"
         );
     };
@@ -61,7 +61,7 @@ pub fn run(from: Option<&str>, no_build: bool, detach: bool) -> Result<ExitCode>
         | DevOutcome::Detached(state) => {
             println!();
             println!("{} worktree `{name}` running in the background (pid {})", ui::OK, state.pid);
-            println!("  logs with `gm logs`, stop with `gm stop`");
+            println!("  logs with `gm service logs`, stop with `gm service stop`");
             Ok(ExitCode::SUCCESS)
         },
         | DevOutcome::Exited {
@@ -74,7 +74,7 @@ pub fn run(from: Option<&str>, no_build: bool, detach: bool) -> Result<ExitCode>
             // The dev run took the slot; leaving it empty silently would look
             // like the active generation is still serving.
             if let Ok(Some(id)) = project.store.current_id() {
-                println!("  service slot is free — `gm start` runs generation {id} again");
+                println!("  service slot is free — `gm service start` runs generation {id} again");
             }
             if code == 0 { Ok(ExitCode::SUCCESS) } else { Ok(ExitCode::FAILURE) }
         },
@@ -110,7 +110,7 @@ pub fn list() -> Result<ExitCode> {
     }
 
     if rows.is_empty() {
-        println!("no worktrees (create one with `gm dev new <name>`)");
+        println!("no worktrees (create one with `gm worktree create <name>`)");
         return Ok(ExitCode::SUCCESS);
     }
 
@@ -118,7 +118,7 @@ pub fn list() -> Result<ExitCode> {
     println!("{:<3} {:<20} {:<20} {:<10} STATE", "", "NAME", "BRANCH", "COMMIT");
     for (name, branch, commit, dirty, here) in rows {
         // `*` marks the worktree the current directory is in — the one a bare
-        // `gm dev run` or `gm build` would act on.
+        // `gm worktree run` or `gm generation build` would act on.
         let marker = if here { "*" } else { " " };
         println!("{marker:<3} {name:<20} {branch:<20} {commit:<10} {dirty}");
     }

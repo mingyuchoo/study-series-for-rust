@@ -58,7 +58,7 @@ fn copy_path(src: &Path, dest: &Path) -> Result<()> {
     Ok(())
 }
 
-/// Total size of a directory tree, for `gm generations` reporting.
+/// Total size of a directory tree, for `gm generation list` reporting.
 pub fn dir_size(path: &Path) -> u64 {
     let Ok(entries) = fs::read_dir(path) else {
         return 0;

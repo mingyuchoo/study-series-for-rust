@@ -7,9 +7,9 @@ use std::fmt;
 
 /// Where the running process came from.
 ///
-/// Recording this is what keeps `gm status` honest once a worktree can be run
-/// directly: "something is running" is not useful if you cannot tell a verified
-/// generation from an unverified development checkout.
+/// Recording this is what keeps `gm project status` honest once a worktree can
+/// be run directly: "something is running" is not useful if you cannot tell a
+/// verified generation from an unverified development checkout.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "kebab-case")]
 pub enum RunSource {
@@ -43,7 +43,7 @@ pub struct RunState {
     pub source: RunSource,
     pub pid: i32,
     pub started_at: DateTime<Utc>,
-    /// False while a foreground `gm dev run` owns the terminal.
+    /// False while a foreground `gm worktree run` owns the terminal.
     #[serde(default)]
     pub detached: bool,
 }

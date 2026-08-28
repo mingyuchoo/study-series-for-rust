@@ -27,8 +27,8 @@ pub fn run(preset: Option<String>, name: Option<String>, force: bool) -> Result<
     println!("{} wrote {}", ui::OK, manifest.display());
     println!();
     println!("Review the build, test, artifacts and run entries, then:");
-    println!("  gm dev new my-feature   # stage 1: isolated worktree");
-    println!("  gm build --switch       # stage 2: build, test, activate");
-    println!("  gm rollback             # stage 3: back out");
+    println!("  gm worktree create my-feature       # stage 1: isolated worktree");
+    println!("  gm generation build --activate      # stage 2: build, test, activate");
+    println!("  gm generation rollback              # stage 3: back out");
     Ok(ExitCode::SUCCESS)
 }

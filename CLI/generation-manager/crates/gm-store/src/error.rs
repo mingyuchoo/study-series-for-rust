@@ -4,7 +4,7 @@ pub type Result<T> = std::result::Result<T, Error>;
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
-    #[error("no generation-manager.toml found in {0} or any parent directory (run `gm init`)")]
+    #[error("no generation-manager.toml found in {0} or any parent directory (run `gm project init`)")]
     ProjectNotFound(PathBuf),
 
     #[error("generation {0} does not exist")]

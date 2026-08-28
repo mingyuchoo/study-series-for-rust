@@ -73,7 +73,7 @@ impl Store {
     // ---------------------------------------------------------------- reading
 
     /// All generations, ordered oldest first. Unreadable entries are skipped so
-    /// one corrupt directory cannot break `gm generations`.
+    /// one corrupt directory cannot break `gm generation list`.
     pub fn list(&self) -> Result<Vec<GenerationEntry>> {
         let generations = self.layout.generations();
         let mut ids = Vec::new();
@@ -138,8 +138,8 @@ impl Store {
         self.get(id)
     }
 
-    /// The generation a bare `gm rollback` would select: the highest id below
-    /// the active one, mirroring `nixos-rebuild --rollback`.
+    /// The generation a bare `gm generation rollback` would select: the highest
+    /// id below the active one, mirroring `nixos-rebuild --rollback`.
     pub fn rollback_target(&self) -> Result<GenerationId> {
         let current = self.current_id()?;
         let ids: Vec<_> = self.list()?.into_iter().map(|entry| entry.meta.id).collect();

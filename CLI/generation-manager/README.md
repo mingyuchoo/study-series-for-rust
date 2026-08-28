@@ -7,13 +7,13 @@ NixOS의 세대/롤백 모델을 일반 프로젝트에 옮긴 것입니다. 다
 까지만 보장합니다.
 
 ```
-1단계  gm dev new <name>            원본을 건드리지 않는 격리된 worktree
-       gm dev run                   worktree 코드를 그 자리에서 실행 (개발 내부 루프)
-2단계  gm build --switch            빌드 → 테스트 → 세대 생성 → 활성화 → 헬스체크
-3단계  gm rollback                  이전 세대로 복귀
+1단계  gm worktree create <name>             원본을 건드리지 않는 격리된 worktree
+       gm worktree run                       worktree 코드를 그 자리에서 실행 (개발 내부 루프)
+2단계  gm generation build --activate        빌드 → 테스트 → 세대 생성 → 활성화 → 헬스체크
+3단계  gm generation rollback                이전 세대로 복귀
 ```
 
-헬스체크가 실패하면 `gm switch`가 **자동으로 이전 세대를 되돌리고** 종료 코드 1을
+헬스체크가 실패하면 `gm generation activate`가 **자동으로 이전 세대를 되돌리고** 종료 코드 1을
 반환합니다. 이 자동 롤백이 도구의 핵심이며, 단순 배포 스크립트와의 차이입니다.
 
 변경 이력은 [CHANGELOG.md](CHANGELOG.md)를 참고하세요.
@@ -22,7 +22,7 @@ NixOS의 세대/롤백 모델을 일반 프로젝트에 옮긴 것입니다. 다
 
 - **Unix 계열 전용.** 프로세스 분리에 `setsid(2)`, 세대 전환에 심볼릭 링크와
   `rename(2)`을 씁니다. Windows는 지원하지 않습니다.
-- **git.** `gm dev *` 명령이 `git worktree`를 직접 호출합니다. 그 외 명령은
+- **git.** `gm worktree *` 명령이 `git worktree`를 직접 호출합니다. 그 외 명령은
   git 없이도 동작합니다.
 - **Rust 2024 edition** 지원 툴체인.
 
@@ -36,19 +36,20 @@ cargo install --path crates/gm-cli
 ## 빠른 시작
 
 ```bash
-gm init --preset rust          # generation-manager.toml 생성 (미지정 시 자동 감지)
+gm project init --preset rust             # generation-manager.toml 생성 (미지정 시 자동 감지)
 
-gm dev new add-cache           # 1단계: .gm/worktrees/add-cache + 동명 브랜치
-cd .gm/worktrees/add-cache     #        개발
-gm dev run                     #        그 자리에서 실행 (전경, 검증 없음)
-gm build --switch              # 2단계: 빌드·테스트·활성화·검증
+gm worktree create add-cache              # 1단계: .gm/worktrees/add-cache + 동명 브랜치
+cd .gm/worktrees/add-cache                #        개발
+gm worktree run                           #        그 자리에서 실행 (전경, 검증 없음)
+gm generation build --activate            # 2단계: 빌드, 테스트, 활성화, 검증
 
-gm generations                 # 세대 목록 (* 가 활성 세대)
-gm status                      # 활성 세대 + 지금 무엇이 돌고 있는지
-gm logs -n 100                 # 서비스 로그
+gm generation list                        # 세대 목록 (* 가 활성 세대)
+gm project status                         # 프로젝트 전체 상태
+gm service status                         # 실행 중인 서비스의 출처
+gm service logs -n 100                    # 서비스 로그
 
-gm rollback                    # 3단계: 바로 이전 세대로
-gm gc --keep 5                 # 오래된 세대 정리
+gm generation rollback                    # 3단계: 바로 이전 세대로
+gm generation prune --keep 5              # 오래된 세대 정리
 ```
 
 ## 명령어
@@ -58,23 +59,25 @@ gm gc --keep 5                 # 오래된 세대 정리
 
 | 명령 | 설명 |
 | --- | --- |
-| `gm init [--preset P] [--name N] [--force]` | 매니페스트 생성. 프리셋 미지정 시 프로젝트 파일로 자동 감지 |
-| `gm status` | 활성 세대, 서 있는 worktree, 실행 중인 것의 **출처** |
-| `gm dev new <name> [--base <ref>]` | worktree + 동명 브랜치 생성 |
-| `gm dev list` | worktree 목록 (`*` = 현재 서 있는 곳) |
-| `gm dev run [--from N] [--no-build] [--detach]` | worktree 코드를 실행. 세대를 만들지 않음 |
-| `gm dev rm <name> [--force]` | worktree 제거 (브랜치는 남김) |
-| `gm build [--from N] [--note T] [--switch]` | 빌드·테스트 후 세대 생성. `--switch`면 이어서 활성화 |
-| `gm switch [--gen N]` | 세대 활성화 + 검증 (기본: 가장 최근 세대) |
-| `gm rollback [--to N]` | 이전 세대로 복귀 (기본: 활성 세대 바로 아래) |
-| `gm generations` (`gens`) | 세대 목록. 상태는 `built` / `healthy` / `rejected` |
-| `gm history` | 전환 이력과 사유 |
-| `gm gc [--keep N]` | 오래된 세대 삭제 (기본 5). 활성 세대와 롤백 대상은 항상 보존 |
-| `gm start` / `gm stop` / `gm restart` | 활성 세대의 프로세스 제어 |
-| `gm logs [-n N]` | 서비스 로그 꼬리 (기본 40줄) |
+| `gm project init [--preset P] [--name N] [--force]` | 매니페스트 생성. 프리셋 미지정 시 프로젝트 파일로 자동 감지 |
+| `gm project status` | 프로젝트 루트, 활성 세대, 현재 worktree, 서비스 상태 요약 |
+| `gm worktree create <name> [--base <ref>]` | worktree + 동명 브랜치 생성 |
+| `gm worktree list` | worktree 목록 (`*` = 현재 서 있는 곳) |
+| `gm worktree run [WORKTREE] [--no-build] [--detach]` | worktree 코드를 실행. 세대를 만들지 않음 |
+| `gm worktree remove <name> [--force]` | worktree 제거 (브랜치는 남김) |
+| `gm generation build [WORKTREE] [--note T] [--activate]` | 빌드와 테스트 후 세대 생성. `--activate`면 이어서 활성화 |
+| `gm generation list` | 세대 목록. 상태는 `built` / `healthy` / `rejected` |
+| `gm generation activate [GENERATION]` | 세대 활성화 + 검증 (기본: 가장 최근 세대) |
+| `gm generation rollback [GENERATION]` | 이전 세대로 복귀 (기본: 활성 세대 바로 아래) |
+| `gm generation history` | 활성화 이력과 사유 |
+| `gm generation prune [--keep N]` | 오래된 세대 삭제 (기본 5). 활성 세대와 롤백 대상은 항상 보존 |
+| `gm service status` | 실행 슬롯 상태와 실행 중인 소스 표시 |
+| `gm service start` / `stop` / `restart` | 활성 세대의 프로세스 제어 |
+| `gm service logs [-n N]` | 서비스 로그 꼬리 (기본 40줄) |
 
-**종료 코드.** 검증에 실패해 자동 롤백된 `gm switch`(및 `gm build --switch`)는
-`1`을 반환합니다. `gm dev run`은 실행한 코드의 종료 코드를 그대로 전달합니다.
+**종료 코드.** 검증에 실패해 자동 롤백된 `gm generation activate`와
+`gm generation build --activate`는 `1`을 반환합니다. `gm worktree run`은
+실행한 코드의 종료 코드를 그대로 전달합니다.
 
 ### worktree 안에서의 동작
 
@@ -86,15 +89,16 @@ gm gc --keep 5                 # 오래된 세대 정리
 
 ```bash
 cd .gm/worktrees/add-cache
-gm status        # 원본의 활성 세대가 보임 + `worktree add-cache (you are here)`
-gm dev run       # 이 worktree를 실행
-gm build         # 이 worktree를 빌드 (--from 불필요)
+gm project status      # 원본의 활성 세대가 보임 + `worktree add-cache (you are here)`
+gm worktree run        # 이 worktree를 실행
+gm generation build   # 이 worktree를 빌드 (대상 인자 불필요)
 ```
 
 ## 실행 슬롯과 실행 출처
 
 한 프로젝트는 **하나의 서비스 슬롯**만 가집니다. 슬롯을 차지한 주체는
-`.gm/run/state.json`에 기록되므로, `gm status`는 "뭔가 돌고 있다"가 아니라
+`.gm/run/state.json`에 기록되므로, `gm project status`와 `gm service status`는
+"뭔가 돌고 있다"가 아니라
 **무엇이 돌고 있는지**를 답합니다.
 
 ```
@@ -102,24 +106,24 @@ gm build         # 이 worktree를 빌드 (--from 불필요)
   running      worktree `add-cache` (dev, unverified)   ← 세대가 아니라 개발 코드
 ```
 
-| | `gm start` / `gm switch` | `gm dev run` |
+| | `gm service start` / `gm generation activate` | `gm worktree run` |
 | --- | --- | --- |
 | 대상 | 활성 세대 (검증됨) | worktree (미검증) |
 | 모드 | 배경 (setsid 분리) | 전경 (`--detach`로 배경) |
 | 테스트 | 세대 생성 시 통과 | 건너뜀 |
-| 헬스체크·자동 롤백 | 함 | **안 함** |
-| 종료 | `gm stop` | Ctrl-C |
+| 헬스체크와 자동 롤백 | 함 | **안 함** |
+| 종료 | `gm service stop` | Ctrl-C |
 
 슬롯을 뺏을 때는 양쪽 모두 무엇을 밀어냈는지 출력합니다.
 
 ```
-$ gm switch --gen 1
+$ gm generation activate 1
   → stopping worktree `add-cache` (dev, unverified) to take the service slot
 ```
 
 ## 매니페스트
 
-`generation-manager.toml`. 빌드·테스트·실행이 전부 shell 커맨드(`sh -c`)라 언어에
+`generation-manager.toml`. 빌드, 테스트, 실행이 전부 shell 커맨드(`sh -c`)라 언어에
 중립적입니다.
 
 ```toml
@@ -151,8 +155,8 @@ interval_secs = 1                              # 기본 1
 
 `run.cmd`(그리고 `health.cmd`)의 작업 디렉토리는 다음과 같습니다.
 
-- `gm start` / `gm switch` → 세대의 payload (`.gm/store/NNNN-xxx/root`)
-- `gm dev run` → 해당 worktree 루트
+- `gm service start` / `gm generation activate` → 세대의 payload (`.gm/store/NNNN-xxx/root`)
+- `gm worktree run` → 해당 worktree 루트
 
 payload는 **빌드 디렉토리의 상대 경로 구조를 그대로 복사**한 것이라, 두 경우에
 같은 명령이 성립합니다. 따라서 `run.cmd`는 빌드 디렉토리 기준 상대 경로로
@@ -176,10 +180,10 @@ payload는 **빌드 디렉토리의 상대 경로 구조를 그대로 복사**�
 
 ### 프리셋
 
-`gm init --preset <name>`. 미지정 시 `Cargo.toml` / `package.json` / `go.mod` /
+`gm project init --preset <name>`. 미지정 시 `Cargo.toml` / `package.json` / `go.mod` /
 `pyproject.toml`(또는 `requirements.txt`)을 보고 고릅니다.
 
-`rust` · `node` · `python` · `go` · `generic`
+`rust`, `node`, `python`, `go`, `generic`
 
 프리셋은 출발점일 뿐이므로, 생성된 매니페스트의 명령과 산출물 경로는 프로젝트에
 맞게 손봐야 합니다.
@@ -230,7 +234,7 @@ unlink와 symlink 사이에 활성 세대가 없는 구간이 생기므로 쓰�
   하드링크가 아닌 복사를 씁니다. 산출물이 크면 reflink 도입 여지가 있습니다.
 - **git은 CLI 호출.** `git worktree` 지원은 libgit2 쪽이 어정쩡해서 `git`을
   직접 실행합니다.
-- **`gm dev run`은 검증하지 않습니다.** 아직 안 되는 코드를 돌려보는 게 목적이라
+- **`gm worktree run`은 검증하지 않습니다.** 아직 안 되는 코드를 돌려보는 게 목적이라
   헬스체크와 자동 롤백을 일부러 뺐습니다. 검증이 필요하면 세대를 만드세요.
 - **헬스체크 HTTP는 평문 전용.** 대상이 로컬 프로세스라 TLS 스택을 넣지
   않았습니다. `https://`는 `tcp` 또는 `cmd` 프로브로 대체하세요.
@@ -252,10 +256,10 @@ cargo test --workspace
 | `gm-application` | 가짜 포트를 사용한 정상 활성화와 자동 롤백 정책 |
 | `gm-store` | 원자적 전환, GC 실행, 잠금과 잠금 소유권 검사 |
 | `gm-runner` | 헬스체크 URL 파싱 |
-| `tests/worktree.rs` | `init`, `dev new/list/rm`, worktree 안에서의 발견 동작 |
-| `tests/dev_run.rs` | `dev run` — 전경 실행, 종료 코드, 빌드 단계, 대상 자동 선택, 슬롯 인계 |
-| `tests/lifecycle.rs` | `build`, `switch`, `rollback`, `generations`, `history`, `gc` |
-| `tests/service.rs` | `start`, `stop`, `restart`, `logs`, `status`, `-C` |
+| `tests/worktree.rs` | `project init`, `worktree create/list/remove`, worktree 안에서의 발견 동작 |
+| `tests/dev_run.rs` | `worktree run` — 전경 실행, 종료 코드, 빌드 단계, 대상 자동 선택, 슬롯 인계 |
+| `tests/lifecycle.rs` | `generation build/list/activate/rollback/history/prune` |
+| `tests/service.rs` | `project status`, `service status/start/stop/restart/logs`, `-C` |
 
 통합 테스트는 임시 디렉토리에 프로젝트를 만들고 실제 프로세스를 띄웁니다.
 git이 필요한 것은 `tests/worktree.rs`뿐입니다.

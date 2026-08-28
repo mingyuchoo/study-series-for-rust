@@ -98,8 +98,8 @@ pub struct Fixture {
 }
 
 impl Fixture {
-    /// A directory with no manifest, for testing `gm init` and discovery
-    /// failure.
+    /// A directory with no manifest, for testing `gm project init` and
+    /// discovery failure.
     pub fn bare() -> Fixture {
         let n = COUNTER.fetch_add(1, Ordering::SeqCst);
         let root = std::env::temp_dir().join(format!("gm-it-{}-{n}", std::process::id()));
@@ -189,7 +189,7 @@ impl Fixture {
 impl Drop for Fixture {
     fn drop(&mut self) {
         // Tests that leave a detached process must not outlive their directory.
-        let _ = self.gm(&["stop"]);
+        let _ = self.gm(&["service", "stop"]);
         let _ = std::fs::remove_dir_all(&self.root);
     }
 }

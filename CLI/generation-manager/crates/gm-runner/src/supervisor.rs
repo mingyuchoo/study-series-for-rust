@@ -21,8 +21,8 @@ use std::{fs::{File,
 ///
 /// One project owns one service slot. Whatever takes the slot — an activated
 /// generation or a development worktree — records itself in `run/state.json`,
-/// so `gm status` can always name what is running, not merely that something
-/// is.
+/// so `gm project status` can always name what is running, not merely that
+/// something is.
 ///
 /// The scope is deliberate: one process, one state file, one log file. A
 /// multi-service or reboot-surviving setup belongs to systemd, and this type is
@@ -127,7 +127,7 @@ impl Supervisor {
         Ok(state)
     }
 
-    /// Start attached to the terminal. Used by `gm dev run`: in the inner
+    /// Start attached to the terminal. Used by `gm worktree run`: in the inner
     /// development loop you want the output in front of you and Ctrl-C to mean
     /// stop.
     ///

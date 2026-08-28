@@ -29,6 +29,25 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Command {
+    /// Manage project configuration and inspect the project overview.
+    #[command(subcommand)]
+    Project(ProjectCommand),
+
+    /// Manage development worktrees.
+    #[command(subcommand)]
+    Worktree(WorktreeCommand),
+
+    /// Build, activate, inspect, and prune generations.
+    #[command(subcommand)]
+    Generation(GenerationCommand),
+
+    /// Inspect and control the service process.
+    #[command(subcommand)]
+    Service(ServiceCommand),
+}
+
+#[derive(Subcommand)]
+enum ProjectCommand {
     /// Create generation-manager.toml in the current directory.
     Init {
         /// Language preset: rust, node, python, go, generic.
@@ -42,54 +61,90 @@ enum Command {
         force: bool,
     },
 
-    /// Show the active generation and service state.
+    /// Show the project, active generation, and service state.
     Status,
+}
 
-    /// Manage development worktrees (stage 1).
-    #[command(subcommand)]
-    Dev(DevCommand),
+#[derive(Subcommand)]
+enum WorktreeCommand {
+    /// Create a worktree and a branch for it.
+    Create {
+        name: String,
+        /// Base commit or branch for the new branch.
+        #[arg(long)]
+        base: Option<String>,
+    },
+    /// List worktrees managed by this project.
+    List,
+    /// Run a worktree's code directly, without creating a generation.
+    Run {
+        /// Worktree to run (defaults to the one you are standing in).
+        #[arg(value_name = "WORKTREE")]
+        worktree: Option<String>,
+        /// Skip the build stage before running.
+        #[arg(long)]
+        no_build: bool,
+        /// Run in the background instead of attaching to the terminal.
+        #[arg(long)]
+        detach: bool,
+    },
+    /// Remove a worktree.
+    Remove {
+        name: String,
+        /// Remove even with uncommitted changes.
+        #[arg(long)]
+        force: bool,
+    },
+}
 
-    /// Build and test a checkout into a new generation (stage 2).
+#[derive(Subcommand)]
+enum GenerationCommand {
+    /// Build and test a checkout into a new generation.
     Build {
-        /// Build from this worktree instead of the project root.
-        #[arg(long, value_name = "NAME")]
-        from: Option<String>,
+        /// Build from this worktree (defaults to the current worktree or
+        /// project root).
+        #[arg(value_name = "WORKTREE")]
+        worktree: Option<String>,
         /// Free-form note stored with the generation.
         #[arg(long)]
         note: Option<String>,
         /// Activate the generation immediately after a successful build.
         #[arg(long)]
-        switch: bool,
-    },
-
-    /// Activate a generation and verify it (stage 2).
-    Switch {
-        /// Generation number (defaults to the newest).
-        #[arg(long = "gen", value_name = "N")]
-        generation: Option<u64>,
-    },
-
-    /// Return to an older generation (stage 3).
-    Rollback {
-        /// Target generation (defaults to the one before the active).
-        #[arg(long, value_name = "N")]
-        to: Option<u64>,
+        activate: bool,
     },
 
     /// List generations.
-    #[command(visible_alias = "gens")]
-    Generations,
+    List,
 
-    /// Show the switch log.
+    /// Activate a generation and verify it.
+    Activate {
+        /// Generation number (defaults to the newest).
+        #[arg(value_name = "GENERATION")]
+        generation: Option<u64>,
+    },
+
+    /// Return to an older generation.
+    Rollback {
+        /// Target generation (defaults to the one before the active).
+        #[arg(value_name = "GENERATION")]
+        generation: Option<u64>,
+    },
+
+    /// Show the activation log.
     History,
 
     /// Delete old generations.
-    Gc {
+    Prune {
         /// Number of recent generations to keep.
         #[arg(long, default_value_t = 5)]
         keep: usize,
     },
+}
 
+#[derive(Subcommand)]
+enum ServiceCommand {
+    /// Show the service process and its source.
+    Status,
     /// Start the service from the active generation.
     Start,
     /// Stop the running service.
@@ -100,38 +155,6 @@ enum Command {
     Logs {
         #[arg(short = 'n', long, default_value_t = 40)]
         lines: usize,
-    },
-}
-
-#[derive(Subcommand)]
-enum DevCommand {
-    /// Create a worktree and a branch for it.
-    New {
-        name: String,
-        /// Base commit or branch for the new branch.
-        #[arg(long)]
-        base: Option<String>,
-    },
-    /// List worktrees managed by this project.
-    List,
-    /// Run this worktree's code directly, without creating a generation.
-    Run {
-        /// Worktree to run (defaults to the one you are standing in).
-        #[arg(long, value_name = "NAME")]
-        from: Option<String>,
-        /// Skip the build stage before running.
-        #[arg(long)]
-        no_build: bool,
-        /// Run in the background instead of attaching to the terminal.
-        #[arg(long)]
-        detach: bool,
-    },
-    /// Remove a worktree.
-    Rm {
-        name: String,
-        /// Remove even with uncommitted changes.
-        #[arg(long)]
-        force: bool,
     },
 }
 
