@@ -3,11 +3,18 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
+BACKEND_PID=""
+FRONTEND_PID=""
+
 cleanup() {
+  local pids="${BACKEND_PID:-} ${FRONTEND_PID:-}"
+
   echo ""
   echo "[run.sh] 프로세스를 종료합니다..."
-  kill $BACKEND_PID $FRONTEND_PID 2>/dev/null || true
-  wait $BACKEND_PID $FRONTEND_PID 2>/dev/null || true
+  if [[ -n "${pids// /}" ]]; then
+    kill $pids 2>/dev/null || true
+    wait $pids 2>/dev/null || true
+  fi
   echo "[run.sh] 모든 프로세스가 종료되었습니다."
 }
 
