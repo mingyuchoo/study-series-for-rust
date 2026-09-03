@@ -1,0 +1,5 @@
+{"summary": "Accrued interest uses a 365.25-day year; legacy LOAN231 3000-CALC-INTEREST divides by 365 (ACT/365).",
+ "location": {"file": "loan_service.py", "start_line": 11, "end_line": 11},
+ "legacy_behavior": "COMPUTE WS-INTEREST ROUNDED = PRINCIPAL * RATE * DAYS / 365",
+ "next_behavior": "DAYS_IN_YEAR = 365.25 → interest lower by DAYS*RATE*PRINCIPAL*(1/365 - 1/365.25), diverging after rounding",
+ "affected_rules": ["BR-LOAN-0001-000004"]}

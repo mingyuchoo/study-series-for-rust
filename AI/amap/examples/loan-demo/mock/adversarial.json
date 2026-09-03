@@ -1,0 +1,8 @@
+{"probes": [
+  {"name": "leap day end-of-month", "category": "calendar", "initial_state": {"loan_balance": 20000000, "processed_request_ids": []},
+   "input": {"request_id": "REQ-ADV-0001", "customer": {"id": "C-ADV", "grade": "VIP"}, "loan": {"id": "L-ADV", "principal": 20000000, "annual_rate": 0.061, "age_years": 4, "days_since_last_accrual": 29}, "repayment": {"type": "EARLY", "amount": 3000000, "date": "2024-02-29"}}, "expectation": "posted; interest for 29 days"},
+  {"name": "float amount with fraction", "category": "precision", "initial_state": {"loan_balance": 20000000, "processed_request_ids": []},
+   "input": {"request_id": "REQ-ADV-0002", "customer": {"id": "C-ADV", "grade": "STD"}, "loan": {"id": "L-ADV", "principal": 20000000, "annual_rate": 0.061, "age_years": 4, "days_since_last_accrual": 29}, "repayment": {"type": "EARLY", "amount": 333333.33, "date": "2026-02-28"}}, "expectation": "fee rounded half-up"},
+  {"name": "grade lowercase", "category": "encoding", "initial_state": {"loan_balance": 20000000, "processed_request_ids": []},
+   "input": {"request_id": "REQ-ADV-0003", "customer": {"id": "C-ADV", "grade": "vip"}, "loan": {"id": "L-ADV", "principal": 20000000, "annual_rate": 0.061, "age_years": 4, "days_since_last_accrual": 29}, "repayment": {"type": "EARLY", "amount": 3000000, "date": "2026-02-28"}}, "expectation": "treated as non-VIP exactly like legacy"}
+]}

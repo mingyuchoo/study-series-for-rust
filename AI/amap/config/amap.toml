@@ -1,0 +1,11 @@
+# AMAP platform settings. Every key can be overridden with AMAP_<KEY> environment variables.
+# database_url = "postgres://amap:amap@localhost:5432/amap"   # unset → in-memory knowledge store
+# nats_url = "nats://localhost:4222"                          # unset → in-memory event bus
+lake = ".amap/lake"                                            # or "s3://amap-evidence/lake" (MinIO/S3)
+# llm_gateway_url = "http://localhost:8090"                   # unset → embedded gateway (needs provider keys)
+control_plane_listen = "0.0.0.0:8080"
+llm_gateway_listen = "0.0.0.0:8090"
+worker_listen = "0.0.0.0:50051"
+json_logs = false
+# otlp_endpoint = "http://localhost:4317"
+token_budget = 0

@@ -1,0 +1,72 @@
+# Minimal Kubernetes deployment (cloud-agnostic: EKS / AKS / GKE / on-prem).
+apiVersion: v1
+kind: ConfigMap
+metadata: { name: amap-config }
+data:
+  AMAP_DATABASE_URL: "postgres://amap:amap@postgres:5432/amap"
+  AMAP_NATS_URL: "nats://nats:4222"
+  AMAP_LAKE: "s3://amap-evidence/lake"
+  AMAP_LLM_GATEWAY_URL: "http://llm-gateway:8090"
+  AMAP_JSON_LOGS: "true"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: control-plane }
+spec:
+  replicas: 2
+  selector: { matchLabels: { app: control-plane } }
+  template:
+    metadata: { labels: { app: control-plane } }
+    spec:
+      containers:
+        - name: control-plane
+          image: amap/control-plane:0.1.0
+          ports: [{ containerPort: 8080 }]
+          envFrom: [{ configMapRef: { name: amap-config } }, { secretRef: { name: amap-secrets } }]
+          readinessProbe: { httpGet: { path: /healthz, port: 8080 } }
+---
+apiVersion: v1
+kind: Service
+metadata: { name: control-plane }
+spec: { selector: { app: control-plane }, ports: [{ port: 8080, targetPort: 8080 }] }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: llm-gateway }
+spec:
+  replicas: 2
+  selector: { matchLabels: { app: llm-gateway } }
+  template:
+    metadata: { labels: { app: llm-gateway } }
+    spec:
+      containers:
+        - name: llm-gateway
+          image: amap/llm-gateway:0.1.0
+          ports: [{ containerPort: 8090 }]
+          envFrom: [{ secretRef: { name: amap-secrets } }]   # ANTHROPIC_API_KEY, OPENAI_API_KEY, AMAP_OPENAI_MODEL
+          readinessProbe: { httpGet: { path: /healthz, port: 8090 } }
+---
+apiVersion: v1
+kind: Service
+metadata: { name: llm-gateway }
+spec: { selector: { app: llm-gateway }, ports: [{ port: 8090, targetPort: 8090 }] }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: verification-worker }
+spec:
+  replicas: 4
+  selector: { matchLabels: { app: verification-worker } }
+  template:
+    metadata: { labels: { app: verification-worker } }
+    spec:
+      containers:
+        - name: worker
+          image: amap/verification-worker:0.1.0
+          ports: [{ containerPort: 50051 }]
+          envFrom: [{ configMapRef: { name: amap-config } }]
+---
+apiVersion: v1
+kind: Service
+metadata: { name: verification-worker }
+spec: { selector: { app: verification-worker }, ports: [{ port: 50051, targetPort: 50051 }] }

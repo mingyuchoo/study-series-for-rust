@@ -1,0 +1,5 @@
+{"summary": "Early repayment fee floor (1,000 won) is not applied; legacy 4000-CALC-FEE raises any positive fee below WS-FEE-FLOOR to 1,000.",
+ "location": {"file": "loan_service.py", "start_line": 44, "end_line": 50},
+ "legacy_behavior": "IF WS-FEE > 0 AND WS-FEE < WS-FEE-FLOOR MOVE WS-FEE-FLOOR TO WS-FEE",
+ "next_behavior": "fee = round_half_up(amount * rate) with no floor",
+ "affected_rules": ["BR-LOAN-0001-000005", "BR-LOAN-0001-000002", "BR-LOAN-0001-000003"]}

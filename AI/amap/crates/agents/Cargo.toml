@@ -1,0 +1,35 @@
+[package]
+name = "amap-agents"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+amap-domain.workspace = true
+amap-comparator.workspace = true
+amap-invariant.workspace = true
+amap-uncertainty.workspace = true
+amap-policy.workspace = true
+amap-knowledge.workspace = true
+amap-graph.workspace = true
+amap-evidence.workspace = true
+amap-context.workspace = true
+amap-replay.workspace = true
+amap-llm.workspace = true
+amap-orchestrator.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+serde_yaml.workspace = true
+thiserror.workspace = true
+async-trait.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+chrono.workspace = true
+uuid.workspace = true
+regex.workspace = true
+rand.workspace = true
+tonic.workspace = true
+tree-sitter.workspace = true
+tree-sitter-java.workspace = true
+tree-sitter-python.workspace = true
+walkdir = "2"

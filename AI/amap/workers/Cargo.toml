@@ -1,0 +1,37 @@
+[package]
+name = "amap-workers"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "verification-worker"
+path = "src/bin/verification-worker.rs"
+[[bin]]
+name = "replay-worker"
+path = "src/bin/replay-worker.rs"
+[[bin]]
+name = "mutation-worker"
+path = "src/bin/mutation-worker.rs"
+[[bin]]
+name = "fault-worker"
+path = "src/bin/fault-worker.rs"
+[[bin]]
+name = "concurrency-worker"
+path = "src/bin/concurrency-worker.rs"
+[[bin]]
+name = "comparator-worker"
+path = "src/bin/comparator-worker.rs"
+
+[dependencies]
+amap-domain.workspace = true
+amap-orchestrator.workspace = true
+amap-agents.workspace = true
+amap-telemetry.workspace = true
+amap-cli.workspace = true
+tonic.workspace = true
+tokio.workspace = true
+serde_json.workspace = true
+anyhow.workspace = true
+tracing.workspace = true
+clap.workspace = true

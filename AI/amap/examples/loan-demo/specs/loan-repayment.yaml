@@ -1,0 +1,20 @@
+# Equivalence policy for loan repayment outputs (design §11). Business amounts are EXACT.
+name: loan-repayment
+default: exact
+fields:
+  status:              { comparator: exact }
+  reason:              { comparator: exact }
+  interest:            { comparator: exact }
+  fee:                 { comparator: exact }
+  principal_reduction: { comparator: exact }
+  principal_after:     { comparator: exact }
+  final_balance:       { comparator: exact }
+  transaction_id:      { comparator: format, pattern: "^TX-[0-9A-F]{12}$", unique: true }
+  timestamp:           { comparator: tolerance, tolerance: 2s }
+  debit:               { comparator: unordered }
+  credit:              { comparator: unordered }
+  trace_id:            { comparator: ignore }
+  retry_after_ms:      { comparator: numeric, tolerance: 250 }
+  loan_balance_before: { comparator: exact }
+  loan_balance_after:  { comparator: exact }
+  "*.fault":           { comparator: ignore }

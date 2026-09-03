@@ -1,0 +1,56 @@
+# AMAP run specification for the loan early-repayment demo.
+# Paths are relative to this file.
+
+[function]
+id = "FN-LOAN-0001"
+name = "Loan early repayment posting"
+domain = "Loan"
+priority = "P0"
+description = "Validates an early/scheduled repayment, computes accrued interest and fee, posts ledger entries, notifies IF238."
+
+[[requirements]]
+id = "REQ-1203"
+title = "Accrued interest ACT/365"
+text = "Interest accrues on an ACT/365 basis, rounded half-up to the won."
+confidence = 0.95
+
+[[requirements]]
+id = "REQ-1204"
+title = "Early repayment fee"
+text = "VIP loans older than 3 years: no fee. VIP: 0.5%. Others: 1.5%. Floor 1,000 won. Scheduled repayments: no fee."
+confidence = 0.95
+
+[[requirements]]
+id = "REQ-1205"
+title = "Charges and overpayment"
+text = "Repayment must cover interest and fee and must not exceed principal."
+confidence = 0.9
+
+[[requirements]]
+id = "REQ-1207"
+title = "Idempotency"
+text = "Duplicate request ids are ignored."
+confidence = 0.9
+
+[run]
+source_root = "legacy"
+documents = ["docs/requirements.md"]
+traces = "traces/production.jsonl"
+workspace = ".workspace/next"
+next_command = ["python3", "{workspace}/loan_service.py"]
+legacy_command = ["python3", "legacy/legacy_emulator.py"]
+comparator_specs = ["specs/loan-repayment.yaml"]
+default_spec = "loan-repayment"
+invariants = "specs/invariants.dsl"
+max_fix_iterations = 3
+max_mutants = 40
+faults = ["db_timeout", "api_timeout", "mq_duplicate", "partial_commit", "slow_response"]
+auto_approve_hitl = true
+
+[run.concurrency_template]
+initial_state = { balance = 1000000 }
+transactions = [{ id = "A", amount = 700000 }, { id = "B", amount = 300000 }]
+
+[mock]
+# Fixture-driven LLM answers for offline runs (`amap run --mock`). Real runs use the LLM gateway.
+fixtures = "mock"

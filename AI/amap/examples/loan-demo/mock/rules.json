@@ -1,0 +1,24 @@
+{
+  "rules": [
+    {"name": "VIP early repayment fee waiver", "condition": "status == \"POSTED\" AND input.repayment.type == \"EARLY\" AND input.customer.grade == \"VIP\" AND input.loan.age_years > 3", "result": "fee == 0",
+     "source": {"file": "LOAN231.cbl", "start_line": 89, "end_line": 110}, "db_entities": ["CUSTOMER", "LOAN_MASTER"], "interfaces": ["IF-CALL-IF238"], "in_document": true, "priority": "P0"},
+    {"name": "VIP early repayment fee", "condition": "status == \"POSTED\" AND input.repayment.type == \"EARLY\" AND input.customer.grade == \"VIP\" AND input.loan.age_years <= 3", "result": "fee == MAX(ROUND(input.repayment.amount * 0.005), 1000)",
+     "source": {"file": "LOAN231.cbl", "start_line": 89, "end_line": 110}, "db_entities": ["CUSTOMER", "LOAN_MASTER"], "interfaces": [], "in_document": true, "priority": "P0"},
+    {"name": "Standard early repayment fee", "condition": "status == \"POSTED\" AND input.repayment.type == \"EARLY\" AND input.customer.grade != \"VIP\"", "result": "fee == MAX(ROUND(input.repayment.amount * 0.015), 1000)",
+     "source": {"file": "LOAN231.cbl", "start_line": 89, "end_line": 110}, "db_entities": ["LOAN_MASTER"], "interfaces": [], "in_document": true, "priority": "P0"},
+    {"name": "Accrued interest ACT/365", "condition": "status == \"POSTED\"", "result": "interest == ROUND(input.loan.principal * input.loan.annual_rate * input.loan.days_since_last_accrual / 365)",
+     "source": {"file": "LOAN231.cbl", "start_line": 84, "end_line": 88}, "db_entities": ["LOAN_MASTER"], "interfaces": [], "in_document": true, "priority": "P0"},
+    {"name": "Early repayment fee floor", "condition": "status == \"POSTED\" AND input.repayment.type == \"EARLY\" AND input.customer.grade != \"VIP\" AND input.repayment.amount < 60000", "result": "fee == 1000",
+     "source": {"file": "LOAN231.cbl", "start_line": 104, "end_line": 107}, "db_entities": [], "interfaces": [], "in_document": true, "priority": "P1"},
+    {"name": "Amount covers charges", "condition": "status == \"REJECTED\" AND reason == \"AMOUNT_BELOW_CHARGES\"", "result": "input.repayment.amount < interest + fee OR NOT EXISTS(interest)",
+     "source": {"file": "LOAN231.cbl", "start_line": 111, "end_line": 122}, "db_entities": [], "interfaces": [], "in_document": true, "priority": "P1"},
+    {"name": "No overpayment", "condition": "status == \"POSTED\"", "result": "principal_after >= 0",
+     "source": {"file": "LOAN231.cbl", "start_line": 111, "end_line": 122}, "db_entities": ["LOAN_MASTER"], "interfaces": [], "in_document": true, "priority": "P0"},
+    {"name": "Duplicate request ignored", "condition": "status == \"DUPLICATE_IGNORED\"", "result": "COUNT(state_change) == 0",
+     "source": {"file": "LOAN231.cbl", "start_line": 75, "end_line": 83}, "db_entities": ["REQUEST_LOG"], "interfaces": [], "in_document": true, "priority": "P1"},
+    {"name": "Double-entry ledger", "condition": "status == \"POSTED\"", "result": "SUM(debit.amount) == SUM(credit.amount)",
+     "source": {"file": "LOAN231.cbl", "start_line": 133, "end_line": 151}, "db_entities": ["LEDGER"], "interfaces": [], "in_document": true, "priority": "P0"},
+    {"name": "Scheduled repayment has no fee", "condition": "input.repayment.type == \"SCHEDULED\" AND status == \"POSTED\"", "result": "fee == 0",
+     "source": {"file": "LOAN231.cbl", "start_line": 89, "end_line": 110}, "db_entities": [], "interfaces": [], "in_document": true, "priority": "P1"}
+  ]
+}

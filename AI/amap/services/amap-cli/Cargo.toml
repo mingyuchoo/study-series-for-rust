@@ -1,0 +1,41 @@
+[package]
+name = "amap-cli"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lib]
+name = "amap_cli"
+path = "src/lib.rs"
+
+[[bin]]
+name = "amap"
+path = "src/main.rs"
+
+[dependencies]
+amap-domain.workspace = true
+amap-comparator.workspace = true
+amap-invariant.workspace = true
+amap-uncertainty.workspace = true
+amap-policy.workspace = true
+amap-knowledge.workspace = true
+amap-graph.workspace = true
+amap-evidence.workspace = true
+amap-context.workspace = true
+amap-replay.workspace = true
+amap-llm.workspace = true
+amap-orchestrator.workspace = true
+amap-agents.workspace = true
+amap-telemetry.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+serde_yaml.workspace = true
+thiserror.workspace = true
+anyhow.workspace = true
+clap.workspace = true
+figment.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+uuid.workspace = true
+chrono.workspace = true
+toml = "0.8"

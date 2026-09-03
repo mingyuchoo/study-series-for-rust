@@ -1,0 +1,362 @@
+{
+ "scenarios": [
+  {
+   "name": "full payoff leaves zero principal",
+   "rule_ids": [
+    "BR-LOAN-0001-000007"
+   ],
+   "initial_state": {
+    "loan_balance": 1000000,
+    "processed_request_ids": []
+   },
+   "input": {
+    "request_id": "REQ-GEN-0001",
+    "customer": {
+     "id": "C1",
+     "grade": "GOLD"
+    },
+    "loan": {
+     "id": "L1",
+     "principal": 1000000,
+     "annual_rate": 0.05,
+     "age_years": 2,
+     "days_since_last_accrual": 0
+    },
+    "repayment": {
+     "type": "EARLY",
+     "amount": 1015228,
+     "date": "2026-06-30"
+    }
+   },
+   "expected_output": null
+  },
+  {
+   "name": "amount exactly equals charges",
+   "rule_ids": [
+    "BR-LOAN-0001-000006"
+   ],
+   "initial_state": {
+    "loan_balance": 1000000,
+    "processed_request_ids": []
+   },
+   "input": {
+    "request_id": "REQ-GEN-0002",
+    "customer": {
+     "id": "C2",
+     "grade": "STD"
+    },
+    "loan": {
+     "id": "L2",
+     "principal": 7300000,
+     "annual_rate": 0.05,
+     "age_years": 1,
+     "days_since_last_accrual": 73
+    },
+    "repayment": {
+     "type": "EARLY",
+     "amount": 74112,
+     "date": "2026-02-28"
+    }
+   },
+   "expected_output": null
+  },
+  {
+   "name": "same-day repayment accrues nothing",
+   "rule_ids": [
+    "BR-LOAN-0001-000004"
+   ],
+   "initial_state": {
+    "loan_balance": 5000000,
+    "processed_request_ids": []
+   },
+   "input": {
+    "request_id": "REQ-GEN-0003",
+    "customer": {
+     "id": "C3",
+     "grade": "VIP"
+    },
+    "loan": {
+     "id": "L3",
+     "principal": 5000000,
+     "annual_rate": 0.04,
+     "age_years": 3,
+     "days_since_last_accrual": 0
+    },
+    "repayment": {
+     "type": "EARLY",
+     "amount": 200000,
+     "date": "2026-12-31"
+    }
+   },
+   "expected_output": null
+  },
+  {
+   "name": "amount just below charges is rejected",
+   "rule_ids": [
+    "BR-LOAN-0001-000006"
+   ],
+   "initial_state": {
+    "loan_balance": 7300000,
+    "processed_request_ids": []
+   },
+   "input": {
+    "request_id": "REQ-GEN-0004",
+    "customer": {
+     "id": "C4",
+     "grade": "STD"
+    },
+    "loan": {
+     "id": "L4",
+     "principal": 7300000,
+     "annual_rate": 0.05,
+     "age_years": 1,
+     "days_since_last_accrual": 73
+    },
+    "repayment": {
+     "type": "EARLY",
+     "amount": 74111,
+     "date": "2026-02-28"
+    }
+   },
+   "expected_output": null
+  },
+  {
+   "name": "overpayment by one won is rejected",
+   "rule_ids": [
+    "BR-LOAN-0001-000007"
+   ],
+   "initial_state": {
+    "loan_balance": 1000000,
+    "processed_request_ids": []
+   },
+   "input": {
+    "request_id": "REQ-GEN-0005",
+    "customer": {
+     "id": "C5",
+     "grade": "GOLD"
+    },
+    "loan": {
+     "id": "L5",
+     "principal": 1000000,
+     "annual_rate": 0.05,
+     "age_years": 2,
+     "days_since_last_accrual": 0
+    },
+    "repayment": {
+     "type": "EARLY",
+     "amount": 1015229,
+     "date": "2026-06-30"
+    }
+   },
+   "expected_output": null
+  },
+  {
+   "name": "half-up rounding of interest",
+   "rule_ids": [
+    "BR-LOAN-0001-000004"
+   ],
+   "initial_state": {
+    "loan_balance": 3650000,
+    "processed_request_ids": []
+   },
+   "input": {
+    "request_id": "REQ-GEN-0006",
+    "customer": {
+     "id": "C6",
+     "grade": "STD"
+    },
+    "loan": {
+     "id": "L6",
+     "principal": 3650000,
+     "annual_rate": 0.05,
+     "age_years": 1,
+     "days_since_last_accrual": 1
+    },
+    "repayment": {
+     "type": "SCHEDULED",
+     "amount": 100000,
+     "date": "2026-01-15"
+    }
+   },
+   "expected_output": null
+  },
+  {
+   "name": "VIP fee floor applies to tiny amounts",
+   "rule_ids": [
+    "BR-LOAN-0001-000002"
+   ],
+   "initial_state": {
+    "loan_balance": 9000000,
+    "processed_request_ids": []
+   },
+   "input": {
+    "request_id": "REQ-GEN-0007",
+    "customer": {
+     "id": "C7",
+     "grade": "VIP"
+    },
+    "loan": {
+     "id": "L7",
+     "principal": 9000000,
+     "annual_rate": 0.03,
+     "age_years": 1,
+     "days_since_last_accrual": 2
+    },
+    "repayment": {
+     "type": "EARLY",
+     "amount": 150000,
+     "date": "2026-05-05"
+    }
+   },
+   "expected_output": null
+  },
+  {
+   "name": "fee of exactly 1000 is not raised",
+   "rule_ids": [
+    "BR-LOAN-0001-000005"
+   ],
+   "initial_state": {
+    "loan_balance": 9000000,
+    "processed_request_ids": []
+   },
+   "input": {
+    "request_id": "REQ-GEN-0008",
+    "customer": {
+     "id": "C8",
+     "grade": "STD"
+    },
+    "loan": {
+     "id": "L8",
+     "principal": 9000000,
+     "annual_rate": 0.03,
+     "age_years": 1,
+     "days_since_last_accrual": 2
+    },
+    "repayment": {
+     "type": "EARLY",
+     "amount": 66667,
+     "date": "2026-05-05"
+    }
+   },
+   "expected_output": null
+  },
+  {
+   "name": "negative accrual days rejected",
+   "rule_ids": [],
+   "initial_state": {
+    "loan_balance": 9000000,
+    "processed_request_ids": []
+   },
+   "input": {
+    "request_id": "REQ-GEN-0009",
+    "customer": {
+     "id": "C9",
+     "grade": "STD"
+    },
+    "loan": {
+     "id": "L9",
+     "principal": 9000000,
+     "annual_rate": 0.03,
+     "age_years": 1,
+     "days_since_last_accrual": -1
+    },
+    "repayment": {
+     "type": "EARLY",
+     "amount": 500000,
+     "date": "2026-05-05"
+    }
+   },
+   "expected_output": null
+  },
+  {
+   "name": "loan age exactly three years pays VIP fee",
+   "rule_ids": [
+    "BR-LOAN-0001-000002"
+   ],
+   "initial_state": {
+    "loan_balance": 9000000,
+    "processed_request_ids": []
+   },
+   "input": {
+    "request_id": "REQ-GEN-0010",
+    "customer": {
+     "id": "C10",
+     "grade": "VIP"
+    },
+    "loan": {
+     "id": "L10",
+     "principal": 9000000,
+     "annual_rate": 0.03,
+     "age_years": 3,
+     "days_since_last_accrual": 10
+    },
+    "repayment": {
+     "type": "EARLY",
+     "amount": 1000000,
+     "date": "2026-05-05"
+    }
+   },
+   "expected_output": null
+  },
+  {
+   "name": "zero-rate loan accrues nothing",
+   "rule_ids": [
+    "BR-LOAN-0001-000004"
+   ],
+   "initial_state": {
+    "loan_balance": 9000000,
+    "processed_request_ids": []
+   },
+   "input": {
+    "request_id": "REQ-GEN-0011",
+    "customer": {
+     "id": "C11",
+     "grade": "STD"
+    },
+    "loan": {
+     "id": "L11",
+     "principal": 9000000,
+     "annual_rate": 0,
+     "age_years": 0,
+     "days_since_last_accrual": 10
+    },
+    "repayment": {
+     "type": "EARLY",
+     "amount": 1000000,
+     "date": "2026-05-05"
+    }
+   },
+   "expected_output": null
+  },
+  {
+   "name": "one-won early repayment with zero-day accrual",
+   "rule_ids": [
+    "BR-LOAN-0001-000003"
+   ],
+   "initial_state": {
+    "loan_balance": 1000000,
+    "processed_request_ids": []
+   },
+   "input": {
+    "request_id": "REQ-GEN-0012",
+    "customer": {
+     "id": "C12",
+     "grade": "STD"
+    },
+    "loan": {
+     "id": "L12",
+     "principal": 1000000,
+     "annual_rate": 0.05,
+     "age_years": 1,
+     "days_since_last_accrual": 0
+    },
+    "repayment": {
+     "type": "EARLY",
+     "amount": 1,
+     "date": "2026-07-01"
+    }
+   },
+   "expected_output": null
+  }
+ ]
+}

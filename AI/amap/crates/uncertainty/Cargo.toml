@@ -1,0 +1,10 @@
+[package]
+name = "amap-uncertainty"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+amap-domain.workspace = true
+serde.workspace = true
+serde_json.workspace = true

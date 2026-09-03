@@ -1,0 +1,18 @@
+[package]
+name = "amap-evidence"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+amap-domain.workspace = true
+datafusion.workspace = true
+object_store = { workspace = true, features = ["aws"] }
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+chrono.workspace = true
+uuid.workspace = true
+tracing.workspace = true
+url = "2"

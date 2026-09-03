@@ -1,0 +1,32 @@
+syntax = "proto3";
+package amap.v1;
+
+// Internal high-speed RPC between the orchestrator and verification workers (stack §1).
+service Verification {
+  // Run one verification engine over a batch of scenarios. Payloads are JSON to keep the
+  // domain model in one place (Rust crates); the wire contract is the envelope.
+  rpc Verify (VerifyRequest) returns (VerifyResponse);
+  rpc Health (HealthRequest) returns (HealthResponse);
+}
+
+message VerifyRequest {
+  string run_id = 1;
+  string function_id = 2;
+  // golden_replay | differential | boundary | property | mutation | fault | concurrency | adversarial
+  string kind = 3;
+  // JSON array of TestScenario
+  bytes scenarios_json = 4;
+  // JSON RunConfig (paths, commands, specs)
+  bytes config_json = 5;
+}
+
+message VerifyResponse {
+  // JSON array of VerificationResult
+  bytes results_json = 1;
+  // JSON object of engine-specific metrics (e.g. mutation injected/detected)
+  bytes metrics_json = 2;
+  string worker = 3;
+}
+
+message HealthRequest {}
+message HealthResponse { string status = 1; string worker = 2; repeated string kinds = 3; }

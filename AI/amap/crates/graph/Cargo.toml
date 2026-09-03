@@ -1,0 +1,12 @@
+[package]
+name = "amap-graph"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+amap-domain.workspace = true
+amap-knowledge.workspace = true
+petgraph.workspace = true
+serde.workspace = true
+serde_json.workspace = true

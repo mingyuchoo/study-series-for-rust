@@ -1,0 +1,24 @@
+[package]
+name = "control-plane"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+amap-domain.workspace = true
+amap-knowledge.workspace = true
+amap-graph.workspace = true
+amap-evidence.workspace = true
+amap-orchestrator.workspace = true
+amap-agents.workspace = true
+amap-telemetry.workspace = true
+amap-cli.workspace = true
+axum.workspace = true
+tower-http.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+anyhow.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+uuid.workspace = true
+chrono.workspace = true

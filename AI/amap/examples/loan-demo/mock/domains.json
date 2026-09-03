@@ -1,0 +1,2 @@
+{"domains": [{"entity": "LOAN231.cbl::LOAN231", "domain": "Loan"}, {"entity": "LOAN231.cbl::4000-CALC-FEE", "domain": "Loan/Pricing"}, {"entity": "LOAN231.cbl::6000-WRITE-LEDGER", "domain": "Accounting"}],
+ "suspicious": ["LOAN231.cbl::9000-LEGACY-REPRICE"]}

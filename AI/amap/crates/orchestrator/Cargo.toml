@@ -1,0 +1,32 @@
+[package]
+name = "amap-orchestrator"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[features]
+default = ["nats"]
+nats = ["dep:async-nats"]
+
+[dependencies]
+amap-domain.workspace = true
+amap-knowledge.workspace = true
+amap-llm.workspace = true
+amap-evidence.workspace = true
+amap-policy.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+async-trait.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+chrono.workspace = true
+uuid.workspace = true
+futures.workspace = true
+tonic.workspace = true
+tonic-prost.workspace = true
+prost.workspace = true
+async-nats = { workspace = true, optional = true }
+
+[build-dependencies]
+tonic-prost-build.workspace = true

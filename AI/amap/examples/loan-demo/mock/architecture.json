@@ -1,0 +1,16 @@
+{
+  "decision": "Map LOAN231 to a Loan Service (repayment pricing + posting) that emits accounting entries to an Accounting Service via the double-entry event; keep IF238 as an outbound adapter.",
+  "evidence": ["4000-CALC-FEE and 3000-CALC-INTEREST depend only on CUSTOMER.grade and LOAN_MASTER", "6000-WRITE-LEDGER writes LEDGER exclusively", "IF238 is invoked after posting (5000-POST)"],
+  "alternatives": ["Single monolithic repayment service", "Move fee pricing into a shared Pricing Service"],
+  "risks": ["ACT/365 vs ACT/365.25 day-count drift", "Fee floor edge cases below 60,000 won", "Idempotency across service boundary"],
+  "affected_rules": ["BR-LOAN-0001-000001", "BR-LOAN-0001-000002", "BR-LOAN-0001-000003", "BR-LOAN-0001-000004", "BR-LOAN-0001-000005"],
+  "affected_tests": [],
+  "rule_ownership": [
+    {"rule_id": "BR-LOAN-0001-000001", "service": "Loan Service"},
+    {"rule_id": "BR-LOAN-0001-000002", "service": "Loan Service"},
+    {"rule_id": "BR-LOAN-0001-000003", "service": "Loan Service"},
+    {"rule_id": "BR-LOAN-0001-000004", "service": "Loan Service"},
+    {"rule_id": "BR-LOAN-0001-000005", "service": "Loan Service"},
+    {"rule_id": "BR-LOAN-0001-000009", "service": "Accounting Service"}
+  ]
+}

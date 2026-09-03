@@ -1,0 +1,98 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/domain",
+    "crates/comparator",
+    "crates/invariant",
+    "crates/uncertainty",
+    "crates/policy",
+    "crates/knowledge",
+    "crates/graph",
+    "crates/evidence",
+    "crates/context",
+    "crates/replay",
+    "crates/telemetry",
+    "crates/llm",
+    "crates/orchestrator",
+    "crates/agents",
+    "services/control-plane",
+    "services/llm-gateway",
+    "services/amap-cli",
+    "workers",
+]
+# The WASM comparator plugin is built separately for wasm32-unknown-unknown (see plugins/finance/README.md).
+exclude = ["plugins/finance"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0"
+rust-version = "1.85"
+
+[workspace.dependencies]
+# --- AMAP crates ---
+amap-domain = { path = "crates/domain" }
+amap-comparator = { path = "crates/comparator" }
+amap-invariant = { path = "crates/invariant" }
+amap-uncertainty = { path = "crates/uncertainty" }
+amap-policy = { path = "crates/policy" }
+amap-knowledge = { path = "crates/knowledge" }
+amap-graph = { path = "crates/graph" }
+amap-evidence = { path = "crates/evidence" }
+amap-context = { path = "crates/context" }
+amap-replay = { path = "crates/replay" }
+amap-telemetry = { path = "crates/telemetry" }
+amap-llm = { path = "crates/llm" }
+amap-orchestrator = { path = "crates/orchestrator" }
+amap-agents = { path = "crates/agents" }
+amap-cli = { path = "services/amap-cli" }
+
+# --- Core runtime ---
+tokio = { version = "1", features = ["full"] }
+axum = "0.8"
+tonic = "0.14"
+tonic-prost = "0.14"
+tonic-prost-build = "0.14"
+prost = "0.14"
+tower = "0.5"
+tower-http = { version = "0.6", features = ["trace", "cors", "timeout"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+serde_yaml = "0.9"
+thiserror = "2"
+anyhow = "1"
+clap = { version = "4", features = ["derive", "env"] }
+figment = { version = "0.10", features = ["toml", "env"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+async-trait = "0.1"
+futures = "0.3"
+uuid = { version = "1", features = ["v4", "serde"] }
+chrono = { version = "0.4", features = ["serde"] }
+rand = "0.9"
+regex = "1"
+sha2 = "0.10"
+hex = "0.4"
+bytes = "1"
+reqwest = { version = "0.13", features = ["json"] }
+
+# --- Data / storage ---
+sqlx = { version = "0.9", default-features = false, features = ["runtime-tokio", "tls-rustls-ring", "postgres", "uuid", "chrono", "json", "migrate", "macros"] }
+async-nats = "0.50"
+datafusion = "55"
+object_store = "0.13"
+
+# --- Engines ---
+wasmtime = "48"
+cedar-policy = "4.12"
+tantivy = "0.26"
+petgraph = "0.8"
+pest = "2.9"
+pest_derive = "2.9"
+tree-sitter = "0.27"
+tree-sitter-java = "0.23"
+tree-sitter-python = "0.25"
+
+[profile.release]
+lto = "thin"
+codegen-units = 4

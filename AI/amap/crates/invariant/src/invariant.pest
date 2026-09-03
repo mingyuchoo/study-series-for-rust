@@ -1,0 +1,40 @@
+// Business Invariant DSL (design §9).
+//
+//   RULE ACCOUNTING-001
+//   SUM(debit.amount) == SUM(credit.amount)
+//
+//   RULE BR-LOAN-000183 WHEN customer.grade == "VIP" AND loan.age_years > 3 THEN fee == 0
+//
+WHITESPACE = _{ " " | "\t" | NEWLINE }
+COMMENT    = _{ ("--" | "#") ~ (!NEWLINE ~ ANY)* }
+
+file      = { SOI ~ rule* ~ EOI }
+rule      = { ^"RULE" ~ rule_name ~ (^"WHEN" ~ expr ~ ^"THEN")? ~ expr }
+rule_name = @{ (ASCII_ALPHANUMERIC | "-" | "_" | ".")+ }
+
+single_expr = { SOI ~ expr ~ EOI }
+
+expr       = { or_expr }
+or_expr    = { and_expr ~ (or_op ~ and_expr)* }
+or_op      = @{ ^"OR" ~ !(ASCII_ALPHANUMERIC | "_") }
+and_expr   = { not_expr ~ (and_op ~ not_expr)* }
+and_op     = @{ ^"AND" ~ !(ASCII_ALPHANUMERIC | "_") }
+not_expr   = { not_op ~ not_expr | comparison }
+not_op     = @{ ^"NOT" ~ !(ASCII_ALPHANUMERIC | "_") }
+comparison = { arith ~ (cmp_op ~ arith)? }
+cmp_op     = { "==" | "!=" | "<=" | ">=" | "<" | ">" | "=" }
+arith      = { term ~ (add_op ~ term)* }
+add_op     = { "+" | "-" }
+term       = { factor ~ (mul_op ~ factor)* }
+mul_op     = { "*" | "/" | "%" }
+factor     = { func_call | number | string | boolean | null | path | "(" ~ expr ~ ")" | neg }
+neg        = { "-" ~ factor }
+func_call  = { func_name ~ "(" ~ (expr ~ ("," ~ expr)*)? ~ ")" }
+func_name  = { ^"SUM" | ^"COUNT" | ^"MIN" | ^"MAX" | ^"ABS" | ^"ROUND" | ^"EXISTS" | ^"LEN" | ^"ALL" | ^"ANY" }
+keyword    = @{ (^"AND" | ^"OR" | ^"NOT" | ^"RULE" | ^"WHEN" | ^"THEN" | ^"true" | ^"false" | ^"null") ~ !(ASCII_ALPHANUMERIC | "_") }
+ident      = @{ !keyword ~ (ASCII_ALPHA | "_") ~ (ASCII_ALPHANUMERIC | "_")* }
+path       = @{ ident ~ ("." ~ ident)* }
+number     = @{ ASCII_DIGIT+ ~ ("." ~ ASCII_DIGIT+)? }
+string     = @{ "\"" ~ (!"\"" ~ ANY)* ~ "\"" | "'" ~ (!"'" ~ ANY)* ~ "'" }
+boolean    = @{ (^"true" | ^"false") ~ !(ASCII_ALPHANUMERIC | "_") }
+null       = @{ ^"null" ~ !(ASCII_ALPHANUMERIC | "_") }
