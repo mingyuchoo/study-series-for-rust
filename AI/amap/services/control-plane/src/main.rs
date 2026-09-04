@@ -1,11 +1,10 @@
 //! Modernization Control Plane (design §1): policy, quality gate, risk, evidence, audit and
 //! HITL over a REST API. Hosts the orchestrator in modular-monolith mode.
-#[allow(unused_imports)]
-use amap_cli::bootstrap::mock_provider;
-use amap_cli::{Platform, PlatformBuilder, RunSpec, Settings};
 use amap_domain::*;
 use amap_knowledge::{ReviewStatus, WorkflowRun};
 use amap_orchestrator::AgentContext;
+#[allow(unused_imports)]
+use amap_platform::{Platform, PlatformBuilder, RunSpec, Settings};
 use axum::extract::{DefaultBodyLimit, Path, Query, State};
 use axum::http::{header, HeaderMap, Request, StatusCode};
 use axum::middleware::{self, Next};
@@ -94,7 +93,8 @@ fn launch_run(platform: Arc<Platform>, ctx: AgentContext) {
                     if let Some(gateway) = &platform.gateway {
                         value["llm_audit"] = json!(gateway.audit_log());
                     }
-                    state.checkpoint = outcome.final_outputs.clone();
+                    state.checkpoint =
+                        serde_json::to_value(&outcome.final_outputs).unwrap_or(Value::Null);
                     state.outcome = Some(value);
                 }
                 Err(error) => {
@@ -102,7 +102,7 @@ fn launch_run(platform: Arc<Platform>, ctx: AgentContext) {
                     state.outcome = Some(json!({ "error": error.to_string() }));
                 }
             }
-            state.updated_at = chrono::Utc::now();
+            state.updated_at = platform.clock.now();
             if let Err(error) = platform.knowledge.upsert_workflow_run(state).await {
                 tracing::error!(%error, %run_id, "failed to persist workflow result");
             }
@@ -151,7 +151,7 @@ async fn start_run(State(app): State<App>, Json(req): Json<StartRun>) -> ApiResu
         app.platform.clone()
     };
     let ctx = platform.context_for(&spec, None).await.map_err(internal)?;
-    let now = chrono::Utc::now();
+    let now = platform.clock.now();
     let state = WorkflowRun {
         id: ctx.run_id.0.clone(),
         function_id: ctx.function_id.clone(),
@@ -248,7 +248,7 @@ async fn resume_run(State(app): State<App>, Path(id): Path<String>) -> ApiResult
         .map_err(internal)?;
     ctx.inputs = state.checkpoint.clone();
     state.status = "running".into();
-    state.updated_at = chrono::Utc::now();
+    state.updated_at = platform.clock.now();
     state.outcome = None;
     app.platform
         .knowledge

@@ -1,4 +1,5 @@
-.PHONY: build test demo lint wasm services infra
+.PHONY: architecture build test demo lint wasm services infra
+architecture: ; python3 scripts/check_architecture.py
 build:       ; cargo build --workspace --locked
 test:        ; cargo test --workspace --locked
 lint:        ; cargo clippy --workspace --all-targets --locked -- -D warnings

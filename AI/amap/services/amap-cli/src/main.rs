@@ -1,6 +1,6 @@
 //! `amap` — command-line entry point for the Autonomous Modernization Assurance Platform.
-use amap_cli::{PlatformBuilder, RunSpec, Settings};
 use amap_domain::*;
+use amap_platform::{PlatformBuilder, RunSpec, Settings};
 use anyhow::Context;
 use clap::{Parser, Subcommand};
 use std::path::PathBuf;

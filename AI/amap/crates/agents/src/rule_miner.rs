@@ -1,5 +1,7 @@
 //! Business Rule Mining Agent (design §4): LLM extracts rules; the platform validates them
 //! (DSL parse) and assigns confidence deterministically from evidence sources.
+use crate::outputs::RuleMiningOutput;
+use crate::ports::RuleMiningDependencies;
 use crate::{context_pack, priority_from, str_list};
 use amap_context::ContextBudget;
 use amap_domain::*;
@@ -30,6 +32,9 @@ impl AgentTask for RuleMinerAgent {
         AgentRole::RuleMiner
     }
     async fn execute(&self, ctx: &AgentContext) -> Result<AgentResult, OrchestrationError> {
+        let dependencies = RuleMiningDependencies {
+            knowledge: ctx.knowledge.as_ref(),
+        };
         let pack = context_pack(
             ctx,
             "business rules conditions fees interest",
@@ -71,7 +76,7 @@ impl AgentTask for RuleMinerAgent {
             None
         };
 
-        let existing = ctx.knowledge.rules_for(&ctx.function_id).await?;
+        let existing = dependencies.knowledge.rules_for(&ctx.function_id).await?;
         let mut stored = 0;
         let mut unparsable = 0;
         let mut ids = Vec::new();
@@ -145,7 +150,10 @@ impl AgentTask for RuleMinerAgent {
                         existing.len() + i + 1
                     ))
                 });
-            let valid_requirements = ctx.knowledge.requirements_for(&ctx.function_id).await?;
+            let valid_requirements = dependencies
+                .knowledge
+                .requirements_for(&ctx.function_id)
+                .await?;
             let requirement_ids: Vec<RequirementId> = str_list(&r["requirement_ids"])
                 .into_iter()
                 .filter(|candidate| valid_requirements.iter().any(|req| req.id.0 == *candidate))
@@ -177,7 +185,8 @@ impl AgentTask for RuleMinerAgent {
                     vec!["unparsable".into()]
                 },
             };
-            ctx.knowledge
+            dependencies
+                .knowledge
                 .add_relationship(Relationship::new(
                     ctx.function_id.0.clone(),
                     RelationKind::FunctionToRule,
@@ -185,7 +194,8 @@ impl AgentTask for RuleMinerAgent {
                 ))
                 .await?;
             for requirement_id in requirement_ids {
-                ctx.knowledge
+                dependencies
+                    .knowledge
                     .add_relationship(Relationship::new(
                         requirement_id.0,
                         RelationKind::RequirementToRule,
@@ -193,7 +203,7 @@ impl AgentTask for RuleMinerAgent {
                     ))
                     .await?;
             }
-            ctx.knowledge.upsert_rule(rule).await?;
+            dependencies.knowledge.upsert_rule(rule).await?;
             ids.push(id.0);
             stored += 1;
         }
@@ -202,10 +212,15 @@ impl AgentTask for RuleMinerAgent {
             json!({ "count": stored, "unparsable": unparsable }),
         )
         .await;
-        Ok(AgentResult::new(
+        AgentResult::typed(
             format!("mined {stored} business rules ({unparsable} unparsable → confidence capped at 0.40)"),
-            json!({ "rules": ids, "unparsable": unparsable, "provider": format!("{:?}", resp.provider), "n_version": second_opinion.is_some() }),
-        ))
+            RuleMiningOutput {
+                rules: ids,
+                unparsable,
+                provider: format!("{:?}", resp.provider),
+                n_version: second_opinion.is_some(),
+            },
+        )
     }
 }
 

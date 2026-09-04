@@ -7,6 +7,7 @@
 pub mod bus;
 pub mod config;
 pub mod dag;
+pub mod ports;
 
 pub mod proto {
     tonic::include_proto!("amap.v1");
@@ -17,6 +18,7 @@ pub use bus::NatsBus;
 pub use bus::{Event, EventBus, InMemoryBus};
 pub use config::{RunConfig, TraceSource};
 pub use dag::{Dag, DagNode, Executor, RunReport, StepReport, StepStatus};
+pub use ports::{Clock, IdGenerator, SystemClock, UuidGenerator};
 
 use amap_domain::*;
 use amap_evidence::EvidenceLake;
@@ -24,6 +26,7 @@ use amap_knowledge::KnowledgeStore;
 use amap_llm::LlmClient;
 use amap_policy::PolicyEngine;
 use async_trait::async_trait;
+use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::sync::Arc;
@@ -71,6 +74,8 @@ pub struct AgentContext {
     pub bus: Arc<dyn EventBus>,
     pub lake: Arc<EvidenceLake>,
     pub policy: Arc<PolicyEngine>,
+    pub clock: Arc<dyn Clock>,
+    pub ids: Arc<dyn IdGenerator>,
     pub config: Arc<RunConfig>,
     /// Outputs of upstream tasks, keyed by task name.
     pub inputs: Value,
@@ -79,6 +84,19 @@ pub struct AgentContext {
 impl AgentContext {
     pub fn input(&self, task: &str) -> Value {
         self.inputs.get(task).cloned().unwrap_or(Value::Null)
+    }
+
+    pub fn input_as<T: DeserializeOwned>(
+        &self,
+        task: &str,
+    ) -> Result<Option<T>, OrchestrationError> {
+        let value = self.input(task);
+        if value.is_null() {
+            return Ok(None);
+        }
+        serde_json::from_value(value)
+            .map(Some)
+            .map_err(|error| OrchestrationError::Other(format!("invalid {task} output: {error}")))
     }
 
     /// Enforce a governance policy before an agent acts.
@@ -108,7 +126,7 @@ impl AgentContext {
                 run_id: self.run_id.0.clone(),
                 function_id: self.function_id.0.clone(),
                 payload,
-                at: chrono::Utc::now(),
+                at: self.clock.now(),
             })
             .await;
     }
@@ -141,6 +159,15 @@ impl AgentResult {
             evidence: vec![],
             halt: Some(reason.into()),
         }
+    }
+
+    pub fn typed<T: Serialize>(
+        summary: impl Into<String>,
+        output: T,
+    ) -> Result<Self, OrchestrationError> {
+        let outputs = serde_json::to_value(output)
+            .map_err(|error| OrchestrationError::Other(error.to_string()))?;
+        Ok(Self::new(summary, outputs))
     }
 }
 

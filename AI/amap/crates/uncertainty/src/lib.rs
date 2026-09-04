@@ -21,6 +21,59 @@ pub struct ConfidenceVector {
     pub complexity: f64,
 }
 
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub struct ConfidenceEvidence {
+    pub requirement_confidences: Vec<f64>,
+    pub rule_confidences: Vec<f64>,
+    pub rules_total: usize,
+    pub rules_observed_in_production: usize,
+    pub scenarios_total: usize,
+    pub source_units_total: usize,
+    pub unresolved_dependencies: usize,
+    pub equivalence: f64,
+}
+
+pub fn confidence_vector_from_evidence(evidence: &ConfidenceEvidence) -> ConfidenceVector {
+    let average = |values: &[f64]| {
+        if values.is_empty() {
+            0.0
+        } else {
+            values.iter().sum::<f64>() / values.len() as f64
+        }
+    };
+    let requirement = if evidence.requirement_confidences.is_empty() {
+        0.5
+    } else {
+        average(&evidence.requirement_confidences)
+    };
+    let behavior = if evidence.rules_total == 0 {
+        0.0
+    } else {
+        evidence.rules_observed_in_production as f64 / evidence.rules_total as f64
+    };
+    let test = if evidence.rules_total == 0 {
+        0.0
+    } else {
+        (evidence.scenarios_total as f64 / (evidence.rules_total as f64 * 3.0)).min(1.0)
+    };
+    let dependency = if evidence.source_units_total == 0 {
+        1.0
+    } else {
+        1.0 - (evidence.unresolved_dependencies as f64 / evidence.source_units_total as f64)
+            .min(0.5)
+    };
+
+    ConfidenceVector {
+        requirement,
+        rule: average(&evidence.rule_confidences),
+        behavior,
+        test,
+        dependency,
+        equivalence: evidence.equivalence,
+        complexity: (evidence.source_units_total as f64 / 200.0).min(1.0),
+    }
+}
+
 impl Default for ConfidenceVector {
     fn default() -> Self {
         Self {
@@ -244,6 +297,26 @@ mod tests {
             ..Default::default()
         };
         assert!(rule_confidence(&full, &bad) < 0.6);
+    }
+
+    #[test]
+    fn confidence_vector_is_derived_only_from_supplied_evidence() {
+        let vector = confidence_vector_from_evidence(&ConfidenceEvidence {
+            requirement_confidences: vec![0.8, 1.0],
+            rule_confidences: vec![0.7, 0.9],
+            rules_total: 2,
+            rules_observed_in_production: 1,
+            scenarios_total: 3,
+            source_units_total: 10,
+            unresolved_dependencies: 2,
+            equivalence: 0.95,
+        });
+        assert_eq!(vector.requirement, 0.9);
+        assert_eq!(vector.rule, 0.8);
+        assert_eq!(vector.behavior, 0.5);
+        assert_eq!(vector.test, 0.5);
+        assert_eq!(vector.dependency, 0.8);
+        assert_eq!(vector.equivalence, 0.95);
     }
 
     #[test]

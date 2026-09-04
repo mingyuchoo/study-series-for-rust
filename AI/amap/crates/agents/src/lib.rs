@@ -8,6 +8,8 @@ pub mod boundary;
 pub mod builder;
 pub mod discovery;
 pub mod fix;
+pub mod outputs;
+pub mod ports;
 pub mod rca;
 pub mod review;
 pub mod rule_miner;
@@ -16,6 +18,7 @@ pub mod uncertainty_agent;
 pub mod verification;
 pub mod verifier;
 pub mod workflow;
+pub mod workspace;
 
 pub use adversarial::AdversarialAgent;
 pub use architecture::ArchitectureAgent;
@@ -24,6 +27,7 @@ pub use boundary::BoundaryAgent;
 pub use builder::BuilderAgent;
 pub use discovery::DiscoveryAgent;
 pub use fix::FixAgent;
+pub use outputs::*;
 pub use rca::RcaAgent;
 pub use review::ReviewAgent;
 pub use rule_miner::RuleMinerAgent;
@@ -35,7 +39,6 @@ pub use workflow::{run_modernization, WorkflowOutcome};
 use amap_context::{ContextBudget, ContextEngine, ContextPack};
 use amap_domain::*;
 use amap_orchestrator::{AgentContext, OrchestrationError};
-use chrono::Utc;
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 
@@ -45,7 +48,7 @@ pub async fn context_pack(
     task_hint: &str,
     budget: ContextBudget,
 ) -> Result<ContextPack, OrchestrationError> {
-    let mut engine = ContextEngine::new(Some(&ctx.config.source_root))
+    let mut engine = ContextEngine::from_environment(Some(&ctx.config.source_root))
         .map_err(|e| OrchestrationError::Other(e.to_string()))?;
     engine
         .index(ctx.knowledge.as_ref())
@@ -69,7 +72,7 @@ pub fn evidence_from_results(
             let encoded = serde_json::to_vec(r).unwrap_or_default();
             let content_hash = hex::encode(Sha256::digest(encoded));
             EvidenceRecord {
-                evidence_id: format!("EV-{}", uuid::Uuid::new_v4()),
+                evidence_id: ctx.ids.next("EV"),
                 content_hash,
                 run_id: ctx.run_id.clone(),
                 function_id: r.function_id.clone(),
@@ -80,7 +83,7 @@ pub fn evidence_from_results(
                 passed: r.passed,
                 explained: r.explained,
                 producer: producer.to_string(),
-                created_at: Utc::now(),
+                created_at: ctx.clock.now(),
                 payload_uri: None,
                 details: serde_json::json!({ "differences": r.differences, "details": r.details }),
             }

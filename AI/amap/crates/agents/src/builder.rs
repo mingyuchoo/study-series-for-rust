@@ -1,5 +1,7 @@
 //! Builder Agent (design §8): one narrow bounded context → next-system code. Never verifies itself.
 use crate::context_pack;
+use crate::outputs::BuildOutput;
+use crate::workspace::{FileSystemWorkspaceFactory, WorkspaceFactory};
 use amap_context::ContextBudget;
 use amap_domain::*;
 use amap_llm::{Effort, LlmRequest, TaskKind};
@@ -7,33 +9,23 @@ use amap_orchestrator::{AgentContext, AgentResult, AgentTask, OrchestrationError
 use amap_policy::{ActionContext, Principal};
 use async_trait::async_trait;
 use serde_json::json;
-use std::path::{Component, Path, PathBuf};
 
-#[derive(Default)]
-pub struct BuilderAgent;
-
-/// Reject path traversal; files are always written under the workspace.
-pub fn safe_join(root: &Path, rel: &str) -> Option<PathBuf> {
-    let p = Path::new(rel);
-    if p.is_absolute() || p.components().any(|c| matches!(c, Component::ParentDir)) {
-        return None;
-    }
-    Some(root.join(p))
+pub struct BuilderAgent {
+    workspaces: std::sync::Arc<dyn WorkspaceFactory>,
 }
 
-pub fn write_files(root: &Path, files: &[FileChange]) -> Result<Vec<String>, OrchestrationError> {
-    let mut written = Vec::new();
-    for f in files {
-        let path = safe_join(root, &f.path)
-            .ok_or_else(|| OrchestrationError::Other(format!("unsafe path {}", f.path)))?;
-        if let Some(parent) = path.parent() {
-            std::fs::create_dir_all(parent)
-                .map_err(|e| OrchestrationError::Other(e.to_string()))?;
+impl Default for BuilderAgent {
+    fn default() -> Self {
+        Self {
+            workspaces: std::sync::Arc::new(FileSystemWorkspaceFactory),
         }
-        std::fs::write(&path, &f.content).map_err(|e| OrchestrationError::Other(e.to_string()))?;
-        written.push(f.path.clone());
     }
-    Ok(written)
+}
+
+impl BuilderAgent {
+    pub fn with_workspaces(workspaces: std::sync::Arc<dyn WorkspaceFactory>) -> Self {
+        Self { workspaces }
+    }
 }
 
 pub fn files_from_json(v: &serde_json::Value) -> Vec<FileChange> {
@@ -96,19 +88,23 @@ impl AgentTask for BuilderAgent {
                 "builder produced no files",
             ));
         }
-        std::fs::create_dir_all(&ctx.config.workspace)
-            .map_err(|e| OrchestrationError::Other(e.to_string()))?;
-        let written = write_files(&ctx.config.workspace, &files)?;
+        let workspace = self.workspaces.open(&ctx.config.workspace);
+        let written = workspace.apply(&files)?;
         ctx.emit("build.completed", json!({ "files": written }))
             .await;
-        Ok(AgentResult::new(
+        AgentResult::typed(
             format!(
                 "built {} file(s) with {:?}/{}",
                 written.len(),
                 resp.provider,
                 resp.model
             ),
-            json!({ "files": written, "provider": resp.provider, "model": resp.model, "notes": j["notes"] }),
-        ))
+            BuildOutput {
+                files: written,
+                provider: resp.provider,
+                model: resp.model,
+                notes: j["notes"].clone(),
+            },
+        )
     }
 }

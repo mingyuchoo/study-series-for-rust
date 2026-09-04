@@ -1,24 +1,65 @@
 //! Verification Factory runner (design §9): runs every independent engine, writes evidence,
 //! and computes the quality gate deterministically. Remote workers are used when configured.
 use crate::evidence_from_results;
+use crate::outputs::VerificationOutput;
+use crate::ports::VerificationDependencies;
 use crate::verification::run_engine;
+use amap_assurance::{assess_verification, VerificationFacts};
 use amap_domain::*;
-use amap_evidence::{build_certificate, CertificateInputs};
 use amap_orchestrator::proto::verification_client::VerificationClient;
 use amap_orchestrator::proto::{Artifact, VerifyRequest};
 use amap_orchestrator::{AgentContext, AgentResult, AgentTask, OrchestrationError};
 use amap_policy::{ActionContext, Principal};
 use async_trait::async_trait;
 use serde_json::{json, Value};
-use std::collections::HashSet;
 use std::path::Path;
+use std::sync::Arc;
 use tonic::metadata::MetadataValue;
 use tonic::transport::{Certificate, ClientTlsConfig, Endpoint, Identity};
 use tonic::Request;
 use walkdir::WalkDir;
 
-#[derive(Default)]
-pub struct VerifierAgent;
+pub struct VerifierAgent {
+    runner: Arc<dyn VerificationRunner>,
+}
+
+impl Default for VerifierAgent {
+    fn default() -> Self {
+        Self {
+            runner: Arc::new(ConfiguredVerificationRunner),
+        }
+    }
+}
+
+impl VerifierAgent {
+    pub fn with_runner(runner: Arc<dyn VerificationRunner>) -> Self {
+        Self { runner }
+    }
+}
+
+#[async_trait]
+pub trait VerificationRunner: Send + Sync {
+    async fn run(
+        &self,
+        context: &AgentContext,
+        kind: VerificationKind,
+        scenarios: &[TestScenario],
+    ) -> Result<(Vec<VerificationResult>, Value), OrchestrationError>;
+}
+
+struct ConfiguredVerificationRunner;
+
+#[async_trait]
+impl VerificationRunner for ConfiguredVerificationRunner {
+    async fn run(
+        &self,
+        context: &AgentContext,
+        kind: VerificationKind,
+        scenarios: &[TestScenario],
+    ) -> Result<(Vec<VerificationResult>, Value), OrchestrationError> {
+        dispatch(context, kind, scenarios).await
+    }
+}
 
 fn collect_tree(
     root: &Path,
@@ -224,7 +265,13 @@ impl AgentTask for VerifierAgent {
         AgentRole::Replay
     }
     async fn execute(&self, ctx: &AgentContext) -> Result<AgentResult, OrchestrationError> {
-        let scenarios = ctx.knowledge.scenarios_for(&ctx.function_id).await?;
+        let dependencies = VerificationDependencies {
+            knowledge: ctx.knowledge.as_ref(),
+        };
+        let scenarios = dependencies
+            .knowledge
+            .scenarios_for(&ctx.function_id)
+            .await?;
         let golden: Vec<TestScenario> = scenarios
             .iter()
             .filter(|s| s.origin == ScenarioOrigin::GoldenMaster)
@@ -239,7 +286,7 @@ impl AgentTask for VerifierAgent {
         let mut metrics = serde_json::Map::new();
 
         // 1. Static
-        let (r, m) = dispatch(ctx, VerificationKind::Static, &[]).await?;
+        let (r, m) = self.runner.run(ctx, VerificationKind::Static, &[]).await?;
         metrics.insert("static".into(), m);
         all_results.extend(r);
 
@@ -250,13 +297,16 @@ impl AgentTask for VerifierAgent {
             .cloned()
             .collect();
         if !unit.is_empty() {
-            let (r, m) = dispatch(ctx, VerificationKind::Unit, &unit).await?;
+            let (r, m) = self.runner.run(ctx, VerificationKind::Unit, &unit).await?;
             metrics.insert("unit".into(), m);
             all_results.extend(r);
         }
 
         // 3. Golden replay (production behaviors as oracle)
-        let (r, m) = dispatch(ctx, VerificationKind::GoldenReplay, &golden).await?;
+        let (r, m) = self
+            .runner
+            .run(ctx, VerificationKind::GoldenReplay, &golden)
+            .await?;
         metrics.insert("golden_replay".into(), m);
         all_results.extend(r);
 
@@ -269,7 +319,10 @@ impl AgentTask for VerifierAgent {
             .cloned()
             .collect();
         if ctx.config.legacy_command.is_some() && !manual.is_empty() {
-            let (r, m) = dispatch(ctx, VerificationKind::Differential, &manual).await?;
+            let (r, m) = self
+                .runner
+                .run(ctx, VerificationKind::Differential, &manual)
+                .await?;
             metrics.insert("differential".into(), m);
             all_results.extend(r);
         }
@@ -277,7 +330,7 @@ impl AgentTask for VerifierAgent {
         // 5. State and interface verification are independently reported for golden captures.
         for kind in [VerificationKind::State, VerificationKind::Interface] {
             if !golden.is_empty() {
-                let (r, m) = dispatch(ctx, kind, &golden).await?;
+                let (r, m) = self.runner.run(ctx, kind, &golden).await?;
                 metrics.insert(format!("{kind:?}").to_lowercase(), m);
                 all_results.extend(r);
             }
@@ -298,7 +351,7 @@ impl AgentTask for VerifierAgent {
             if subset.is_empty() {
                 continue;
             }
-            let (r, m) = dispatch(ctx, kind, &subset).await?;
+            let (r, m) = self.runner.run(ctx, kind, &subset).await?;
             metrics.insert(format!("{kind:?}").to_lowercase(), m);
             differential.extend(r);
         }
@@ -309,7 +362,7 @@ impl AgentTask for VerifierAgent {
                 if let Some(mut s) = scenarios.iter().find(|s| s.id == r.scenario_id).cloned() {
                     if s.expected_output.is_none() && r.passed {
                         s.expected_output = Some(exp.clone());
-                        ctx.knowledge.upsert_scenario(s).await?;
+                        dependencies.knowledge.upsert_scenario(s).await?;
                         oracle_derived += 1;
                     }
                 }
@@ -318,20 +371,32 @@ impl AgentTask for VerifierAgent {
         all_results.extend(differential);
 
         // 7. Mutation (uses every scenario with an expectation)
-        let refreshed = ctx.knowledge.scenarios_for(&ctx.function_id).await?;
-        let (r, m) = dispatch(ctx, VerificationKind::Mutation, &refreshed).await?;
+        let refreshed = dependencies
+            .knowledge
+            .scenarios_for(&ctx.function_id)
+            .await?;
+        let (r, m) = self
+            .runner
+            .run(ctx, VerificationKind::Mutation, &refreshed)
+            .await?;
         let mutation_injected = m["injected"].as_u64().unwrap_or(0);
         let mutation_detected = m["detected"].as_u64().unwrap_or(0);
         metrics.insert("mutation".into(), m);
         all_results.extend(r);
 
         // 8. Fault injection
-        let (r, m) = dispatch(ctx, VerificationKind::Fault, &golden).await?;
+        let (r, m) = self
+            .runner
+            .run(ctx, VerificationKind::Fault, &golden)
+            .await?;
         metrics.insert("fault".into(), m);
         all_results.extend(r);
 
         // 9. Concurrency
-        let (r, m) = dispatch(ctx, VerificationKind::Concurrency, &[]).await?;
+        let (r, m) = self
+            .runner
+            .run(ctx, VerificationKind::Concurrency, &[])
+            .await?;
         metrics.insert("concurrency".into(), m);
         all_results.extend(r);
 
@@ -345,94 +410,39 @@ impl AgentTask for VerifierAgent {
             &ctx.function_id.0,
             &ActionContext::default(),
         )?;
-        let rules = ctx.knowledge.rules_for(&ctx.function_id).await?;
-        let behaviors = ctx.knowledge.behaviors_for(&ctx.function_id).await?;
-        let requirements = ctx.knowledge.requirements_for(&ctx.function_id).await?;
-        let evidenced_rules: HashSet<String> = all_results
-            .iter()
-            .filter(|r| r.kind != VerificationKind::Mutation)
-            .flat_map(|r| r.rule_ids.iter().map(|x| x.0.clone()))
-            .collect();
-        let failed_rules: HashSet<String> = all_results
-            .iter()
-            .filter(|r| r.is_unexplained_failure())
-            .flat_map(|r| r.rule_ids.iter().map(|x| x.0.clone()))
-            .collect();
-        let verified_rules: HashSet<String> =
-            evidenced_rules.difference(&failed_rules).cloned().collect();
-        let covered_requirements: HashSet<String> = rules
-            .iter()
-            .filter(|rule| verified_rules.contains(&rule.id.0))
-            .flat_map(|rule| rule.requirement_ids.iter().map(|id| id.0.clone()))
-            .collect();
-        let covered_behaviors: HashSet<String> = all_results
-            .iter()
-            .filter(|r| r.kind == VerificationKind::GoldenReplay)
-            .filter_map(|r| {
-                golden
-                    .iter()
-                    .find(|g| g.id == r.scenario_id)
-                    .and_then(|g| g.behavior_id.clone())
-                    .map(|b| b.0)
-            })
-            .collect();
-        let unknown_risk = rules
-            .iter()
-            .filter(|r| {
-                !failed_rules.contains(&r.id.0)
-                    && (r.confidence < 0.70
-                        || (r.observed_production_cases == 0 && !verified_rules.contains(&r.id.0)))
-            })
-            .count() as u64;
-        let residual = amap_uncertainty::ResidualUncertainty {
-            total_capabilities: rules.len() as u64,
-            high_confidence_verified: rules
-                .iter()
-                .filter(|r| r.confidence >= 0.70 && verified_rules.contains(&r.id.0))
-                .count() as u64,
-            known_unresolved: failed_rules.len() as u64,
-            unknown_risk_candidates: unknown_risk,
-        };
-
-        // Rows from this run only (the lake also holds history).
-        let rows = rows_from_results(&all_results);
-        let (cert, eq) = build_certificate(
-            &rows,
-            CertificateInputs {
-                function_id: ctx.function_id.0.clone(),
-                implemented: all_results
-                    .iter()
-                    .any(|r| r.kind == VerificationKind::Static && r.passed),
-                requirements_total: requirements.len() as u64,
-                requirements_covered: requirements
-                    .iter()
-                    .filter(|requirement| covered_requirements.contains(&requirement.id.0))
-                    .count() as u64,
-                rules_total: rules.len() as u64,
-                rules_covered: rules
-                    .iter()
-                    .filter(|r| verified_rules.contains(&r.id.0))
-                    .count() as u64,
-                critical_rules_total: rules.iter().filter(|r| r.priority.is_critical()).count()
-                    as u64,
-                critical_rules_covered: rules
-                    .iter()
-                    .filter(|r| r.priority.is_critical() && verified_rules.contains(&r.id.0))
-                    .count() as u64,
-                behaviors_total: behaviors.len() as u64,
-                behaviors_covered: covered_behaviors.len() as u64,
-                mutation_injected,
-                mutation_detected,
-                residual_uncertainty: residual.ratio(),
-            },
-        );
-        let mut gate = evaluate_gate(&cert, &eq, &ctx.config.thresholds);
+        let rules = dependencies.knowledge.rules_for(&ctx.function_id).await?;
+        let behaviors = dependencies
+            .knowledge
+            .behaviors_for(&ctx.function_id)
+            .await?;
+        let requirements = dependencies
+            .knowledge
+            .requirements_for(&ctx.function_id)
+            .await?;
+        let assessment = assess_verification(VerificationFacts {
+            function_id: &ctx.function_id,
+            results: &all_results,
+            rules: &rules,
+            behaviors: &behaviors,
+            requirements: &requirements,
+            golden_scenarios: &golden,
+            mutation_injected,
+            mutation_detected,
+            thresholds: &ctx.config.thresholds,
+        });
+        let mut gate = assessment.gate;
         if gate.certified {
-            let human_approved = ctx.knowledge.list_reviews().await?.iter().any(|review| {
-                review.run_id.as_ref() == Some(&ctx.run_id)
-                    && review.function_id == ctx.function_id
-                    && review.status == amap_knowledge::ReviewStatus::Approved
-            });
+            let human_approved =
+                dependencies
+                    .knowledge
+                    .list_reviews()
+                    .await?
+                    .iter()
+                    .any(|review| {
+                        review.run_id.as_ref() == Some(&ctx.run_id)
+                            && review.function_id == ctx.function_id
+                            && review.status == amap_knowledge::ReviewStatus::Approved
+                    });
             let decision = ctx.policy.authorize(
                 &Principal::engine("gate"),
                 "certify",
@@ -441,7 +451,7 @@ impl AgentTask for VerifierAgent {
                     is_critical: rules.iter().any(|rule| rule.priority.is_critical()),
                     independent_verifier: true,
                     human_approved,
-                    ..ActionContext::default().with_uncertainty(residual.ratio())
+                    ..ActionContext::default().with_uncertainty(assessment.residual.ratio())
                 },
             )?;
             gate.checks.push(GateCheck {
@@ -456,73 +466,78 @@ impl AgentTask for VerifierAgent {
             });
             gate.certified = decision.allowed;
         }
-        let failures: Vec<Value> = all_results
-            .iter()
-            .filter(|r| r.is_unexplained_failure() && r.kind != VerificationKind::Mutation)
-            .take(25)
-            .map(|r| json!({ "scenario": r.scenario_id, "kind": r.kind, "rules": r.rule_ids, "differences": r.differences.iter().take(5).collect::<Vec<_>>(), "details": r.details }))
-            .collect();
-        let total = all_results
-            .iter()
-            .filter(|r| r.kind != VerificationKind::Mutation)
-            .count();
-        let passed = all_results
-            .iter()
-            .filter(|r| r.kind != VerificationKind::Mutation && r.passed)
-            .count();
-        ctx.emit(if gate.certified { "verification.passed" } else { "verification.failed" }, json!({ "passed": passed, "total": total, "unexplained": cert.unexplained_differences })).await;
+        let total = assessment.total;
+        let passed = assessment.passed;
+        ctx.emit(if gate.certified { "verification.passed" } else { "verification.failed" }, json!({ "passed": passed, "total": total, "unexplained": assessment.certificate.unexplained_differences })).await;
 
         let summary = format!(
             "verification: {passed}/{total} passed, mutation {mutation_detected}/{mutation_injected}, unexplained {}, residual uncertainty {:.2}% → {}",
-            cert.unexplained_differences,
-            residual.ratio() * 100.0,
+            assessment.certificate.unexplained_differences,
+            assessment.residual.ratio() * 100.0,
             if gate.certified { "FE CERTIFIED" } else { "GATE FAILED" }
         );
-        let mut res = AgentResult::new(
+        let mut res = AgentResult::typed(
             summary,
-            json!({
-                "certified": gate.certified,
-                "gate": gate,
-                "certificate": cert,
-                "equivalence": if total == 0 { 0.0 } else { passed as f64 / total as f64 },
-                "equivalence_metrics": eq,
-                "residual": residual,
-                "failures": failures,
-                "metrics": metrics,
-                "oracle_derived_expectations": oracle_derived,
-            }),
-        );
+            VerificationOutput {
+                certified: gate.certified,
+                gate,
+                certificate: assessment.certificate,
+                equivalence: if total == 0 {
+                    0.0
+                } else {
+                    passed as f64 / total as f64
+                },
+                equivalence_metrics: assessment.equivalence_metrics,
+                residual: assessment.residual,
+                failures: assessment.failures,
+                metrics,
+                oracle_derived_expectations: oracle_derived,
+            },
+        )?;
         res.evidence = evidence;
         Ok(res)
     }
 }
 
-pub fn rows_from_results(results: &[VerificationResult]) -> Vec<amap_evidence::KindRow> {
-    let mut map: std::collections::BTreeMap<(String, String), amap_evidence::KindRow> =
-        Default::default();
-    for r in results {
-        let kind = serde_json::to_value(r.kind)
-            .unwrap()
-            .as_str()
-            .unwrap()
-            .to_string();
-        let prio = format!("{:?}", r.priority);
-        let row = map
-            .entry((kind.clone(), prio.clone()))
-            .or_insert(amap_evidence::KindRow {
-                kind,
-                priority: prio,
-                total: 0,
-                passed: 0,
-                unexplained: 0,
-            });
-        row.total += 1;
-        if r.passed {
-            row.passed += 1;
-        }
-        if r.is_unexplained_failure() {
-            row.unexplained += 1;
+pub use amap_assurance::rows_from_results;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn result(kind: VerificationKind, priority: Priority, passed: bool) -> VerificationResult {
+        VerificationResult {
+            kind,
+            scenario_id: ScenarioId::new("TEST-1"),
+            function_id: FunctionId::new("FN-1"),
+            rule_ids: vec![RuleId::new("BR-1")],
+            priority,
+            passed,
+            differences: vec![],
+            explained: false,
+            explanation: None,
+            duration_ms: 0,
+            details: Value::Null,
         }
     }
-    map.into_values().collect()
+
+    #[test]
+    fn verification_rows_are_grouped_by_kind_and_priority() {
+        let rows = rows_from_results(&[
+            result(VerificationKind::GoldenReplay, Priority::P0, true),
+            result(VerificationKind::GoldenReplay, Priority::P0, false),
+            result(VerificationKind::Mutation, Priority::P1, false),
+        ]);
+
+        assert_eq!(rows.len(), 2);
+        let golden = rows.iter().find(|row| row.kind == "golden_replay").unwrap();
+        assert_eq!(golden.priority, "P0");
+        assert_eq!(golden.total, 2);
+        assert_eq!(golden.passed, 1);
+        assert_eq!(golden.unexplained, 1);
+
+        let mutation = rows.iter().find(|row| row.kind == "mutation").unwrap();
+        assert_eq!(mutation.total, 1);
+        assert_eq!(mutation.unexplained, 1);
+    }
 }

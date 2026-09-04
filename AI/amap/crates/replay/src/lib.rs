@@ -7,6 +7,16 @@ pub mod sut;
 
 pub use sut::{ExecOptions, Execution, HttpSystem, ProcessSystem, ReplayCase, SystemUnderTest};
 
+/// Pure transformations used before and after system execution.
+pub mod core {
+    pub use crate::{merge_view, scenarios_from_behaviors};
+}
+
+/// Process and HTTP system-under-test adapters.
+pub mod adapters {
+    pub use crate::sut::{ExecOptions, Execution, HttpSystem, ProcessSystem, ReplayCase};
+}
+
 use amap_comparator::{ComparatorSpec, ComparisonEngine};
 use amap_domain::*;
 use amap_invariant::{check_all, InvariantSet};

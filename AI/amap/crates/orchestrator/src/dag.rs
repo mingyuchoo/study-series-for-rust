@@ -130,7 +130,7 @@ async fn checkpoint(
 ) -> Result<(), OrchestrationError> {
     if let Some(mut run) = ctx.knowledge.get_workflow_run(&ctx.run_id.0).await? {
         run.checkpoint = Value::Object(outputs.clone());
-        run.updated_at = chrono::Utc::now();
+        run.updated_at = ctx.clock.now();
         if let Some(status) = status {
             run.status = status.to_string();
         }
@@ -267,7 +267,7 @@ impl Executor {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{AgentResult, InMemoryBus, RunConfig};
+    use crate::{AgentResult, InMemoryBus, RunConfig, SystemClock, UuidGenerator};
     use amap_domain::*;
     use async_trait::async_trait;
 
@@ -312,6 +312,8 @@ mod tests {
             bus: Arc::new(InMemoryBus::new()),
             lake,
             policy: Arc::new(amap_policy::PolicyEngine::default()),
+            clock: Arc::new(SystemClock),
+            ids: Arc::new(UuidGenerator),
             config: Arc::new(RunConfig {
                 source_root: ".".into(),
                 documents: vec![],

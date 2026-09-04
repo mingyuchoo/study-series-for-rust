@@ -1,5 +1,6 @@
 //! Behavior Mining Agent (design §5): production traces → Behavior Records → Golden Master.
 //! Rules are linked to behaviors *deterministically* by evaluating their DSL conditions.
+use crate::outputs::BehaviorMiningOutput;
 use crate::rule_miner::{rule_as_invariant, rule_matches};
 use amap_domain::*;
 use amap_invariant::check;
@@ -126,10 +127,10 @@ impl AgentTask for BehaviorMinerAgent {
     }
     async fn execute(&self, ctx: &AgentContext) -> Result<AgentResult, OrchestrationError> {
         if ctx.config.traces.is_none() && ctx.config.trace_sources.is_empty() {
-            return Ok(AgentResult::new(
+            return AgentResult::typed(
                 "no production traces configured",
-                json!({ "behaviors": 0 }),
-            ));
+                BehaviorMiningOutput::default(),
+            );
         }
         let mut rules = ctx.knowledge.rules_for(&ctx.function_id).await?;
         let mut observed: HashMap<String, (u64, u64)> = HashMap::new(); // rule → (matched, result_holds)
@@ -298,9 +299,14 @@ impl AgentTask for BehaviorMinerAgent {
             json!({ "behaviors": behaviors, "links": linked, "malformed": malformed }),
         )
         .await;
-        Ok(AgentResult::new(
+        AgentResult::typed(
             format!("mined {behaviors} production behaviors → golden scenarios, {linked} rule links, {} contradictions", contradicted.len()),
-            json!({ "behaviors": behaviors, "links": linked, "malformed": malformed, "contradicted": contradicted }),
-        ))
+            BehaviorMiningOutput {
+                behaviors,
+                links: linked,
+                malformed,
+                contradicted,
+            },
+        )
     }
 }

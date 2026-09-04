@@ -31,6 +31,7 @@ coverage, implementation presence, mutation score and zero unexplained differenc
 | Path | Role |
 |---|---|
 | `crates/domain` | Canonical model: rules, behavior records, scenarios, verification results, evidence, gate |
+| `crates/assurance` | Pure verification assessment: evidence aggregation, certificates, residual uncertainty and quality-gate inputs |
 | `crates/comparator` | Functional Equivalence Engine: exact/numeric/tolerance/format/unordered/ignore + **Wasmtime** plugins, YAML specs |
 | `crates/invariant` | Business Invariant DSL (pest) → AST → evaluator; also used for rule conditions (`WHEN … THEN …`) |
 | `crates/uncertainty` | Evidence-based confidence scoring, `U = f(R,B,T,D,E,C)`, HITL tiers, residual uncertainty, N-version agreement |
@@ -43,12 +44,19 @@ coverage, implementation presence, mutation score and zero unexplained differenc
 | `crates/llm` | LLM gateway core: Anthropic (raw Messages API) / OpenAI-compatible / mock providers, role routing, PII filter, cache, retries, budgets, audit, cost |
 | `crates/orchestrator` | `AgentTask` abstraction, checkpointed DAG executor with retries + resumable HITL halts, in-memory/NATS bus, gRPC proto (Tonic) |
 | `crates/agents` | Discovery (COBOL, Rust, JavaScript, C#, SQL, JCL), Rule Miner, file/Kafka Behavior Miner, Uncertainty, Architecture, Builder, Test Generator, Boundary, Adversarial, Verifier (static/golden/differential/state/interface/property/mutation/fault/concurrency), RCA, Fix, Review, closed-loop workflow |
+| `crates/platform` | Shared composition root: settings, run specifications, stores, event bus, evidence lake, policies and LLM adapters |
 | `services/control-plane` | REST API: runs, functions, rules/behaviors/scenarios/evidence, HITL reviews, events, evidence SQL, graph, metrics |
 | `services/llm-gateway` | Standalone gateway (`POST /v1/complete`, `/v1/audit`) |
 | `services/amap-cli` | `amap` CLI + shared bootstrap/run-spec code |
 | `workers/` | gRPC verification workers (`verification-worker`, `replay-`, `mutation-`, `fault-`, `concurrency-`, `comparator-worker`) |
 | `plugins/finance` | Example WASM comparator plugin |
 | `proto/`, `migrations/`, `config/`, `deploy/`, `docker-compose.yml` | Wire contract, PostgreSQL schema, settings, Kubernetes/Prometheus, local infra |
+
+The dependency direction follows a functional-core / imperative-shell boundary. `amap-domain`,
+`amap-assurance`, `amap-invariant` and `amap-uncertainty` contain deterministic decisions. Delivery
+crates compose filesystem, database, message-bus, LLM and worker adapters through `amap-platform`.
+Run `make architecture` to verify that core crates have not acquired infrastructure dependencies or
+direct side effects.
 
 ## Running for real
 

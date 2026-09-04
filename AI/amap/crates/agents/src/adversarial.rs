@@ -1,6 +1,7 @@
 //! Adversarial Agent (design §14): "how can this system be broken?" — independent context,
 //! a different model from the builder, plus deterministic hostile probes.
 use crate::context_pack;
+use crate::outputs::{BuildOutput, ScenarioGenerationOutput};
 use amap_context::ContextBudget;
 use amap_domain::*;
 use amap_llm::{LlmRequest, TaskKind};
@@ -104,10 +105,14 @@ impl AgentTask for AdversarialAgent {
     async fn execute(&self, ctx: &AgentContext) -> Result<AgentResult, OrchestrationError> {
         let behaviors = ctx.knowledge.behaviors_for(&ctx.function_id).await?;
         let Some(base) = behaviors.first() else {
-            return Ok(AgentResult::new(
+            return AgentResult::typed(
                 "no base behavior for adversarial probing",
-                json!({ "scenarios": 0 }),
-            ));
+                ScenarioGenerationOutput {
+                    scenarios: 0,
+                    provider: None,
+                    llm_probes: Some(0),
+                },
+            );
         };
         let rules = ctx.knowledge.rules_for(&ctx.function_id).await?;
         let mut count = 0;
@@ -159,8 +164,9 @@ impl AgentTask for AdversarialAgent {
         }
 
         // LLM probes from a model different from the builder's.
-        let builder_provider: Option<ModelProvider> =
-            serde_json::from_value(ctx.input("build")["provider"].clone()).ok();
+        let builder_provider = ctx
+            .input_as::<BuildOutput>("build")?
+            .map(|output| output.provider);
         let mut pack =
             context_pack(ctx, "adversarial edge cases", ContextBudget::default()).await?;
         pack.source.clear();
@@ -230,12 +236,16 @@ impl AgentTask for AdversarialAgent {
         for (_, s) in scenarios {
             ctx.knowledge.upsert_scenario(s).await?;
         }
-        Ok(AgentResult::new(
+        AgentResult::typed(
             format!(
                 "generated {n} adversarial probes ({} from LLM)",
                 llm_probes.len()
             ),
-            json!({ "scenarios": n, "llm_probes": llm_probes.len() }),
-        ))
+            ScenarioGenerationOutput {
+                scenarios: n,
+                provider: None,
+                llm_probes: Some(llm_probes.len()),
+            },
+        )
     }
 }

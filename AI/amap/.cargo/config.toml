@@ -1,0 +1,4 @@
+[env]
+# Keep native C/C++ dependencies aligned with Rust's Apple Silicon baseline.
+# An explicitly exported environment variable still takes precedence.
+MACOSX_DEPLOYMENT_TARGET = { value = "11.0" }

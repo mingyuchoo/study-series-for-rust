@@ -7,6 +7,7 @@ rust-version.workspace = true
 
 [dependencies]
 amap-domain.workspace = true
+amap-assurance.workspace = true
 datafusion.workspace = true
 object_store = { workspace = true, features = ["aws"] }
 serde.workspace = true

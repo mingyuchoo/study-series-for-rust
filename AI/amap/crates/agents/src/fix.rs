@@ -1,6 +1,7 @@
 //! Fix Agent (design §19): root-cause hypothesis → staged patch (applied only after independent review).
-use crate::builder::{files_from_json, write_files};
-use crate::rca::workspace_files;
+use crate::builder::files_from_json;
+use crate::outputs::{FixOutput, RcaOutput};
+use crate::workspace::{FileSystemWorkspaceFactory, WorkspaceFactory};
 use amap_domain::*;
 use amap_llm::{LlmRequest, TaskKind};
 use amap_orchestrator::{AgentContext, AgentResult, AgentTask, OrchestrationError};
@@ -8,11 +9,22 @@ use amap_policy::{ActionContext, Principal};
 use async_trait::async_trait;
 use serde_json::json;
 
-#[derive(Default)]
-pub struct FixAgent;
+pub struct FixAgent {
+    workspaces: std::sync::Arc<dyn WorkspaceFactory>,
+}
 
-pub fn staging_dir(ws: &std::path::Path) -> std::path::PathBuf {
-    ws.join(".amap-staging")
+impl Default for FixAgent {
+    fn default() -> Self {
+        Self {
+            workspaces: std::sync::Arc::new(FileSystemWorkspaceFactory),
+        }
+    }
+}
+
+impl FixAgent {
+    pub fn with_workspaces(workspaces: std::sync::Arc<dyn WorkspaceFactory>) -> Self {
+        Self { workspaces }
+    }
 }
 
 #[async_trait]
@@ -24,17 +36,20 @@ impl AgentTask for FixAgent {
         AgentRole::Fix
     }
     async fn execute(&self, ctx: &AgentContext) -> Result<AgentResult, OrchestrationError> {
-        let root = ctx.input("rca")["root_cause"].clone();
-        if root.is_null() {
-            return Ok(AgentResult::new("nothing to fix", json!({ "patch": null })));
-        }
+        let Some(root) = ctx
+            .input_as::<RcaOutput>("rca")?
+            .and_then(|output| output.root_cause)
+        else {
+            return AgentResult::typed("nothing to fix", FixOutput::default());
+        };
         ctx.authorize(
             &Principal::agent("fix"),
             "patch",
             &ctx.function_id.0,
             &ActionContext::default(),
         )?;
-        let files = workspace_files(&ctx.config.workspace);
+        let workspace = self.workspaces.open(&ctx.config.workspace);
+        let files = workspace.read_files()?;
         let src: String = files
             .iter()
             .map(|f| format!("### {}\n```\n{}\n```", f.path, f.content))
@@ -62,10 +77,7 @@ impl AgentTask for FixAgent {
         if changes.is_empty() {
             return Err(OrchestrationError::agent("fix", "empty patch"));
         }
-        let staging = staging_dir(&ctx.config.workspace);
-        let _ = std::fs::remove_dir_all(&staging);
-        std::fs::create_dir_all(&staging).map_err(|e| OrchestrationError::Other(e.to_string()))?;
-        write_files(&staging, &changes)?;
+        workspace.stage(&changes)?;
         let patch = Patch {
             function_id: ctx.function_id.clone(),
             rationale: j["rationale"].as_str().unwrap_or("").to_string(),
@@ -77,13 +89,16 @@ impl AgentTask for FixAgent {
             json!({ "files": changes.iter().map(|c| c.path.clone()).collect::<Vec<_>>() }),
         )
         .await;
-        Ok(AgentResult::new(
+        AgentResult::typed(
             format!(
                 "staged patch touching {} file(s): {}",
                 changes.len(),
                 patch.rationale
             ),
-            json!({ "patch": patch, "provider": resp.provider }),
-        ))
+            FixOutput {
+                patch: Some(patch),
+                provider: Some(resp.provider),
+            },
+        )
     }
 }

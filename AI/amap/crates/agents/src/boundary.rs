@@ -1,4 +1,5 @@
 //! Boundary Generation Agent (design §13): deterministic boundary values from rule conditions.
+use crate::outputs::ScenarioGenerationOutput;
 use amap_domain::*;
 use amap_invariant::{BinOp, Expr};
 use amap_orchestrator::{AgentContext, AgentResult, AgentTask, OrchestrationError};
@@ -96,10 +97,14 @@ impl AgentTask for BoundaryAgent {
         let behaviors = ctx.knowledge.behaviors_for(&ctx.function_id).await?;
         let bases: Vec<&BehaviorRecord> = behaviors.iter().take(2).collect();
         if bases.is_empty() {
-            return Ok(AgentResult::new(
+            return AgentResult::typed(
                 "no base behaviors for boundary generation",
-                json!({ "scenarios": 0 }),
-            ));
+                ScenarioGenerationOutput {
+                    scenarios: 0,
+                    provider: None,
+                    llm_probes: None,
+                },
+            );
         }
         let mut count = 0;
         for rule in &rules {
@@ -165,10 +170,14 @@ impl AgentTask for BoundaryAgent {
                 }
             }
         }
-        Ok(AgentResult::new(
+        AgentResult::typed(
             format!("generated {count} boundary scenarios"),
-            json!({ "scenarios": count }),
-        ))
+            ScenarioGenerationOutput {
+                scenarios: count,
+                provider: None,
+                llm_probes: None,
+            },
+        )
     }
 }
 

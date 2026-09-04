@@ -11,6 +11,7 @@ kafka = ["dep:rdkafka"]
 
 [dependencies]
 amap-domain.workspace = true
+amap-assurance.workspace = true
 amap-comparator.workspace = true
 amap-invariant.workspace = true
 amap-uncertainty.workspace = true

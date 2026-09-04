@@ -65,6 +65,7 @@ checksum = "683d7910e743518b0e34f1186f92494becacb047c7b6bf616c96772180fef923"
 name = "amap-agents"
 version = "0.1.0"
 dependencies = [
+ "amap-assurance",
  "amap-comparator",
  "amap-context",
  "amap-domain",
@@ -102,6 +103,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "amap-assurance"
+version = "0.1.0"
+dependencies = [
+ "amap-domain",
+ "amap-uncertainty",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "amap-cli"
 version = "0.1.0"
 dependencies = [
@@ -115,6 +126,7 @@ dependencies = [
  "amap-knowledge",
  "amap-llm",
  "amap-orchestrator",
+ "amap-platform",
  "amap-policy",
  "amap-replay",
  "amap-telemetry",
@@ -177,6 +189,7 @@ dependencies = [
 name = "amap-evidence"
 version = "0.1.0"
 dependencies = [
+ "amap-assurance",
  "amap-domain",
  "chrono",
  "datafusion",
@@ -272,6 +285,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "amap-platform"
+version = "0.1.0"
+dependencies = [
+ "amap-domain",
+ "amap-evidence",
+ "amap-knowledge",
+ "amap-llm",
+ "amap-orchestrator",
+ "amap-policy",
+ "anyhow",
+ "figment",
+ "serde",
+ "serde_json",
+ "toml 0.8.23",
+ "tracing",
+]
+
+[[package]]
 name = "amap-policy"
 version = "0.1.0"
 dependencies = [
@@ -326,9 +357,9 @@ name = "amap-workers"
 version = "0.1.0"
 dependencies = [
  "amap-agents",
- "amap-cli",
  "amap-domain",
  "amap-orchestrator",
+ "amap-platform",
  "amap-telemetry",
  "anyhow",
  "clap",
@@ -1333,12 +1364,12 @@ name = "control-plane"
 version = "0.1.0"
 dependencies = [
  "amap-agents",
- "amap-cli",
  "amap-domain",
  "amap-evidence",
  "amap-graph",
  "amap-knowledge",
  "amap-orchestrator",
+ "amap-platform",
  "amap-telemetry",
  "anyhow",
  "axum",
@@ -3879,9 +3910,9 @@ checksum = "47d9d19d1d6efa0109d2f65ff4c85cddd50bd572e5a00127ab10987290bcefae"
 name = "llm-gateway"
 version = "0.1.0"
 dependencies = [
- "amap-cli",
  "amap-domain",
  "amap-llm",
+ "amap-platform",
  "amap-telemetry",
  "anyhow",
  "axum",

@@ -1,5 +1,5 @@
 [package]
-name = "control-plane"
+name = "amap-platform"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -7,20 +7,14 @@ rust-version.workspace = true
 
 [dependencies]
 amap-domain.workspace = true
-amap-knowledge.workspace = true
-amap-graph.workspace = true
 amap-evidence.workspace = true
+amap-knowledge.workspace = true
+amap-llm.workspace = true
 amap-orchestrator.workspace = true
-amap-agents.workspace = true
-amap-telemetry.workspace = true
-amap-platform.workspace = true
-axum.workspace = true
-tower-http.workspace = true
+amap-policy.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 anyhow.workspace = true
-tokio.workspace = true
+figment.workspace = true
 tracing.workspace = true
-uuid.workspace = true
-chrono.workspace = true
-subtle.workspace = true
+toml = "0.8"

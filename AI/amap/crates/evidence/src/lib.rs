@@ -4,6 +4,20 @@
 //! local directory or an S3/MinIO bucket, and queried in-process with Apache DataFusion.
 //! The [`FunctionCertificate`] is computed from the ledger with SQL — never asserted by an agent.
 
+pub use amap_assurance::{build_certificate, CertificateInputs, KindRow};
+
+/// Pure certificate and verification aggregation API.
+pub mod core {
+    pub use amap_assurance::{
+        assess_verification, build_certificate, rows_from_results, CertificateInputs, KindRow,
+        VerificationAssessment, VerificationFacts, VerificationFailure,
+    };
+}
+
+/// Evidence storage adapter API.
+pub mod adapters {
+    pub use super::{EvidenceError, EvidenceLake, LakeLocation};
+}
 use amap_domain::*;
 use datafusion::arrow::array::{ArrayRef, BooleanArray, StringArray};
 use datafusion::arrow::datatypes::{DataType, Field, Schema, SchemaRef};
@@ -288,99 +302,6 @@ impl EvidenceLake {
             })
             .collect())
     }
-}
-
-#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
-pub struct KindRow {
-    pub kind: String,
-    pub priority: String,
-    pub total: u64,
-    pub passed: u64,
-    pub unexplained: u64,
-}
-
-/// Build a [`FunctionCertificate`] + [`EquivalenceMetrics`] from ledger rows and knowledge counts.
-pub struct CertificateInputs {
-    pub function_id: String,
-    pub implemented: bool,
-    pub requirements_total: u64,
-    pub requirements_covered: u64,
-    pub rules_total: u64,
-    pub rules_covered: u64,
-    pub critical_rules_total: u64,
-    pub critical_rules_covered: u64,
-    pub behaviors_total: u64,
-    pub behaviors_covered: u64,
-    pub mutation_injected: u64,
-    pub mutation_detected: u64,
-    pub residual_uncertainty: f64,
-}
-
-pub fn build_certificate(
-    rows: &[KindRow],
-    inputs: CertificateInputs,
-) -> (FunctionCertificate, EquivalenceMetrics) {
-    let mut cert = FunctionCertificate {
-        function_id: inputs.function_id,
-        implemented: inputs.implemented,
-        requirements_total: inputs.requirements_total,
-        requirements_covered: inputs.requirements_covered,
-        rules_total: inputs.rules_total,
-        rules_covered: inputs.rules_covered,
-        critical_rules_total: inputs.critical_rules_total,
-        critical_rules_covered: inputs.critical_rules_covered,
-        mutation_injected: inputs.mutation_injected,
-        mutation_detected: inputs.mutation_detected,
-        residual_uncertainty: inputs.residual_uncertainty,
-        ..Default::default()
-    };
-    let mut eq = EquivalenceMetrics {
-        behaviors_total: inputs.behaviors_total,
-        behaviors_covered: inputs.behaviors_covered,
-        ..Default::default()
-    };
-    for r in rows {
-        let target = match r.kind.as_str() {
-            "golden_replay" => Some(&mut cert.golden),
-            "boundary" => Some(&mut cert.boundary),
-            "property" | "unit" => Some(&mut cert.property),
-            "adversarial" => Some(&mut cert.adversarial),
-            "fault" => Some(&mut cert.fault),
-            "concurrency" => Some(&mut cert.concurrency),
-            "differential" | "state" | "interface" => Some(&mut cert.production_replay),
-            _ => None,
-        };
-        if let Some(t) = target {
-            t.total += r.total;
-            t.passed += r.passed;
-            t.unexplained_failures += r.unexplained;
-        }
-        if r.kind != "mutation" {
-            cert.unexplained_differences += r.unexplained;
-        }
-        if matches!(r.kind.as_str(), "golden_replay" | "differential" | "unit") {
-            eq.all_total += r.total;
-            eq.all_passed += r.passed;
-            match r.priority.as_str() {
-                "P0" => {
-                    eq.p0_total += r.total;
-                    eq.p0_passed += r.passed;
-                }
-                "P1" => {
-                    eq.p1_total += r.total;
-                    eq.p1_passed += r.passed;
-                }
-                _ => {}
-            }
-            if r.unexplained > 0 && r.priority == "P0" {
-                cert.p0_defects_open += r.unexplained;
-            }
-            if r.unexplained > 0 && r.priority == "P1" {
-                cert.p1_defects_open += r.unexplained;
-            }
-        }
-    }
-    (cert, eq)
 }
 
 #[cfg(test)]

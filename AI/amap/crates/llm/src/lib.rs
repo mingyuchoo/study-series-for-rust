@@ -14,6 +14,19 @@ pub use gateway::{AuditEntry, Gateway, GatewayConfig};
 pub use providers::{anthropic::AnthropicProvider, mock::MockProvider, openai::OpenAiProvider};
 pub use router::{Router, RouterConfig};
 
+/// Provider-neutral LLM request, response, and policy contracts.
+pub mod core {
+    pub use crate::{Effort, LlmClient, LlmError, LlmRequest, LlmResponse, TaskKind};
+}
+
+/// Network and provider adapters plus the stateful gateway shell.
+pub mod adapters {
+    pub use crate::{
+        AnthropicProvider, Gateway, GatewayClient, GatewayConfig, MockProvider, OpenAiProvider,
+        Router, RouterConfig,
+    };
+}
+
 use amap_domain::{AgentRole, ModelProvider};
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};

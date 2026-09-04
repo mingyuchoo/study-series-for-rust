@@ -9,7 +9,9 @@ use amap_llm::{
     AnthropicProvider, Gateway, GatewayConfig, LlmClient, MockProvider, OpenAiProvider, Router,
     RouterConfig, TaskKind,
 };
-use amap_orchestrator::{AgentContext, EventBus, InMemoryBus, RunConfig};
+use amap_orchestrator::{
+    AgentContext, Clock, EventBus, IdGenerator, InMemoryBus, RunConfig, SystemClock, UuidGenerator,
+};
 use amap_policy::PolicyEngine;
 use serde_json::{json, Value};
 use std::path::Path;
@@ -21,6 +23,8 @@ pub struct Platform {
     pub lake: Arc<EvidenceLake>,
     pub bus: Arc<dyn EventBus>,
     pub policy: Arc<PolicyEngine>,
+    pub clock: Arc<dyn Clock>,
+    pub ids: Arc<dyn IdGenerator>,
     pub llm: Arc<dyn LlmClient>,
     pub gateway: Option<Arc<Gateway>>,
     pub mock: bool,
@@ -29,6 +33,8 @@ pub struct Platform {
 pub struct PlatformBuilder {
     settings: Settings,
     mock_fixtures: Option<std::path::PathBuf>,
+    clock: Arc<dyn Clock>,
+    ids: Arc<dyn IdGenerator>,
 }
 
 impl PlatformBuilder {
@@ -36,11 +42,23 @@ impl PlatformBuilder {
         Self {
             settings,
             mock_fixtures: None,
+            clock: Arc::new(SystemClock),
+            ids: Arc::new(UuidGenerator),
         }
     }
     /// Use fixture-driven mock LLM answers (offline demo / CI).
     pub fn with_mock_fixtures(mut self, dir: Option<&Path>) -> Self {
         self.mock_fixtures = Some(dir.map(|d| d.to_path_buf()).unwrap_or_default());
+        self
+    }
+
+    pub fn with_clock(mut self, clock: Arc<dyn Clock>) -> Self {
+        self.clock = clock;
+        self
+    }
+
+    pub fn with_ids(mut self, ids: Arc<dyn IdGenerator>) -> Self {
+        self.ids = ids;
         self
     }
 
@@ -77,6 +95,8 @@ impl PlatformBuilder {
             None => Arc::new(InMemoryBus::new()),
         };
         let policy = Arc::new(PolicyEngine::default());
+        let clock = self.clock.clone();
+        let ids = self.ids.clone();
 
         let mut mock = false;
         let (llm, gateway): (Arc<dyn LlmClient>, Option<Arc<Gateway>>) = if let Some(fixtures) =
@@ -131,6 +151,8 @@ impl PlatformBuilder {
             lake,
             bus,
             policy,
+            clock,
+            ids,
             llm,
             gateway,
             mock,
@@ -158,6 +180,8 @@ impl Platform {
             lake: self.lake.clone(),
             bus: self.bus.clone(),
             policy: self.policy.clone(),
+            clock: self.clock.clone(),
+            ids: self.ids.clone(),
             llm: gw.clone(),
             gateway: Some(gw),
             mock: true,
@@ -194,15 +218,15 @@ impl Platform {
         config.verifier_artifact_max_bytes = self.settings.worker_artifact_max_bytes;
         std::fs::create_dir_all(&config.workspace)?;
         Ok(AgentContext {
-            run_id: RunId::new(
-                run_id.unwrap_or_else(|| format!("RUN-{}", &uuid::Uuid::new_v4().to_string()[..8])),
-            ),
+            run_id: RunId::new(run_id.unwrap_or_else(|| self.ids.next("RUN"))),
             function_id: function.id,
             knowledge: self.knowledge.clone(),
             llm: self.llm.clone(),
             bus: self.bus.clone(),
             lake: self.lake.clone(),
             policy: self.policy.clone(),
+            clock: self.clock.clone(),
+            ids: self.ids.clone(),
             config: Arc::new(config),
             inputs: json!({}),
         })

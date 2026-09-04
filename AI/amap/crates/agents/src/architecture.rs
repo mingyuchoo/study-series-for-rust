@@ -1,11 +1,11 @@
 //! Architecture Agent (design §7): maps legacy function → target architecture; writes no code.
+use crate::outputs::ArchitectureOutput;
 use crate::{context_pack, str_list};
 use amap_context::ContextBudget;
 use amap_domain::*;
 use amap_llm::{LlmRequest, TaskKind};
 use amap_orchestrator::{AgentContext, AgentResult, AgentTask, OrchestrationError};
 use async_trait::async_trait;
-use serde_json::json;
 
 #[derive(Default)]
 pub struct ArchitectureAgent;
@@ -70,7 +70,7 @@ impl AgentTask for ArchitectureAgent {
                 .map(ScenarioId::new)
                 .collect(),
             rule_ownership: rule_ownership.clone(),
-            created_at: chrono::Utc::now(),
+            created_at: ctx.clock.now(),
         };
         if decision.evidence.is_empty() || decision.risks.is_empty() {
             return Err(OrchestrationError::agent(
@@ -88,9 +88,12 @@ impl AgentTask for ArchitectureAgent {
                 .await?;
         }
         ctx.knowledge.upsert_decision(decision.clone()).await?;
-        Ok(AgentResult::new(
+        AgentResult::typed(
             format!("architecture decision recorded: {}", decision.decision),
-            json!({ "decision_id": decision.id, "ownership": rule_ownership.len() }),
-        ))
+            ArchitectureOutput {
+                decision_id: decision.id,
+                ownership: rule_ownership.len(),
+            },
+        )
     }
 }

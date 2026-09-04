@@ -1,70 +1,49 @@
 //! Uncertainty analysis + risk-based HITL routing (design §21, §24).
+use crate::outputs::{UncertaintyOutput, VerificationOutput};
+use crate::ports::{UncertaintyDependencies, UncertaintyKnowledge};
 use amap_domain::*;
 use amap_graph::KnowledgeGraph;
 use amap_knowledge::{ReviewRequest, ReviewStatus};
 use amap_orchestrator::{AgentContext, AgentResult, AgentTask, OrchestrationError};
-use amap_uncertainty::{assess, ConfidenceVector, Weights};
+use amap_uncertainty::{
+    assess, confidence_vector_from_evidence, ConfidenceEvidence, ConfidenceVector, Weights,
+};
 use async_trait::async_trait;
 use serde_json::json;
 
 #[derive(Default)]
 pub struct UncertaintyAgent;
 
-pub async fn confidence_vector(
-    ctx: &AgentContext,
+pub async fn confidence_vector<K: UncertaintyKnowledge + ?Sized>(
+    dependencies: &UncertaintyDependencies<'_, K>,
+    function_id: &FunctionId,
     equivalence: f64,
 ) -> Result<ConfidenceVector, OrchestrationError> {
-    let reqs = ctx.knowledge.requirements_for(&ctx.function_id).await?;
-    let rules = ctx.knowledge.rules_for(&ctx.function_id).await?;
-    let scenarios = ctx.knowledge.scenarios_for(&ctx.function_id).await?;
-    let units = ctx.knowledge.source_units_for(&ctx.function_id).await?;
-    let avg = |v: &[f64]| {
-        if v.is_empty() {
-            0.0
-        } else {
-            v.iter().sum::<f64>() / v.len() as f64
-        }
-    };
-    let requirement = if reqs.is_empty() {
-        0.5
-    } else {
-        avg(&reqs.iter().map(|r| r.confidence).collect::<Vec<_>>())
-    };
-    let rule = avg(&rules.iter().map(|r| r.confidence).collect::<Vec<_>>());
-    let behavior = if rules.is_empty() {
-        0.0
-    } else {
-        rules
-            .iter()
-            .filter(|r| r.observed_production_cases > 0)
-            .count() as f64
-            / rules.len() as f64
-    };
-    let test = if rules.is_empty() {
-        0.0
-    } else {
-        (scenarios.len() as f64 / (rules.len() as f64 * 3.0)).min(1.0)
-    };
+    let reqs = dependencies.knowledge.requirements_for(function_id).await?;
+    let rules = dependencies.knowledge.rules_for(function_id).await?;
+    let scenarios = dependencies.knowledge.scenarios_for(function_id).await?;
+    let units = dependencies.knowledge.source_units_for(function_id).await?;
     let unresolved = units
         .iter()
         .flat_map(|u| u.dependencies.iter())
         .filter(|d| d.0.starts_with("external::"))
         .count();
-    let dependency = if units.is_empty() {
-        1.0
-    } else {
-        1.0 - (unresolved as f64 / units.len() as f64).min(0.5)
-    };
-    let complexity = ((units.len() as f64) / 200.0).min(1.0);
-    Ok(ConfidenceVector {
-        requirement,
-        rule,
-        behavior,
-        test,
-        dependency,
+    Ok(confidence_vector_from_evidence(&ConfidenceEvidence {
+        requirement_confidences: reqs
+            .iter()
+            .map(|requirement| requirement.confidence)
+            .collect(),
+        rule_confidences: rules.iter().map(|rule| rule.confidence).collect(),
+        rules_total: rules.len(),
+        rules_observed_in_production: rules
+            .iter()
+            .filter(|rule| rule.observed_production_cases > 0)
+            .count(),
+        scenarios_total: scenarios.len(),
+        source_units_total: units.len(),
+        unresolved_dependencies: unresolved,
         equivalence,
-        complexity,
-    })
+    }))
 }
 
 #[async_trait]
@@ -76,10 +55,16 @@ impl AgentTask for UncertaintyAgent {
         AgentRole::Uncertainty
     }
     async fn execute(&self, ctx: &AgentContext) -> Result<AgentResult, OrchestrationError> {
-        let equivalence = ctx.input("verify")["equivalence"].as_f64().unwrap_or(0.0);
-        let v = confidence_vector(ctx, equivalence).await?;
+        let dependencies = UncertaintyDependencies {
+            knowledge: ctx.knowledge.as_ref(),
+        };
+        let equivalence = ctx
+            .input_as::<VerificationOutput>("verify")?
+            .map(|output| output.equivalence)
+            .unwrap_or(0.0);
+        let v = confidence_vector(&dependencies, &ctx.function_id, equivalence).await?;
         let report = assess(&v, &Weights::default());
-        let snap = ctx.knowledge.snapshot().await?;
+        let snap = dependencies.knowledge.snapshot().await?;
         let graph = KnowledgeGraph::from_snapshot(&snap);
         let weak = graph.weakly_evidenced_rules();
         ctx.emit(
@@ -90,7 +75,7 @@ impl AgentTask for UncertaintyAgent {
 
         let mut halt = None;
         if report.tier.requires_human() {
-            let reviews = ctx.knowledge.list_reviews().await?;
+            let reviews = dependencies.knowledge.list_reviews().await?;
             let approved = reviews.iter().any(|r| {
                 r.run_id.as_ref() == Some(&ctx.run_id)
                     && r.function_id == ctx.function_id
@@ -114,19 +99,19 @@ impl AgentTask for UncertaintyAgent {
                     } else {
                         ReviewStatus::Pending
                     },
-                    requested_at: chrono::Utc::now(),
+                    requested_at: ctx.clock.now(),
                     decided_by: if ctx.config.auto_approve_hitl {
                         Some("auto-approve (demo)".into())
                     } else {
                         None
                     },
                     decided_at: if ctx.config.auto_approve_hitl {
-                        Some(chrono::Utc::now())
+                        Some(ctx.clock.now())
                     } else {
                         None
                     },
                 };
-                ctx.knowledge.queue_review(req).await?;
+                dependencies.knowledge.queue_review(req).await?;
                 ctx.emit(
                     "human.review.required",
                     json!({ "review_id": id, "tier": report.tier }),
@@ -146,10 +131,16 @@ impl AgentTask for UncertaintyAgent {
             report.tier,
             weak.len()
         );
-        let mut res = AgentResult::new(
+        let mut res = AgentResult::typed(
             summary,
-            json!({ "report": report, "weakly_evidenced": weak }),
-        );
+            UncertaintyOutput {
+                report,
+                weakly_evidenced: weak
+                    .into_iter()
+                    .map(|(rule, missing)| (rule, missing.into_iter().map(str::to_owned).collect()))
+                    .collect(),
+            },
+        )?;
         res.halt = halt;
         Ok(res)
     }

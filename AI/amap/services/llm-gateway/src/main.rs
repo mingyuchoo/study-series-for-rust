@@ -1,11 +1,11 @@
 //! Standalone LLM Gateway (stack §13): agents call `POST /v1/complete`; this service owns
 //! provider routing, PII filtering, caching, retries, budgets, cost and audit.
-use amap_cli::Settings;
 use amap_domain::ModelProvider;
 use amap_llm::{
     AnthropicProvider, Gateway, GatewayConfig, LlmClient, LlmError, LlmRequest, OpenAiProvider,
     Router, RouterConfig,
 };
+use amap_platform::Settings;
 use axum::extract::{DefaultBodyLimit, State};
 use axum::http::{header, HeaderMap, Request, StatusCode};
 use axum::middleware::{self, Next};

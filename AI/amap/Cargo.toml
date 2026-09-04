@@ -2,10 +2,12 @@
 resolver = "2"
 members = [
     "crates/domain",
+    "crates/assurance",
     "crates/comparator",
     "crates/invariant",
     "crates/uncertainty",
     "crates/policy",
+    "crates/platform",
     "crates/knowledge",
     "crates/graph",
     "crates/evidence",
@@ -32,10 +34,12 @@ rust-version = "1.98"
 [workspace.dependencies]
 # --- AMAP crates ---
 amap-domain = { path = "crates/domain" }
+amap-assurance = { path = "crates/assurance" }
 amap-comparator = { path = "crates/comparator" }
 amap-invariant = { path = "crates/invariant" }
 amap-uncertainty = { path = "crates/uncertainty" }
 amap-policy = { path = "crates/policy" }
+amap-platform = { path = "crates/platform" }
 amap-knowledge = { path = "crates/knowledge" }
 amap-graph = { path = "crates/graph" }
 amap-evidence = { path = "crates/evidence" }

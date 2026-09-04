@@ -1,4 +1,6 @@
 //! RCA Agent (design §18): failure → root-cause hypothesis. It never patches (policy-enforced).
+use crate::outputs::{RcaOutput, VerificationOutput};
+use crate::workspace::{FileSystemWorkspaceFactory, WorkspaceFactory};
 use crate::{context_pack, str_list};
 use amap_context::ContextBudget;
 use amap_domain::*;
@@ -7,27 +9,23 @@ use amap_orchestrator::{AgentContext, AgentResult, AgentTask, OrchestrationError
 use amap_policy::{ActionContext, Principal};
 use async_trait::async_trait;
 use serde_json::{json, Value};
-use walkdir::WalkDir;
 
-#[derive(Default)]
-pub struct RcaAgent;
+pub struct RcaAgent {
+    workspaces: std::sync::Arc<dyn WorkspaceFactory>,
+}
 
-pub fn workspace_files(ws: &std::path::Path) -> Vec<FileChange> {
-    WalkDir::new(ws)
-        .into_iter()
-        .filter_map(|e| e.ok())
-        .filter(|e| e.file_type().is_file())
-        .filter_map(|e| {
-            let rel = e.path().strip_prefix(ws).ok()?.display().to_string();
-            if rel.starts_with(".amap") {
-                return None;
-            }
-            Some(FileChange {
-                path: rel,
-                content: std::fs::read_to_string(e.path()).ok()?,
-            })
-        })
-        .collect()
+impl Default for RcaAgent {
+    fn default() -> Self {
+        Self {
+            workspaces: std::sync::Arc::new(FileSystemWorkspaceFactory),
+        }
+    }
+}
+
+impl RcaAgent {
+    pub fn with_workspaces(workspaces: std::sync::Arc<dyn WorkspaceFactory>) -> Self {
+        Self { workspaces }
+    }
 }
 
 #[async_trait]
@@ -39,13 +37,12 @@ impl AgentTask for RcaAgent {
         AgentRole::Rca
     }
     async fn execute(&self, ctx: &AgentContext) -> Result<AgentResult, OrchestrationError> {
-        let verify = ctx.input("verify");
-        let failures = verify["failures"].as_array().cloned().unwrap_or_default();
+        let failures = ctx
+            .input_as::<VerificationOutput>("verify")?
+            .map(|output| output.failures)
+            .unwrap_or_default();
         if failures.is_empty() {
-            return Ok(AgentResult::new(
-                "no unexplained failures",
-                json!({ "root_cause": null }),
-            ));
+            return AgentResult::typed("no unexplained failures", RcaOutput::default());
         }
         // The RCA agent is denied `patch` by policy — make that explicit and auditable.
         if ctx
@@ -64,7 +61,7 @@ impl AgentTask for RcaAgent {
         }
         let rule_ids: Vec<String> = failures
             .iter()
-            .flat_map(|f| str_list(&f["rules"]))
+            .flat_map(|failure| failure.rule_ids.iter().map(|id| id.0.clone()))
             .collect();
         let mut pack = context_pack(
             ctx,
@@ -79,7 +76,8 @@ impl AgentTask for RcaAgent {
         .await?;
         pack.rules
             .retain(|r| rule_ids.contains(&r.id.0) || rule_ids.is_empty());
-        let next_files = workspace_files(&ctx.config.workspace);
+        let workspace = self.workspaces.open(&ctx.config.workspace);
+        let next_files = workspace.read_files()?;
         let next_src: String = next_files
             .iter()
             .map(|f| format!("### next/{}\n```\n{}\n```", f.path, f.content))
@@ -100,10 +98,11 @@ impl AgentTask for RcaAgent {
             .collect();
         let explained = failures
             .iter()
-            .filter(|f| {
-                str_list(&f["rules"])
+            .filter(|failure| {
+                failure
+                    .rule_ids
                     .iter()
-                    .any(|r| affected.iter().any(|a| a.0 == *r))
+                    .any(|rule| affected.iter().any(|candidate| candidate == rule))
                     || affected.is_empty()
             })
             .count();
@@ -128,13 +127,16 @@ impl AgentTask for RcaAgent {
             json!({ "summary": root.summary, "confidence": root.confidence }),
         )
         .await;
-        Ok(AgentResult::new(
+        AgentResult::typed(
             format!(
                 "root cause: {} (confidence {:.1}%)",
                 root.summary,
                 root.confidence * 100.0
             ),
-            json!({ "root_cause": root, "provider": resp.provider }),
-        ))
+            RcaOutput {
+                root_cause: Some(root),
+                provider: Some(resp.provider),
+            },
+        )
     }
 }

@@ -1,10 +1,3 @@
-//! Shared bootstrap for the CLI and the control plane: platform settings, run specs,
-//! store / lake / bus / LLM wiring, and fixture-driven mock providers.
+//! Compatibility facade. New code should depend on `amap-platform` directly.
 
-pub mod bootstrap;
-pub mod runspec;
-pub mod settings;
-
-pub use bootstrap::{Platform, PlatformBuilder};
-pub use runspec::RunSpec;
-pub use settings::Settings;
+pub use amap_platform::*;

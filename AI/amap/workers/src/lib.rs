@@ -295,7 +295,7 @@ pub async fn serve(
     kinds: Vec<VerificationKind>,
     listen: Option<String>,
 ) -> anyhow::Result<()> {
-    let settings = amap_cli::Settings::load(None)?;
+    let settings = amap_platform::Settings::load(None)?;
     if !settings.insecure_dev && settings.worker_token.is_none() {
         anyhow::bail!(
             "AMAP_WORKER_TOKEN is required; set AMAP_INSECURE_DEV=true only for isolated local development"

@@ -9,6 +9,20 @@ pub use pack::{CodeSnippet, ContextBudget, ContextPack};
 pub use search::{Hit, LexicalIndex};
 pub use vector::{InMemoryVectorIndex, OpenAiEmbeddingProvider, VectorIndex};
 
+/// Deterministic context data structures and in-memory ranking primitives.
+pub mod core {
+    pub use crate::pack::{CodeSnippet, ContextBudget, ContextPack};
+    pub use crate::search::Hit;
+    pub use crate::vector::{InMemoryVectorIndex, VectorIndex};
+}
+
+/// Filesystem, Tantivy, knowledge-store, and HTTP embedding adapters.
+pub mod adapters {
+    pub use crate::search::LexicalIndex;
+    pub use crate::vector::OpenAiEmbeddingProvider;
+    pub use crate::ContextEngine;
+}
+
 use amap_domain::*;
 use amap_knowledge::KnowledgeStore;
 use std::path::{Path, PathBuf};
@@ -36,10 +50,21 @@ impl ContextEngine {
         Ok(Self {
             lexical: LexicalIndex::in_memory()?,
             vector: InMemoryVectorIndex::default(),
-            embedding_provider: OpenAiEmbeddingProvider::from_env(),
+            embedding_provider: None,
             pending_embeddings: vec![],
             source_root: source_root.map(|p| p.to_path_buf()),
         })
+    }
+
+    pub fn from_environment(source_root: Option<&Path>) -> Result<Self, ContextError> {
+        let mut engine = Self::new(source_root)?;
+        engine.embedding_provider = OpenAiEmbeddingProvider::from_env();
+        Ok(engine)
+    }
+
+    pub fn with_embedding_provider(mut self, provider: OpenAiEmbeddingProvider) -> Self {
+        self.embedding_provider = Some(provider);
+        self
     }
 
     /// Index everything retrievable: requirements, rules, source units (with text when available), behaviors.

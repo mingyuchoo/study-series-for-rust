@@ -1,6 +1,7 @@
 //! Independent Review Agent (design §20): a different model reviews the staged patch; only an
 //! approved patch is applied to the workspace. Policy forbids reviewing one's own change.
-use crate::builder::write_files;
+use crate::outputs::{FixOutput, RcaOutput, ReviewOutput};
+use crate::workspace::{FileSystemWorkspaceFactory, WorkspaceFactory};
 use amap_domain::*;
 use amap_llm::{LlmRequest, TaskKind};
 use amap_orchestrator::{AgentContext, AgentResult, AgentTask, OrchestrationError};
@@ -8,8 +9,23 @@ use amap_policy::{ActionContext, Principal};
 use async_trait::async_trait;
 use serde_json::json;
 
-#[derive(Default)]
-pub struct ReviewAgent;
+pub struct ReviewAgent {
+    workspaces: std::sync::Arc<dyn WorkspaceFactory>,
+}
+
+impl Default for ReviewAgent {
+    fn default() -> Self {
+        Self {
+            workspaces: std::sync::Arc::new(FileSystemWorkspaceFactory),
+        }
+    }
+}
+
+impl ReviewAgent {
+    pub fn with_workspaces(workspaces: std::sync::Arc<dyn WorkspaceFactory>) -> Self {
+        Self { workspaces }
+    }
+}
 
 #[async_trait]
 impl AgentTask for ReviewAgent {
@@ -20,15 +36,10 @@ impl AgentTask for ReviewAgent {
         AgentRole::Reviewer
     }
     async fn execute(&self, ctx: &AgentContext) -> Result<AgentResult, OrchestrationError> {
-        let patch_json = ctx.input("fix")["patch"].clone();
-        if patch_json.is_null() {
-            return Ok(AgentResult::new(
-                "no patch to review",
-                json!({ "approved": false, "applied": false }),
-            ));
-        }
-        let patch: Patch = serde_json::from_value(patch_json)
-            .map_err(|e| OrchestrationError::agent("review", e))?;
+        let fix = ctx.input_as::<FixOutput>("fix")?.unwrap_or_default();
+        let Some(patch) = fix.patch else {
+            return AgentResult::typed("no patch to review", ReviewOutput::default());
+        };
         let author = Principal::agent(&patch.author_agent);
         let action_ctx = ActionContext {
             author: Some(author.clone()),
@@ -51,9 +62,10 @@ impl AgentTask for ReviewAgent {
             &action_ctx,
         )?;
 
-        let fix_provider: Option<ModelProvider> =
-            serde_json::from_value(ctx.input("fix")["provider"].clone()).ok();
-        let root = ctx.input("rca")["root_cause"].clone();
+        let fix_provider = fix.provider;
+        let root = ctx
+            .input_as::<RcaOutput>("rca")?
+            .and_then(|output| output.root_cause);
         let rules = ctx.knowledge.rules_for(&ctx.function_id).await?;
         let rule_text: String = rules
             .iter()
@@ -110,14 +122,16 @@ impl AgentTask for ReviewAgent {
         };
         let mut applied = false;
         if verdict.approved {
-            write_files(&ctx.config.workspace, &patch.changes)?;
+            self.workspaces
+                .open(&ctx.config.workspace)
+                .apply(&patch.changes)?;
             applied = true;
             ctx.emit("repair.applied", json!({ "files": patch.changes.iter().map(|c| c.path.clone()).collect::<Vec<_>>() })).await;
         } else {
             ctx.emit("repair.rejected", json!({ "comments": verdict.comments }))
                 .await;
         }
-        Ok(AgentResult::new(
+        AgentResult::typed(
             format!(
                 "review {} by {} ({} comment(s))",
                 if verdict.approved {
@@ -128,7 +142,11 @@ impl AgentTask for ReviewAgent {
                 verdict.reviewer_agent,
                 verdict.comments.len()
             ),
-            json!({ "approved": verdict.approved, "applied": applied, "verdict": verdict }),
-        ))
+            ReviewOutput {
+                approved: verdict.approved,
+                applied,
+                verdict: Some(verdict),
+            },
+        )
     }
 }

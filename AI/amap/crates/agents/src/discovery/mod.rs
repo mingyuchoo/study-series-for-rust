@@ -3,6 +3,7 @@ pub mod cobol;
 pub mod structured;
 pub mod treesitter;
 
+use crate::outputs::DiscoveryOutput;
 use crate::{context_pack, str_list};
 use amap_context::ContextBudget;
 use amap_domain::*;
@@ -155,15 +156,15 @@ impl AgentTask for DiscoveryAgent {
             json!({ "entities": entity_count, "suspicious": suspicious.len() }),
         )
         .await;
-        Ok(AgentResult::new(
+        AgentResult::typed(
             format!("discovered {entity_count} code entities, {dependency_edges} dependency edges, {} suspicious", suspicious.len()),
-            json!({
-                "entities": entity_count,
-                "dependency_edges": dependency_edges,
-                "files": analyzed.len(),
-                "suspicious": suspicious,
-                "domains": domains,
-            }),
-        ))
+            DiscoveryOutput {
+                entities: entity_count,
+                dependency_edges,
+                files: analyzed.len(),
+                suspicious,
+                domains,
+            },
+        )
     }
 }

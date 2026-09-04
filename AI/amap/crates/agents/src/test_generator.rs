@@ -1,4 +1,5 @@
 //! Independent Test Agent: generates scenarios from rules/requirements *without* seeing the implementation.
+use crate::outputs::ScenarioGenerationOutput;
 use crate::{context_pack, str_list};
 use amap_context::ContextBudget;
 use amap_domain::*;
@@ -79,9 +80,13 @@ impl AgentTask for TestGeneratorAgent {
             ctx.knowledge.upsert_scenario(scenario).await?;
             count += 1;
         }
-        Ok(AgentResult::new(
+        AgentResult::typed(
             format!("generated {count} independent scenarios"),
-            json!({ "scenarios": count, "provider": resp.provider }),
-        ))
+            ScenarioGenerationOutput {
+                scenarios: count,
+                provider: Some(resp.provider),
+                llm_probes: None,
+            },
+        )
     }
 }
