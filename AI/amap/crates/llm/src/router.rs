@@ -19,21 +19,21 @@ impl Default for RouterConfig {
         use AgentRole::*;
         use ModelProvider::*;
         let mut routes = HashMap::new();
-        routes.insert(Orchestrator, vec![OpenAi, Anthropic]);
-        routes.insert(Builder, vec![OpenAi, Anthropic]);
-        routes.insert(Fix, vec![OpenAi, Anthropic]);
-        routes.insert(Discovery, vec![Anthropic, OpenAi]);
-        routes.insert(RuleMiner, vec![Anthropic, OpenAi]);
-        routes.insert(BehaviorMiner, vec![Anthropic, OpenAi]);
-        routes.insert(Architecture, vec![Anthropic, OpenAi]);
-        routes.insert(TestGenerator, vec![Anthropic, OpenAi]);
-        routes.insert(Adversarial, vec![Anthropic, OpenAi]); // different from Builder
-        routes.insert(Reviewer, vec![Anthropic, OpenAi]); // different from Builder
-        routes.insert(BusinessReviewer, vec![Anthropic, OpenAi]);
-        routes.insert(Rca, vec![OpenAi, Anthropic]);
+        routes.insert(Orchestrator, vec![OpenAi, Azure, Anthropic]);
+        routes.insert(Builder, vec![OpenAi, Azure, Anthropic]);
+        routes.insert(Fix, vec![OpenAi, Azure, Anthropic]);
+        routes.insert(Discovery, vec![Anthropic, OpenAi, Azure]);
+        routes.insert(RuleMiner, vec![Anthropic, OpenAi, Azure]);
+        routes.insert(BehaviorMiner, vec![Anthropic, OpenAi, Azure]);
+        routes.insert(Architecture, vec![Anthropic, OpenAi, Azure]);
+        routes.insert(TestGenerator, vec![Anthropic, OpenAi, Azure]);
+        routes.insert(Adversarial, vec![Anthropic, OpenAi, Azure]); // different from Builder
+        routes.insert(Reviewer, vec![Anthropic, OpenAi, Azure]); // different from Builder
+        routes.insert(BusinessReviewer, vec![Anthropic, OpenAi, Azure]);
+        routes.insert(Rca, vec![OpenAi, Azure, Anthropic]);
         Self {
             routes,
-            fallback: vec![Anthropic, OpenAi, Local, Mock],
+            fallback: vec![Anthropic, OpenAi, Azure, Local, Mock],
         }
     }
 }

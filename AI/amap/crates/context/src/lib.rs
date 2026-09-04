@@ -7,7 +7,7 @@ pub mod vector;
 
 pub use pack::{CodeSnippet, ContextBudget, ContextPack};
 pub use search::{Hit, LexicalIndex};
-pub use vector::{InMemoryVectorIndex, OpenAiEmbeddingProvider, VectorIndex};
+pub use vector::{EmbeddingAuth, InMemoryVectorIndex, OpenAiEmbeddingProvider, VectorIndex};
 
 /// Deterministic context data structures and in-memory ranking primitives.
 pub mod core {

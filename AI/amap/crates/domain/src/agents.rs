@@ -59,6 +59,8 @@ impl AgentRole {
 pub enum ModelProvider {
     Anthropic,
     OpenAi,
+    /// Azure OpenAI (deployment-scoped endpoint, `api-key` auth).
+    Azure,
     Bedrock,
     Local,
     Mock,

@@ -2,8 +2,8 @@
 //! provider routing, PII filtering, caching, retries, budgets, cost and audit.
 use amap_domain::ModelProvider;
 use amap_llm::{
-    AnthropicProvider, Gateway, GatewayConfig, LlmClient, LlmError, LlmRequest, OpenAiProvider,
-    Router, RouterConfig,
+    AnthropicProvider, AzureOpenAiProvider, Gateway, GatewayConfig, LlmClient, LlmError,
+    LlmRequest, OpenAiProvider, Router, RouterConfig,
 };
 use amap_platform::{open_knowledge, KnowledgeAuditSink, Settings};
 use axum::extract::{DefaultBodyLimit, Query, State};
@@ -105,6 +105,9 @@ async fn main() -> anyhow::Result<()> {
     if let Some(p) = OpenAiProvider::from_env() {
         router = router.with_provider(ModelProvider::OpenAi, Arc::new(p));
     }
+    if let Some(p) = AzureOpenAiProvider::from_env() {
+        router = router.with_provider(ModelProvider::Azure, Arc::new(p));
+    }
     if let (Ok(url), Ok(model)) = (
         std::env::var("AMAP_LOCAL_LLM_URL"),
         std::env::var("AMAP_LOCAL_LLM_MODEL"),
@@ -124,7 +127,7 @@ async fn main() -> anyhow::Result<()> {
     if router.configured().is_empty() {
         if !settings.insecure_dev {
             anyhow::bail!(
-                "no LLM provider configured: set ANTHROPIC_API_KEY or OPENAI_API_KEY with AMAP_OPENAI_MODEL"
+                "no LLM provider configured: set ANTHROPIC_API_KEY, OPENAI_API_KEY with AMAP_OPENAI_MODEL, or AZURE_OPENAI_API_KEY with AZURE_OPENAI_ENDPOINT and AZURE_OPENAI_DEPLOYMENT"
             );
         }
         tracing::warn!("no providers configured; serving a development-only mock provider");

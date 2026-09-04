@@ -75,11 +75,21 @@ impl VectorIndex for InMemoryVectorIndex {
     }
 }
 
+/// How the API key is sent to the embedding endpoint.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum EmbeddingAuth {
+    /// `Authorization: Bearer <key>` (OpenAI and most compatible servers).
+    Bearer,
+    /// `api-key: <key>` (Azure OpenAI).
+    ApiKeyHeader,
+}
+
 #[derive(Clone)]
 pub struct OpenAiEmbeddingProvider {
     client: reqwest::Client,
     endpoint: String,
     api_key: Option<String>,
+    auth: EmbeddingAuth,
     model: String,
 }
 
@@ -101,15 +111,58 @@ struct EmbeddingData {
 }
 
 impl OpenAiEmbeddingProvider {
+    /// Generic OpenAI-compatible provider from `AMAP_EMBEDDING_URL` (+ optional
+    /// `AMAP_EMBEDDING_API_KEY`, `AMAP_EMBEDDING_MODEL`). When that is unset, falls back to
+    /// Azure OpenAI via [`Self::azure_from_env`].
     pub fn from_env() -> Option<Self> {
-        let endpoint = std::env::var("AMAP_EMBEDDING_URL").ok()?;
+        let Ok(endpoint) = std::env::var("AMAP_EMBEDDING_URL") else {
+            return Self::azure_from_env();
+        };
         Some(Self {
             client: reqwest::Client::new(),
             endpoint,
             api_key: std::env::var("AMAP_EMBEDDING_API_KEY").ok(),
+            auth: EmbeddingAuth::Bearer,
             model: std::env::var("AMAP_EMBEDDING_MODEL")
                 .unwrap_or_else(|_| "text-embedding-3-small".into()),
         })
+    }
+
+    /// Azure OpenAI embeddings from `AZURE_OPENAI_API_KEY`, `AZURE_OPENAI_ENDPOINT` and
+    /// `AZURE_OPENAI_EMBEDDING_DEPLOYMENT` (all required) plus optional `AZURE_OPENAI_API_VERSION`.
+    pub fn azure_from_env() -> Option<Self> {
+        let api_key = std::env::var("AZURE_OPENAI_API_KEY").ok()?;
+        let endpoint = std::env::var("AZURE_OPENAI_ENDPOINT").ok()?;
+        let deployment = std::env::var("AZURE_OPENAI_EMBEDDING_DEPLOYMENT").ok()?;
+        let api_version = std::env::var("AZURE_OPENAI_API_VERSION")
+            .unwrap_or_else(|_| "2024-12-01-preview".into());
+        Some(Self::azure(api_key, endpoint, deployment, api_version))
+    }
+
+    /// Azure OpenAI embeddings against `{endpoint}/openai/deployments/{deployment}/embeddings`.
+    pub fn azure(
+        api_key: impl Into<String>,
+        endpoint: impl Into<String>,
+        deployment: impl Into<String>,
+        api_version: impl Into<String>,
+    ) -> Self {
+        let deployment = deployment.into();
+        Self {
+            client: reqwest::Client::new(),
+            endpoint: format!(
+                "{}/openai/deployments/{}/embeddings?api-version={}",
+                endpoint.into().trim_end_matches('/'),
+                deployment,
+                api_version.into()
+            ),
+            api_key: Some(api_key.into()),
+            auth: EmbeddingAuth::ApiKeyHeader,
+            model: deployment,
+        }
+    }
+
+    pub fn endpoint(&self) -> &str {
+        &self.endpoint
     }
 
     pub async fn embed(&self, input: &[String]) -> Result<Vec<Vec<f32>>, String> {
@@ -118,7 +171,10 @@ impl OpenAiEmbeddingProvider {
             input,
         });
         if let Some(api_key) = &self.api_key {
-            request = request.bearer_auth(api_key);
+            request = match self.auth {
+                EmbeddingAuth::Bearer => request.bearer_auth(api_key),
+                EmbeddingAuth::ApiKeyHeader => request.header("api-key", api_key),
+            };
         }
         let response = request
             .send()
@@ -135,5 +191,26 @@ impl OpenAiEmbeddingProvider {
             return Err("embedding provider returned an invalid batch".into());
         }
         Ok(rows.into_iter().map(|row| row.embedding).collect())
+    }
+}
+
+#[cfg(test)]
+mod azure_tests {
+    use super::*;
+
+    #[test]
+    fn azure_endpoint_is_deployment_scoped_with_api_version() {
+        let p = OpenAiEmbeddingProvider::azure(
+            "k",
+            "https://example.cognitiveservices.azure.com/",
+            "text-embedding-3-large",
+            "2024-12-01-preview",
+        );
+        assert_eq!(
+            p.endpoint(),
+            "https://example.cognitiveservices.azure.com/openai/deployments/text-embedding-3-large/embeddings?api-version=2024-12-01-preview"
+        );
+        assert_eq!(p.auth, EmbeddingAuth::ApiKeyHeader);
+        assert_eq!(p.model, "text-embedding-3-large");
     }
 }

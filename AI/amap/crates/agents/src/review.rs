@@ -91,6 +91,7 @@ impl AgentTask for ReviewAgent {
             for candidate in [
                 ModelProvider::Anthropic,
                 ModelProvider::OpenAi,
+                ModelProvider::Azure,
                 ModelProvider::Local,
                 ModelProvider::Mock,
             ] {

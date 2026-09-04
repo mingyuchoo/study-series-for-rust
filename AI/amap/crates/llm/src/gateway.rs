@@ -73,6 +73,16 @@ fn price(provider: ModelProvider, model: &str) -> (f64, f64) {
             }
         }
         ModelProvider::OpenAi | ModelProvider::Bedrock => (5.0, 25.0),
+        ModelProvider::Azure => {
+            // Azure bills the underlying OpenAI model; size tiers are cheaper.
+            if model.contains("nano") {
+                (0.1, 0.4)
+            } else if model.contains("mini") {
+                (0.5, 2.0)
+            } else {
+                (5.0, 25.0)
+            }
+        }
         ModelProvider::Local | ModelProvider::Mock => (0.0, 0.0),
     }
 }

@@ -11,7 +11,10 @@ pub mod router;
 
 pub use client::GatewayClient;
 pub use gateway::{content_hash, AuditEntry, AuditSink, Gateway, GatewayConfig};
-pub use providers::{anthropic::AnthropicProvider, mock::MockProvider, openai::OpenAiProvider};
+pub use providers::{
+    anthropic::AnthropicProvider, azure::AzureOpenAiProvider, mock::MockProvider,
+    openai::OpenAiProvider,
+};
 pub use router::{Router, RouterConfig};
 
 /// Provider-neutral LLM request, response, and policy contracts.
@@ -22,8 +25,8 @@ pub mod core {
 /// Network and provider adapters plus the stateful gateway shell.
 pub mod adapters {
     pub use crate::{
-        AnthropicProvider, Gateway, GatewayClient, GatewayConfig, MockProvider, OpenAiProvider,
-        Router, RouterConfig,
+        AnthropicProvider, AzureOpenAiProvider, Gateway, GatewayClient, GatewayConfig,
+        MockProvider, OpenAiProvider, Router, RouterConfig,
     };
 }
 

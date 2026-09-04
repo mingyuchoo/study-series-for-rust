@@ -132,10 +132,19 @@ export AMAP_ANTHROPIC_MODEL='claude-opus-5'  # 생략 시 코드의 기본값을
 export OPENAI_API_KEY='...'
 export AMAP_OPENAI_MODEL='배포된-모델-ID'    # 필수입니다.
 
+# Azure OpenAI
+export AZURE_OPENAI_API_KEY='...'
+export AZURE_OPENAI_ENDPOINT='https://<리소스>.cognitiveservices.azure.com'
+export AZURE_OPENAI_DEPLOYMENT='gpt-5.4'                 # 필수. High 이상 effort에 사용합니다.
+export AZURE_OPENAI_DEPLOYMENT_MEDIUM='gpt-5.4-mini'     # 선택. Medium effort에 사용합니다.
+export AZURE_OPENAI_DEPLOYMENT_LOW='gpt-5.4-nano'        # 선택. Low effort에 사용합니다.
+export AZURE_OPENAI_API_VERSION='2024-12-01-preview'     # 선택. 기본값과 같습니다.
+export AZURE_OPENAI_EMBEDDING_DEPLOYMENT='text-embedding-3-large'  # 선택. 의미 검색용 임베딩입니다.
+
 cargo run --locked --bin amap -- run --spec /path/to/amap.toml
 ```
 
-두 공급자가 모두 있으면 Builder와 Fix, RCA는 OpenAI를 우선하고 Discovery, Rule Miner, Architecture, Test Generator, Adversarial, Reviewer는 Anthropic을 우선합니다. 한 공급자만 있으면 해당 공급자로 폴백합니다.
+여러 공급자가 있으면 Builder와 Fix, RCA는 OpenAI → Azure → Anthropic 순으로, Discovery, Rule Miner, Architecture, Test Generator, Adversarial, Reviewer는 Anthropic → OpenAI → Azure 순으로 우선합니다. 한 공급자만 있으면 해당 공급자로 폴백합니다.
 
 ### 3. 서비스 모드
 
@@ -268,8 +277,9 @@ LLM 관련 추가 환경 변수는 다음과 같습니다.
 
 - Anthropic은 `ANTHROPIC_API_KEY`, 선택 항목인 `AMAP_ANTHROPIC_MODEL`, `ANTHROPIC_BASE_URL`을 사용합니다.
 - OpenAI 호환 공급자는 `OPENAI_API_KEY`, 필수 항목인 `AMAP_OPENAI_MODEL`, 선택 항목인 `OPENAI_BASE_URL`을 사용합니다.
+- Azure OpenAI는 `AZURE_OPENAI_API_KEY`, `AZURE_OPENAI_ENDPOINT`, `AZURE_OPENAI_DEPLOYMENT`(모두 필수)와 선택 항목인 `AZURE_OPENAI_API_VERSION`(기본 `2024-12-01-preview`), `AZURE_OPENAI_DEPLOYMENT_MEDIUM`, `AZURE_OPENAI_DEPLOYMENT_LOW`를 사용합니다. 인증은 `api-key` 헤더이며 배포 이름 기준 URL(`/openai/deployments/<배포>/chat/completions`)을 호출합니다.
 - 독립 LLM Gateway만 `AMAP_LOCAL_LLM_URL`과 `AMAP_LOCAL_LLM_MODEL`, 선택 항목인 `AMAP_LOCAL_LLM_KEY`로 로컬 OpenAI 호환 서버를 등록할 수 있습니다.
-- 의미 검색은 `AMAP_EMBEDDING_URL`, 선택 항목인 `AMAP_EMBEDDING_API_KEY`, `AMAP_EMBEDDING_MODEL`을 사용합니다.
+- 의미 검색은 `AMAP_EMBEDDING_URL`, 선택 항목인 `AMAP_EMBEDDING_API_KEY`, `AMAP_EMBEDDING_MODEL`을 사용합니다. `AMAP_EMBEDDING_URL`이 없고 `AZURE_OPENAI_EMBEDDING_DEPLOYMENT`가 있으면 Azure OpenAI 임베딩 배포를 사용합니다.
 - Control Plane 전체를 mock 공급자로 시작하려면 `AMAP_MOCK_LLM=true`를 사용할 수 있습니다. 요청 본문의 `"mock": true`와 마찬가지로 `AMAP_INSECURE_DEV=true`인 경우에만 허용됩니다.
 
 ## HITL 승인자 인증

@@ -87,7 +87,7 @@ pub fn evaluate_gate(
             passed,
         });
     };
-    let pct = |v: f64| format!("{:.4}%", v * 100.0);
+    let pct = |v: f64| format!("{:.2}%", v * 100.0);
 
     let requirements = ratio(cert.requirements_covered, cert.requirements_total);
     push(

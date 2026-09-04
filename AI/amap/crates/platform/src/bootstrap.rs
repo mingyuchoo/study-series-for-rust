@@ -7,8 +7,8 @@ use amap_domain::*;
 use amap_evidence::EvidenceLake;
 use amap_knowledge::{InMemoryKnowledgeStore, KnowledgeStore};
 use amap_llm::{
-    AnthropicProvider, Gateway, GatewayConfig, LlmClient, MockProvider, OpenAiProvider, Router,
-    RouterConfig, TaskKind,
+    AnthropicProvider, AzureOpenAiProvider, Gateway, GatewayConfig, LlmClient, MockProvider,
+    OpenAiProvider, Router, RouterConfig, TaskKind,
 };
 use amap_orchestrator::{
     AgentContext, Clock, EventBus, IdGenerator, InMemoryBus, RunConfig, SystemClock, UuidGenerator,
@@ -127,8 +127,11 @@ impl PlatformBuilder {
             if let Some(p) = OpenAiProvider::from_env() {
                 router = router.with_provider(ModelProvider::OpenAi, Arc::new(p));
             }
+            if let Some(p) = AzureOpenAiProvider::from_env() {
+                router = router.with_provider(ModelProvider::Azure, Arc::new(p));
+            }
             if router.configured().is_empty() {
-                anyhow::bail!("no LLM provider configured: set ANTHROPIC_API_KEY (and/or OPENAI_API_KEY + AMAP_OPENAI_MODEL), AMAP_LLM_GATEWAY_URL, or run with --mock");
+                anyhow::bail!("no LLM provider configured: set ANTHROPIC_API_KEY, OPENAI_API_KEY + AMAP_OPENAI_MODEL, AZURE_OPENAI_API_KEY + AZURE_OPENAI_ENDPOINT + AZURE_OPENAI_DEPLOYMENT, AMAP_LLM_GATEWAY_URL, or run with --mock");
             }
             tracing::info!(providers = ?router.configured(), "embedded LLM gateway");
             let gw = Arc::new(
