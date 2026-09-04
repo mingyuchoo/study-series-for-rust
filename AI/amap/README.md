@@ -33,7 +33,7 @@ AMAP은 다음 흐름을 실제 코드로 구현합니다.
 - 정적, 단위, 골든 리플레이, 차등, 상태, 인터페이스, 경계값, 속성, 변이, 적대적, 장애, 동시성 검증 엔진을 제공합니다.
 - 검증 실패 시 RCA, 수정, 독립 리뷰를 거쳐 설정된 횟수만큼 재검증합니다.
 - PostgreSQL 지식 저장소, Parquet 증거 레이크, NATS JetStream 이벤트 버스, gRPC 검증 워커를 선택적으로 사용합니다.
-- 모든 외부 LLM 요청에 역할별 라우팅, PII 마스킹, 캐시, 재시도, 토큰 예산, 비용 및 감사 로그를 적용합니다.
+- 모든 외부 LLM 요청에 역할별 라우팅, PII 마스킹, 캐시, 재시도, 토큰 예산, 비용 및 감사 로그를 적용합니다. 감사 항목은 증거와 같은 append-only 원장(PostgreSQL `llm_audit`)에 응답을 넘기기 전에 기록되며, 실행별 토큰 예산은 이 원장으로 계산되어 재시작 후에도 유지됩니다.
 
 ## 빠른 시작
 
@@ -225,6 +225,7 @@ fixtures = "mock"
 
 주요 설정은 다음과 같습니다.
 
+- `comparator_plugins = [{ name = "finance_money", path = "finance_money.wasm" }]`는 Wasmtime 비교기 플러그인을 등록합니다. `[[run.comparator_plugins]]` 테이블 형식도 쓸 수 있지만 `[run]`의 다른 키보다 뒤에 두어야 하며, 항목에 `name`과 `path` 외의 키가 있으면 로드 시 거부됩니다. comparator spec의 `{ comparator: plugin, plugin: <name> }`이 이 이름을 참조하며, 선언되지 않은 플러그인을 참조하는 spec은 리플레이 전에 실행이 실패합니다. 플러그인 파일은 `AMAP_WORKER_ROOT` 안에 있어야 하고 원격 워커에는 아티팩트로 함께 전송됩니다.
 - `traces`는 이전 형식의 단일 JSON Lines 파일을 받습니다.
 - `[[run.trace_sources]]`는 `type = "file"` 또는 `type = "kafka"`를 받습니다. Kafka에는 `brokers`, `topic`, `group_id`와 선택 항목인 `max_records`, `idle_timeout_ms`를 지정합니다.
 - Kafka 수집은 `amap-agents/kafka` 기능이 필요합니다. 예를 들어 `cargo run -p amap-cli --features amap-agents/kafka --bin amap -- run --spec amap.toml`로 활성화합니다. TLS와 SASL 접속 값은 `AMAP_KAFKA_*` 환경 변수로 전달합니다.
@@ -255,6 +256,11 @@ fixtures = "mock"
 | `json_logs`, `AMAP_JSON_LOGS` | `false` | JSON 구조 로그를 사용합니다. |
 | `otlp_endpoint`, `AMAP_OTLP_ENDPOINT` | 미설정 | OpenTelemetry OTLP gRPC 주소입니다. |
 | `insecure_dev`, `AMAP_INSECURE_DEV` | `false` | 로컬 개발에서만 인증 및 TLS 요구를 완화합니다. |
+| `oidc_issuer`, `AMAP_OIDC_ISSUER` | 미설정 | HITL 승인자를 검증할 OIDC 발급자 URL입니다. 미설정 시 보안 모드에서 HITL 결정이 거부됩니다. |
+| `oidc_audience`, `AMAP_OIDC_AUDIENCE` | 미설정 | 토큰의 `aud` 클레임 기대값입니다. 미설정 시 audience 검증을 건너뛰므로 운영에서는 설정하십시오. |
+| `oidc_jwks_url`, `AMAP_OIDC_JWKS_URL` | 미설정 | JWKS 주소입니다. 미설정 시 발급자의 OpenID discovery 문서에서 `jwks_uri`를 읽습니다. |
+| `oidc_roles_claim`, `AMAP_OIDC_ROLES_CLAIM` | `roles` | 역할을 담은 클레임의 점 표기 경로입니다. Keycloak은 `realm_access.roles`입니다. |
+| `oidc_reviewer_role`, `AMAP_OIDC_REVIEWER_ROLE` | 미설정 | HITL 결정에 필요한 역할입니다. 미설정 시 발급자가 검증한 모든 사용자가 결정할 수 있습니다. |
 
 운영 모드에서는 용도가 다른 `AMAP_API_TOKEN`, `AMAP_LLM_GATEWAY_TOKEN`, `AMAP_WORKER_TOKEN`을 각각 설정하십시오. S3 또는 MinIO 자격 증명과 엔드포인트는 `AWS_*` 및 `AWS_ENDPOINT_URL` 환경 변수로 전달합니다.
 
@@ -266,9 +272,21 @@ LLM 관련 추가 환경 변수는 다음과 같습니다.
 - 의미 검색은 `AMAP_EMBEDDING_URL`, 선택 항목인 `AMAP_EMBEDDING_API_KEY`, `AMAP_EMBEDDING_MODEL`을 사용합니다.
 - Control Plane 전체를 mock 공급자로 시작하려면 `AMAP_MOCK_LLM=true`를 사용할 수 있습니다. 요청 본문의 `"mock": true`와 마찬가지로 `AMAP_INSECURE_DEV=true`인 경우에만 허용됩니다.
 
+## HITL 승인자 인증
+
+Uncertainty가 높은 함수는 사람의 승인 없이는 인증되지 않으므로, 승인자의 신원은 요청 헤더가 아니라 신원 공급자(OIDC)로 검증합니다.
+
+- `AMAP_OIDC_ISSUER`를 설정하면 Control Plane이 시작 시 발급자의 JWKS를 읽고, Bearer 토큰의 서명, `iss`, `aud`, `exp`, `nbf`를 검증합니다. 알 수 없는 `kid`는 JWKS를 다시 읽어 확인하며 재조회는 1분에 한 번으로 제한됩니다.
+- `POST /v1/reviews/{id}/decide`는 보안 모드(`AMAP_INSECURE_DEV=false`)에서 OIDC로 검증된 사람만 호출할 수 있습니다. 서비스 토큰(`AMAP_API_TOKEN`)과 `X-AMAP-Actor` 헤더로는 승인도 거절도 할 수 없습니다.
+- `AMAP_OIDC_REVIEWER_ROLE`을 설정하면 토큰의 역할 클레임(`AMAP_OIDC_ROLES_CLAIM`)에 그 역할이 있어야 합니다. 이 검사는 Cedar 정책의 `decide_review` 액션으로 수행되며, LLM 에이전트와 엔진 principal은 항상 거부됩니다.
+- 기록되는 `decided_by`는 토큰의 `sub`이고, `decided_via`는 `oidc:<issuer>`입니다. 데모의 자동 승인은 `auto_approve_hitl`, 개발 모드의 헤더 기반 결정은 `insecure-dev-header`로 남습니다.
+- 서비스 토큰은 실행 시작, 조회, 증거 질의 같은 자동화용으로 계속 사용할 수 있습니다. 보안 모드에서는 `AMAP_API_TOKEN`과 `AMAP_OIDC_ISSUER` 중 하나 이상이 필요합니다.
+
+웹 콘솔의 토큰 입력란에는 서비스 토큰 대신 신원 공급자에서 받은 ID 토큰 또는 access 토큰을 넣으면 HITL 승인과 거절이 가능합니다.
+
 ## Control Plane API
 
-`GET /healthz`와 `GET /openapi.yaml`은 공개됩니다. 그 밖의 엔드포인트는 `AMAP_API_TOKEN`이 설정된 경우 Bearer 인증을 요구합니다. 변경 주체는 `X-AMAP-Actor` 헤더로 기록하며 생략 시 `api-client`를 사용합니다.
+`GET /healthz`와 `GET /openapi.yaml`은 공개됩니다. 그 밖의 엔드포인트는 `AMAP_API_TOKEN` 서비스 토큰 또는 `AMAP_OIDC_ISSUER`가 발급한 Bearer 토큰을 요구합니다. `X-AMAP-Actor` 헤더는 `AMAP_INSECURE_DEV=true`에서만 신뢰되며, 보안 모드에서 서비스 토큰 호출의 주체는 `api-client`로 기록됩니다.
 
 | 메서드와 경로 | 설명 |
 |---|---|
@@ -281,14 +299,23 @@ LLM 관련 추가 환경 변수는 다음과 같습니다.
 | `GET /v1/functions` | 비즈니스 기능 목록을 조회합니다. |
 | `GET /v1/functions/{id}/{resource}` | `requirements`, `rules`, `behaviors`, `scenarios`, `decisions`, `evidence`, `certificate`를 조회합니다. |
 | `GET /v1/reviews` | HITL 검토 요청을 조회합니다. |
-| `POST /v1/reviews/{id}/decide` | `{"status":"approved"}` 또는 `{"status":"rejected"}`를 제출합니다. |
+| `POST /v1/reviews/{id}/decide` | `{"status":"approved"}` 또는 `{"status":"rejected"}`를 제출합니다. OIDC로 검증된 사람만 호출할 수 있습니다. |
 | `GET /v1/events` | 현재 이벤트 버스의 이력을 조회합니다. |
 | `GET /v1/evidence/query?sql=SELECT...` | 읽기 전용 DataFusion SQL로 증거를 조회합니다. |
 | `GET /v1/graph.dot` | 현재 지식 그래프를 Graphviz DOT로 반환합니다. |
-| `GET /v1/llm/audit` | 내장 게이트웨이 감사 로그를 조회합니다. |
+| `GET /v1/llm/audit?run_id=&limit=` | LLM 감사 원장을 최신순으로 조회합니다. 독립 LLM Gateway와 같은 데이터베이스를 쓰면 그 기록도 함께 보입니다. |
 | `GET /metrics` | Prometheus 형식 지표를 반환합니다. |
 
-독립 LLM Gateway는 `POST /v1/complete`, `GET /v1/audit`, `GET /metrics`, 공개 `GET /healthz`를 제공합니다. 보호된 경로는 `AMAP_LLM_GATEWAY_TOKEN`을 사용합니다.
+독립 LLM Gateway는 `POST /v1/complete`, `GET /v1/audit?run_id=&limit=`, `GET /metrics`, 공개 `GET /healthz`를 제공합니다. 보호된 경로는 `AMAP_LLM_GATEWAY_TOKEN`을 사용합니다. 독립 게이트웨이도 `AMAP_DATABASE_URL`을 설정해야 감사 원장과 토큰 예산이 영속화되며, 미설정 시 프로세스 메모리에만 남고 시작 시 경고를 남깁니다.
+
+## LLM 감사 원장
+
+LLM 호출은 `llm_audit` 테이블에 append-only로 기록됩니다. UPDATE와 DELETE는 트리거가 거부하고, 각 항목은 `audit_id`와 기록 필드의 SHA-256 `content_hash`를 가집니다.
+
+- 게이트웨이는 응답을 에이전트에 넘기거나 캐시에 넣기 전에 먼저 원장에 기록합니다. 기록에 실패하면 호출 자체가 실패하며(fail-closed) 그 응답은 캐시되지 않습니다.
+- 실행별 토큰 예산(`token_budget`)은 원장의 비캐시 호출 토큰 합계로 판정합니다. 캐시 적중은 기록은 되지만 예산을 소모하지 않습니다.
+- 캐시 적중, 프롬프트 버전, 공급자, 모델, 비용, PII 마스킹 여부가 항목마다 남으므로 특정 산출물이 어떤 프롬프트와 모델에서 나왔는지 추적할 수 있습니다.
+- 실행 결과(`GET /v1/runs/{id}`의 `outcome.llm_audit`)에는 그 실행의 원장 항목이 그대로 첨부됩니다.
 
 ## 원격 검증 워커
 

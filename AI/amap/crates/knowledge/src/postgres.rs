@@ -269,7 +269,13 @@ impl KnowledgeStore for PgKnowledgeStore {
     async fn list_reviews(&self) -> KResult<Vec<ReviewRequest>> {
         self.list("review_requests", None).await
     }
-    async fn decide_review(&self, id: &str, status: ReviewStatus, by: &str) -> KResult<()> {
+    async fn decide_review(
+        &self,
+        id: &str,
+        status: ReviewStatus,
+        by: &str,
+        via: &str,
+    ) -> KResult<()> {
         let mut r: ReviewRequest = self
             .get("review_requests", id)
             .await?
@@ -281,6 +287,7 @@ impl KnowledgeStore for PgKnowledgeStore {
         }
         r.status = status;
         r.decided_by = Some(by.to_string());
+        r.decided_via = Some(via.to_string());
         r.decided_at = Some(chrono::Utc::now());
         let result = sqlx::query(
             "UPDATE review_requests SET doc = $2, updated_at = now() WHERE id = $1 AND doc->>'status' = 'pending'",
@@ -296,6 +303,70 @@ impl KnowledgeStore for PgKnowledgeStore {
             )));
         }
         Ok(())
+    }
+    async fn record_llm_audit(&self, e: LlmAuditEntry) -> KResult<()> {
+        let result = sqlx::query(
+            "INSERT INTO llm_audit (audit_id, content_hash, run_id, role, task, provider, model, input_tokens, output_tokens, cached, cost_usd, created_at, doc) \
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13) ON CONFLICT (audit_id) DO NOTHING",
+        )
+        .bind(&e.audit_id)
+        .bind(&e.content_hash)
+        .bind(&e.run_id)
+        .bind(&e.role)
+        .bind(&e.task)
+        .bind(&e.provider)
+        .bind(&e.model)
+        .bind(e.input_tokens as i64)
+        .bind(e.output_tokens as i64)
+        .bind(e.cached)
+        .bind(e.cost_usd)
+        .bind(e.at)
+        .bind(serde_json::to_value(&e)?)
+        .execute(&self.pool)
+        .await
+        .map_err(|e| KnowledgeError::Storage(e.to_string()))?;
+        if result.rows_affected() == 0 {
+            return Err(KnowledgeError::Storage(format!(
+                "llm audit entry {} already exists",
+                e.audit_id
+            )));
+        }
+        Ok(())
+    }
+    async fn llm_audit(&self, run_id: Option<&str>, limit: usize) -> KResult<Vec<LlmAuditEntry>> {
+        let limit = limit.min(i64::MAX as usize) as i64;
+        let rows =
+            match run_id {
+                Some(run) => sqlx::query(
+                    "SELECT doc FROM llm_audit WHERE run_id = $1 ORDER BY created_at DESC LIMIT $2",
+                )
+                .bind(run)
+                .bind(limit)
+                .fetch_all(&self.pool)
+                .await,
+                None => {
+                    sqlx::query("SELECT doc FROM llm_audit ORDER BY created_at DESC LIMIT $1")
+                        .bind(limit)
+                        .fetch_all(&self.pool)
+                        .await
+                }
+            }
+            .map_err(|e| KnowledgeError::Storage(e.to_string()))?;
+        rows.into_iter()
+            .map(|r| {
+                serde_json::from_value(r.get::<serde_json::Value, _>("doc")).map_err(Into::into)
+            })
+            .collect()
+    }
+    async fn llm_usage_for_run(&self, run_id: &str) -> KResult<u64> {
+        let row = sqlx::query(
+            "SELECT COALESCE(SUM(input_tokens + output_tokens), 0)::BIGINT AS used FROM llm_audit WHERE run_id = $1 AND NOT cached",
+        )
+        .bind(run_id)
+        .fetch_one(&self.pool)
+        .await
+        .map_err(|e| KnowledgeError::Storage(e.to_string()))?;
+        Ok(row.get::<i64, _>("used").max(0) as u64)
     }
     async fn upsert_workflow_run(&self, run: WorkflowRun) -> KResult<()> {
         self.upsert(

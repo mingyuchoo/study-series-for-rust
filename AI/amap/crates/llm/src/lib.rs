@@ -10,7 +10,7 @@ pub mod providers;
 pub mod router;
 
 pub use client::GatewayClient;
-pub use gateway::{AuditEntry, Gateway, GatewayConfig};
+pub use gateway::{content_hash, AuditEntry, AuditSink, Gateway, GatewayConfig};
 pub use providers::{anthropic::AnthropicProvider, mock::MockProvider, openai::OpenAiProvider};
 pub use router::{Router, RouterConfig};
 
@@ -142,6 +142,8 @@ pub enum LlmError {
     Refused(String),
     #[error("token budget exceeded for run {0}")]
     BudgetExceeded(String),
+    #[error("audit persistence failed: {0}")]
+    Audit(String),
     #[error("transient error: {0}")]
     Transient(String),
     #[error("provider error {status}: {body}")]

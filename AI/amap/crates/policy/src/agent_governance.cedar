@@ -19,6 +19,13 @@ when { context.uncertainty_bp > 2000 && !context.human_approved };
 // The final PASS / FAIL decision is never made by an LLM-backed agent.
 forbid(principal is Agent, action == Action::"decide_pass_fail", resource);
 
+// HITL decisions are made by authenticated humans only; when a reviewer role is configured
+// the decider must hold it (verified against the identity provider, never self-declared).
+forbid(principal is Agent, action == Action::"decide_review", resource);
+forbid(principal is Engine, action == Action::"decide_review", resource);
+forbid(principal, action == Action::"decide_review", resource)
+when { context.role_required && !context.has_required_role };
+
 // The RCA agent proposes hypotheses; it does not patch code.
 forbid(principal == Agent::"rca", action == Action::"patch", resource);
 

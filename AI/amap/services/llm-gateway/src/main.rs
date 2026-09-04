@@ -5,13 +5,14 @@ use amap_llm::{
     AnthropicProvider, Gateway, GatewayConfig, LlmClient, LlmError, LlmRequest, OpenAiProvider,
     Router, RouterConfig,
 };
-use amap_platform::Settings;
-use axum::extract::{DefaultBodyLimit, State};
+use amap_platform::{open_knowledge, KnowledgeAuditSink, Settings};
+use axum::extract::{DefaultBodyLimit, Query, State};
 use axum::http::{header, HeaderMap, Request, StatusCode};
 use axum::middleware::{self, Next};
 use axum::response::Response;
 use axum::routing::{get, post};
 use axum::{Json, Router as AxumRouter};
+use serde::Deserialize;
 use std::sync::Arc;
 
 #[derive(Clone)]
@@ -62,8 +63,22 @@ async fn complete(
     }
 }
 
-async fn audit(State(s): State<AppState>) -> Json<Vec<amap_llm::AuditEntry>> {
-    Json(s.gateway.audit_log())
+#[derive(Deserialize)]
+struct AuditQuery {
+    run_id: Option<String>,
+    limit: Option<usize>,
+}
+
+/// Durable audit ledger (newest first).
+async fn audit(
+    State(s): State<AppState>,
+    Query(q): Query<AuditQuery>,
+) -> Result<Json<Vec<amap_llm::AuditEntry>>, (StatusCode, String)> {
+    s.gateway
+        .audit_entries(q.run_id.as_deref(), q.limit.unwrap_or(500).clamp(1, 10_000))
+        .await
+        .map(Json)
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))
 }
 
 async fn metrics() -> String {
@@ -116,13 +131,19 @@ async fn main() -> anyhow::Result<()> {
         router = router.with_provider(ModelProvider::Mock, Arc::new(amap_llm::MockProvider::new()));
     }
     tracing::info!(providers = ?router.configured(), "gateway providers");
-    let gateway = Arc::new(Gateway::new(
-        router,
-        GatewayConfig {
-            run_token_budget: settings.token_budget,
-            ..Default::default()
-        },
-    ));
+    // The audit ledger lives in the knowledge store (PostgreSQL in production) so entries and
+    // per-run budgets survive restarts and are shared with the control plane.
+    let knowledge = open_knowledge(&settings).await?;
+    let gateway = Arc::new(
+        Gateway::new(
+            router,
+            GatewayConfig {
+                run_token_budget: settings.token_budget,
+                ..Default::default()
+            },
+        )
+        .with_audit_sink(Arc::new(KnowledgeAuditSink::new(knowledge))),
+    );
     let state = AppState {
         gateway,
         token: settings.llm_gateway_token.clone(),

@@ -441,7 +441,7 @@ function Console() {
 
       {showToken ? (
         <div className="token-bar">
-          <label htmlFor="api-token">세션 API 토큰</label>
+          <label htmlFor="api-token">세션 토큰 (서비스 토큰 또는 OIDC ID 토큰)</label>
           <input
             id="api-token"
             onChange={(event) => setToken(event.target.value)}

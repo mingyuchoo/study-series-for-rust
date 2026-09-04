@@ -229,18 +229,24 @@ async fn run(
         println!();
         print_gate(g);
     }
-    if let Some(gw) = &platform.gateway {
-        let audit = gw.audit_log();
-        let cost: f64 = audit.iter().map(|a| a.cost_usd).sum();
-        let tokens: u64 = audit.iter().map(|a| a.input_tokens + a.output_tokens).sum();
-        println!(
-            "\n== LLM audit == {} calls, {} tokens, ${:.4}, {} cached",
-            audit.len(),
-            tokens,
-            cost,
-            audit.iter().filter(|a| a.cached).count()
-        );
-    }
+    let audit = platform
+        .knowledge
+        .llm_audit(Some(ctx.run_id.as_str()), usize::MAX)
+        .await?;
+    let cost: f64 = audit.iter().map(|a| a.cost_usd).sum();
+    let tokens: u64 = audit.iter().map(|a| a.input_tokens + a.output_tokens).sum();
+    println!(
+        "\n== LLM audit == {} calls, {} tokens, ${:.4}, {} cached, ledger: {}",
+        audit.len(),
+        tokens,
+        cost,
+        audit.iter().filter(|a| a.cached).count(),
+        if platform.settings.database_url.is_some() {
+            "PostgreSQL"
+        } else {
+            "in-memory"
+        }
+    );
     let snapshot = platform.knowledge.snapshot().await?;
     let lake_dir = PathBuf::from(&platform.settings.lake);
     if !platform.settings.lake.starts_with("s3://") {

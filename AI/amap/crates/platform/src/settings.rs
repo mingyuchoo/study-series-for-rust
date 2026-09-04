@@ -40,6 +40,17 @@ pub struct Settings {
     pub worker_artifact_max_bytes: usize,
     /// Explicit opt-out for local development only.
     pub insecure_dev: bool,
+    /// OIDC issuer URL. When set, control-plane bearer tokens may be ID/access tokens from this
+    /// issuer, and HITL decisions are attributed to the verified `sub` claim.
+    pub oidc_issuer: Option<String>,
+    /// Expected `aud` claim. Strongly recommended; unset disables audience validation.
+    pub oidc_audience: Option<String>,
+    /// JWKS URL. Defaults to the `jwks_uri` of the issuer's OpenID discovery document.
+    pub oidc_jwks_url: Option<String>,
+    /// Dotted path of the claim carrying reviewer roles (e.g. `roles`, `realm_access.roles`).
+    pub oidc_roles_claim: String,
+    /// Role a human must hold to decide HITL reviews. Unset accepts any authenticated subject.
+    pub oidc_reviewer_role: Option<String>,
     pub worker_tls_cert: Option<PathBuf>,
     pub worker_tls_key: Option<PathBuf>,
     pub worker_tls_client_ca: Option<PathBuf>,
@@ -72,6 +83,11 @@ impl Default for Settings {
             worker_allowed_executables: "python3,python,cargo,java,javac".into(),
             worker_artifact_max_bytes: 64 * 1024 * 1024,
             insecure_dev: false,
+            oidc_issuer: None,
+            oidc_audience: None,
+            oidc_jwks_url: None,
+            oidc_roles_claim: "roles".into(),
+            oidc_reviewer_role: None,
             worker_tls_cert: None,
             worker_tls_key: None,
             worker_tls_client_ca: None,

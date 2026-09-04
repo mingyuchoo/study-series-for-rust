@@ -3,8 +3,11 @@ info:
   title: AMAP Control Plane API
   version: 0.1.0
   description: |
-    Evidence-driven modernization control-plane contract. Protected endpoints require
-    the operator bearer token unless the server runs in isolated insecure development mode.
+    Evidence-driven modernization control-plane contract. Protected endpoints accept either the
+    operator service token or an OIDC bearer token from the configured issuer, unless the server
+    runs in isolated insecure development mode. HITL decisions (`POST /v1/reviews/{id}/decide`)
+    additionally require an OIDC-verified human; the service token and the `X-AMAP-Actor`
+    header are never sufficient to approve or reject a review.
 servers:
   - url: /
 security:
@@ -180,6 +183,10 @@ paths:
           type: string
     post:
       operationId: decideReview
+      description: |
+        Record a HITL decision. The decider is the verified `sub` of the OIDC bearer token; when
+        `AMAP_OIDC_REVIEWER_ROLE` is configured the token must carry that role in the configured
+        roles claim. Cedar governance (`decide_review`) is evaluated before the decision is stored.
       parameters:
         - $ref: "#/components/parameters/Actor"
       requestBody:
@@ -197,6 +204,10 @@ paths:
                 type: object
                 required: [ok]
                 properties:
+                  decided_by:
+                    type: string
+                  decided_via:
+                    type: string
                   ok:
                     type: boolean
         "400":
@@ -249,12 +260,32 @@ paths:
   /v1/llm/audit:
     get:
       operationId: getLlmAudit
+      description: |
+        Durable, append-only ledger of LLM calls (newest first). Shared with a standalone
+        llm-gateway when both services use the same database.
+      parameters:
+        - name: run_id
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 10000
+            default: 500
       responses:
         "200":
-          description: Embedded LLM gateway audit records or a remote-gateway notice.
+          description: LLM audit entries.
           content:
             application/json:
-              schema: {}
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/LlmAuditEntry"
   /metrics:
     get:
       operationId: getMetrics
@@ -275,6 +306,7 @@ components:
       name: X-AMAP-Actor
       in: header
       required: false
+      description: Self-declared actor name. Trusted only in insecure development mode.
       schema:
         type: string
         maxLength: 128
@@ -395,9 +427,49 @@ components:
           format: date-time
         decided_by:
           type: [string, "null"]
+          description: Verified OIDC subject of the decider, or the automation that decided.
+        decided_via:
+          type: [string, "null"]
+          description: "`oidc:<issuer>`, `auto_approve_hitl`, or `insecure-dev-header`."
         decided_at:
           type: [string, "null"]
           format: date-time
+    LlmAuditEntry:
+      type: object
+      required: [audit_id, content_hash, at, role, task, prompt_version, provider, model, input_tokens, output_tokens, cached, cost_usd, request_hash, pii_masked]
+      properties:
+        audit_id:
+          type: string
+        content_hash:
+          type: string
+        at:
+          type: string
+          format: date-time
+        run_id:
+          type: [string, "null"]
+        role:
+          type: string
+        task:
+          type: string
+        prompt_version:
+          type: string
+        provider:
+          type: string
+        model:
+          type: string
+        input_tokens:
+          type: integer
+        output_tokens:
+          type: integer
+        cached:
+          type: boolean
+        cost_usd:
+          type: number
+          format: double
+        request_hash:
+          type: string
+        pii_masked:
+          type: boolean
     ReviewDecision:
       type: object
       required: [status]

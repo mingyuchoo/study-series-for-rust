@@ -133,6 +133,12 @@ fn collect_artifacts(ctx: &AgentContext) -> Result<Vec<Artifact>, OrchestrationE
         .documents
         .iter()
         .chain(ctx.config.comparator_specs.iter())
+        .chain(
+            ctx.config
+                .comparator_plugins
+                .iter()
+                .map(|plugin| &plugin.path),
+        )
         .chain(ctx.config.traces.iter())
         .chain(ctx.config.invariants.iter())
         .chain(

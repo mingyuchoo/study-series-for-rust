@@ -58,8 +58,12 @@ pub struct ReviewRequest {
     pub status: ReviewStatus,
     #[serde(default = "chrono::Utc::now")]
     pub requested_at: chrono::DateTime<chrono::Utc>,
+    /// Verified identity of the decider (OIDC `sub`), or the automation that decided.
     #[serde(default)]
     pub decided_by: Option<String>,
+    /// How the decider was authenticated: `oidc:<issuer>`, `auto_approve_hitl`, `insecure-dev-header`.
+    #[serde(default)]
+    pub decided_via: Option<String>,
     #[serde(default)]
     pub decided_at: Option<chrono::DateTime<chrono::Utc>>,
 }
@@ -127,7 +131,20 @@ pub trait KnowledgeStore: Send + Sync {
 
     async fn queue_review(&self, r: ReviewRequest) -> KResult<()>;
     async fn list_reviews(&self) -> KResult<Vec<ReviewRequest>>;
-    async fn decide_review(&self, id: &str, status: ReviewStatus, by: &str) -> KResult<()>;
+    async fn decide_review(
+        &self,
+        id: &str,
+        status: ReviewStatus,
+        by: &str,
+        via: &str,
+    ) -> KResult<()>;
+
+    /// Append one LLM call to the immutable audit ledger.
+    async fn record_llm_audit(&self, entry: LlmAuditEntry) -> KResult<()>;
+    /// Most recent LLM audit entries (newest first), optionally for one run.
+    async fn llm_audit(&self, run_id: Option<&str>, limit: usize) -> KResult<Vec<LlmAuditEntry>>;
+    /// Billable tokens consumed by a run so far.
+    async fn llm_usage_for_run(&self, run_id: &str) -> KResult<u64>;
 
     async fn upsert_workflow_run(&self, run: WorkflowRun) -> KResult<()>;
     async fn get_workflow_run(&self, id: &str) -> KResult<Option<WorkflowRun>>;

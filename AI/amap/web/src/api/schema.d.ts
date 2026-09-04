@@ -185,6 +185,11 @@ export interface paths {
         };
         get?: never;
         put?: never;
+        /**
+         * @description Record a HITL decision. The decider is the verified `sub` of the OIDC bearer token; when
+         *     `AMAP_OIDC_REVIEWER_ROLE` is configured the token must carry that role in the configured
+         *     roles claim. Cedar governance (`decide_review`) is evaluated before the decision is stored.
+         */
         post: operations["decideReview"];
         delete?: never;
         options?: never;
@@ -247,6 +252,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        /**
+         * @description Durable, append-only ledger of LLM calls (newest first). Shared with a standalone
+         *     llm-gateway when both services use the same database.
+         */
         get: operations["getLlmAudit"];
         put?: never;
         post?: never;
@@ -330,9 +339,31 @@ export interface components {
             status: components["schemas"]["ReviewStatus"];
             /** Format: date-time */
             requested_at: string;
+            /** @description Verified OIDC subject of the decider, or the automation that decided. */
             decided_by?: string | null;
+            /** @description `oidc:<issuer>`, `auto_approve_hitl`, or `insecure-dev-header`. */
+            decided_via?: string | null;
             /** Format: date-time */
             decided_at?: string | null;
+        };
+        LlmAuditEntry: {
+            audit_id: string;
+            content_hash: string;
+            /** Format: date-time */
+            at: string;
+            run_id?: string | null;
+            role: string;
+            task: string;
+            prompt_version: string;
+            provider: string;
+            model: string;
+            input_tokens: number;
+            output_tokens: number;
+            cached: boolean;
+            /** Format: double */
+            cost_usd: number;
+            request_hash: string;
+            pii_masked: boolean;
         };
         ReviewDecision: {
             /** @enum {string} */
@@ -404,6 +435,7 @@ export interface components {
         };
     };
     parameters: {
+        /** @description Self-declared actor name. Trusted only in insecure development mode. */
         Actor: string;
         RunId: string;
     };
@@ -497,6 +529,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
+                /** @description Self-declared actor name. Trusted only in insecure development mode. */
                 "X-AMAP-Actor"?: components["parameters"]["Actor"];
             };
             path?: never;
@@ -571,6 +604,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
+                /** @description Self-declared actor name. Trusted only in insecure development mode. */
                 "X-AMAP-Actor"?: components["parameters"]["Actor"];
             };
             path: {
@@ -661,6 +695,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
+                /** @description Self-declared actor name. Trusted only in insecure development mode. */
                 "X-AMAP-Actor"?: components["parameters"]["Actor"];
             };
             path: {
@@ -681,6 +716,8 @@ export interface operations {
                 };
                 content: {
                     "application/json": {
+                        decided_by?: string;
+                        decided_via?: string;
                         ok: boolean;
                     };
                 };
@@ -756,20 +793,23 @@ export interface operations {
     };
     getLlmAudit: {
         parameters: {
-            query?: never;
+            query?: {
+                run_id?: string;
+                limit?: number;
+            };
             header?: never;
             path?: never;
             cookie?: never;
         };
         requestBody?: never;
         responses: {
-            /** @description Embedded LLM gateway audit records or a remote-gateway notice. */
+            /** @description LLM audit entries. */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["LlmAuditEntry"][];
                 };
             };
         };

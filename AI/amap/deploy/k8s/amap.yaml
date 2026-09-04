@@ -8,6 +8,11 @@ data:
   AMAP_LAKE: "s3://amap-evidence/lake"
   AMAP_LLM_GATEWAY_URL: "http://llm-gateway:8090"
   AMAP_JSON_LOGS: "true"
+  # HITL decisions require a reviewer verified by this issuer (see README "HITL 승인자 인증").
+  AMAP_OIDC_ISSUER: "https://idp.example.com/realms/amap"
+  AMAP_OIDC_AUDIENCE: "amap-control-plane"
+  AMAP_OIDC_ROLES_CLAIM: "realm_access.roles"
+  AMAP_OIDC_REVIEWER_ROLE: "amap-sme"
 ---
 apiVersion: apps/v1
 kind: Deployment

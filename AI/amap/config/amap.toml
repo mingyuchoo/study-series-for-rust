@@ -19,6 +19,12 @@ worker_root = "."
 worker_allowed_executables = "python3,python,cargo,java,javac"
 worker_artifact_max_bytes = 67108864
 insecure_dev = false
+# --- OIDC reviewer authentication (required for HITL decisions outside insecure_dev) ---
+# oidc_issuer = "https://idp.example.com/realms/amap"   # issuer of ID/access tokens
+# oidc_audience = "amap-control-plane"                  # expected `aud` claim (strongly recommended)
+# oidc_jwks_url = "https://idp.example.com/realms/amap/protocol/openid-connect/certs"  # default: discovery
+oidc_roles_claim = "roles"                              # e.g. "realm_access.roles" for Keycloak
+# oidc_reviewer_role = "amap-sme"                       # role required to approve/reject HITL reviews
 # worker_tls_cert = "certs/worker.pem"
 # worker_tls_key = "certs/worker-key.pem"
 # worker_tls_client_ca = "certs/control-plane-ca.pem"

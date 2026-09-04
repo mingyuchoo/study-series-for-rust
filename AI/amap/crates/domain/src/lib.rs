@@ -9,6 +9,7 @@ pub mod behavior;
 pub mod evidence;
 pub mod gate;
 pub mod ids;
+pub mod llm_audit;
 pub mod rules;
 pub mod verification;
 
@@ -17,6 +18,7 @@ pub use behavior::*;
 pub use evidence::*;
 pub use gate::*;
 pub use ids::*;
+pub use llm_audit::*;
 pub use rules::*;
 pub use verification::*;
 

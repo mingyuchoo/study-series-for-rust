@@ -75,6 +75,10 @@ pub struct ActionContext {
     /// Uncertainty in basis points (0.2 = 2000).
     pub uncertainty_bp: i64,
     pub human_approved: bool,
+    /// A reviewer role is configured for HITL decisions.
+    pub role_required: bool,
+    /// The principal holds that reviewer role (verified from the identity provider).
+    pub has_required_role: bool,
 }
 
 impl ActionContext {
@@ -142,6 +146,14 @@ impl PolicyEngine {
             (
                 "human_approved".into(),
                 RestrictedExpression::new_bool(ctx.human_approved),
+            ),
+            (
+                "role_required".into(),
+                RestrictedExpression::new_bool(ctx.role_required),
+            ),
+            (
+                "has_required_role".into(),
+                RestrictedExpression::new_bool(ctx.has_required_role),
             ),
         ];
         if let Some(author) = &ctx.author {
@@ -212,6 +224,60 @@ mod tests {
                 "decide_pass_fail",
                 "FN-1",
                 &ctx
+            )
+            .unwrap()
+            .allowed
+        );
+    }
+
+    #[test]
+    fn hitl_decisions_are_human_only_and_role_gated() {
+        let e = PolicyEngine::default();
+        let open = ActionContext::default();
+        assert!(
+            !e.authorize(
+                &Principal::agent("reviewer"),
+                "decide_review",
+                "HITL-1",
+                &open
+            )
+            .unwrap()
+            .allowed
+        );
+        assert!(
+            !e.authorize(&Principal::engine("gate"), "decide_review", "HITL-1", &open)
+                .unwrap()
+                .allowed
+        );
+        assert!(
+            e.authorize(&Principal::human("alice"), "decide_review", "HITL-1", &open)
+                .unwrap()
+                .allowed
+        );
+        let gated = ActionContext {
+            role_required: true,
+            ..Default::default()
+        };
+        assert!(
+            !e.authorize(
+                &Principal::human("alice"),
+                "decide_review",
+                "HITL-1",
+                &gated
+            )
+            .unwrap()
+            .allowed
+        );
+        let holder = ActionContext {
+            has_required_role: true,
+            ..gated
+        };
+        assert!(
+            e.authorize(
+                &Principal::human("alice"),
+                "decide_review",
+                "HITL-1",
+                &holder
             )
             .unwrap()
             .allowed

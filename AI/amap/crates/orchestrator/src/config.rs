@@ -21,6 +21,15 @@ pub enum TraceSource {
     },
 }
 
+/// A sandboxed WebAssembly comparator addressable from comparator specs as
+/// `{ comparator: plugin, plugin: <name> }` (stack §8).
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ComparatorPlugin {
+    pub name: String,
+    pub path: PathBuf,
+}
+
 /// Per-run configuration (paths, commands, engines). Serialisable so it can travel to workers.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct RunConfig {
@@ -45,6 +54,9 @@ pub struct RunConfig {
     /// Comparator spec YAML files.
     #[serde(default)]
     pub comparator_specs: Vec<PathBuf>,
+    /// WASM comparator plugins registered in the equivalence engine before any spec is applied.
+    #[serde(default)]
+    pub comparator_plugins: Vec<ComparatorPlugin>,
     /// Default comparator spec name for golden scenarios.
     #[serde(default)]
     pub default_spec: Option<String>,
@@ -182,6 +194,12 @@ impl RunConfig {
             .chain(self.invariants.iter())
         {
             ensure_inside(path, "support file", true)?;
+        }
+        for plugin in &self.comparator_plugins {
+            if plugin.name.trim().is_empty() {
+                return Err("comparator plugin name must not be empty".into());
+            }
+            ensure_inside(&plugin.path, "comparator plugin", true)?;
         }
         for source in &self.trace_sources {
             if let TraceSource::File { path } = source {

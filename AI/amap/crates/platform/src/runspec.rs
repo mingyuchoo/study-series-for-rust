@@ -70,6 +70,9 @@ impl RunSpec {
             }
         }
         spec.run.comparator_specs = spec.run.comparator_specs.iter().map(abs).collect();
+        for plugin in &mut spec.run.comparator_plugins {
+            plugin.path = abs(&plugin.path);
+        }
         spec.run.invariants = spec.run.invariants.as_ref().map(abs);
         spec.mock.fixtures = spec.mock.fixtures.as_ref().map(abs);
         // Commands may reference relative paths (legacy emulator); resolve `legacy/...` style args.

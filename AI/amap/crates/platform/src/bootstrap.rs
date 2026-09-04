@@ -1,5 +1,6 @@
 //! Wire the platform together from settings: knowledge store, evidence lake, event bus,
 //! policy engine and LLM access (embedded gateway, remote gateway, or fixture-driven mock).
+use crate::audit::KnowledgeAuditSink;
 use crate::runspec::RunSpec;
 use crate::settings::Settings;
 use amap_domain::*;
@@ -64,18 +65,9 @@ impl PlatformBuilder {
 
     pub async fn build(self) -> anyhow::Result<Platform> {
         let s = self.settings.clone();
-        let knowledge: Arc<dyn KnowledgeStore> = match &s.database_url {
-            Some(url) => {
-                let pg = amap_knowledge::PgKnowledgeStore::connect(url).await?;
-                pg.migrate().await?;
-                tracing::info!("knowledge store: PostgreSQL");
-                Arc::new(pg)
-            }
-            None => {
-                tracing::info!("knowledge store: in-memory");
-                Arc::new(InMemoryKnowledgeStore::new())
-            }
-        };
+        let knowledge = open_knowledge(&s).await?;
+        let audit_sink: Arc<dyn amap_llm::AuditSink> =
+            Arc::new(KnowledgeAuditSink::new(knowledge.clone()));
         let lake = Arc::new(if s.lake.starts_with("s3://") {
             EvidenceLake::open_s3(&s.lake).await?
         } else {
@@ -105,13 +97,16 @@ impl PlatformBuilder {
             mock = true;
             let router = Router::new(RouterConfig::default())
                 .with_provider(ModelProvider::Mock, Arc::new(mock_provider(fixtures)));
-            let gw = Arc::new(Gateway::new(
-                router,
-                GatewayConfig {
-                    run_token_budget: s.token_budget,
-                    ..Default::default()
-                },
-            ));
+            let gw = Arc::new(
+                Gateway::new(
+                    router,
+                    GatewayConfig {
+                        run_token_budget: s.token_budget,
+                        ..Default::default()
+                    },
+                )
+                .with_audit_sink(audit_sink.clone()),
+            );
             (gw.clone(), Some(gw))
         } else if let Some(url) = &s.llm_gateway_url {
             if !s.insecure_dev && s.llm_gateway_token.is_none() {
@@ -136,13 +131,16 @@ impl PlatformBuilder {
                 anyhow::bail!("no LLM provider configured: set ANTHROPIC_API_KEY (and/or OPENAI_API_KEY + AMAP_OPENAI_MODEL), AMAP_LLM_GATEWAY_URL, or run with --mock");
             }
             tracing::info!(providers = ?router.configured(), "embedded LLM gateway");
-            let gw = Arc::new(Gateway::new(
-                router,
-                GatewayConfig {
-                    run_token_budget: s.token_budget,
-                    ..Default::default()
-                },
-            ));
+            let gw = Arc::new(
+                Gateway::new(
+                    router,
+                    GatewayConfig {
+                        run_token_budget: s.token_budget,
+                        ..Default::default()
+                    },
+                )
+                .with_audit_sink(audit_sink.clone()),
+            );
             (gw.clone(), Some(gw))
         };
         Ok(Platform {
@@ -167,13 +165,16 @@ impl Platform {
             ModelProvider::Mock,
             Arc::new(mock_provider(dir.unwrap_or(Path::new("")))),
         );
-        let gw = Arc::new(Gateway::new(
-            router,
-            GatewayConfig {
-                run_token_budget: self.settings.token_budget,
-                ..Default::default()
-            },
-        ));
+        let gw = Arc::new(
+            Gateway::new(
+                router,
+                GatewayConfig {
+                    run_token_budget: self.settings.token_budget,
+                    ..Default::default()
+                },
+            )
+            .with_audit_sink(Arc::new(KnowledgeAuditSink::new(self.knowledge.clone()))),
+        );
         Platform {
             settings: self.settings.clone(),
             knowledge: self.knowledge.clone(),
@@ -231,6 +232,26 @@ impl Platform {
             inputs: json!({}),
         })
     }
+}
+
+/// Open the knowledge store named by the settings: PostgreSQL (with migrations) or in-memory.
+pub async fn open_knowledge(settings: &Settings) -> anyhow::Result<Arc<dyn KnowledgeStore>> {
+    Ok(match &settings.database_url {
+        Some(url) => {
+            let pg = amap_knowledge::PgKnowledgeStore::connect(url).await?;
+            pg.migrate().await?;
+            tracing::info!("knowledge store: PostgreSQL");
+            Arc::new(pg)
+        }
+        None => {
+            if !settings.insecure_dev {
+                tracing::warn!("no database_url: knowledge, HITL reviews and the LLM audit ledger are in-memory and will not survive a restart");
+            } else {
+                tracing::info!("knowledge store: in-memory");
+            }
+            Arc::new(InMemoryKnowledgeStore::new())
+        }
+    })
 }
 
 fn read_fixture(dir: &Path, name: &str) -> Option<Value> {

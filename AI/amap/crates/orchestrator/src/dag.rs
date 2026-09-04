@@ -323,6 +323,7 @@ mod tests {
                 next_command: vec![],
                 legacy_command: None,
                 comparator_specs: vec![],
+                comparator_plugins: vec![],
                 default_spec: None,
                 invariants: None,
                 timing_tolerance_ms: None,

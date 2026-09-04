@@ -174,6 +174,16 @@ fn materialize(
             )
         })
         .collect();
+    for plugin in &mut config.comparator_plugins {
+        plugin.path = rebase_path(
+            &plugin.path,
+            &old_source,
+            &old_workspace,
+            &new_source,
+            &new_workspace,
+            &exact,
+        );
+    }
     config.traces = config.traces.as_ref().map(|path| {
         rebase_path(
             path,

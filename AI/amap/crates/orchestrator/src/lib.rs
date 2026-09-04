@@ -16,7 +16,7 @@ pub mod proto {
 #[cfg(feature = "nats")]
 pub use bus::NatsBus;
 pub use bus::{Event, EventBus, InMemoryBus};
-pub use config::{RunConfig, TraceSource};
+pub use config::{ComparatorPlugin, RunConfig, TraceSource};
 pub use dag::{Dag, DagNode, Executor, RunReport, StepReport, StepStatus};
 pub use ports::{Clock, IdGenerator, SystemClock, UuidGenerator};
 

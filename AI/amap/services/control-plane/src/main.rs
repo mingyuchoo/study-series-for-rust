@@ -1,10 +1,14 @@
 //! Modernization Control Plane (design §1): policy, quality gate, risk, evidence, audit and
 //! HITL over a REST API. Hosts the orchestrator in modular-monolith mode.
+mod auth;
+
 use amap_domain::*;
 use amap_knowledge::{ReviewStatus, WorkflowRun};
 use amap_orchestrator::AgentContext;
 #[allow(unused_imports)]
 use amap_platform::{Platform, PlatformBuilder, RunSpec, Settings};
+use amap_policy::{ActionContext, Principal};
+use auth::{OidcConfig, OidcVerifier};
 use axum::extract::{DefaultBodyLimit, Path, Query, State};
 use axum::http::{header, HeaderMap, Request, StatusCode};
 use axum::middleware::{self, Next};
@@ -25,15 +29,55 @@ use tower_http::services::{ServeDir, ServeFile};
 #[derive(Clone)]
 struct App {
     platform: Arc<Platform>,
+    /// Shared secret for service clients (CI, automation). Never sufficient for HITL decisions.
     api_token: Option<String>,
+    /// Verifies human bearer tokens issued by the configured identity provider.
+    oidc: Option<Arc<OidcVerifier>>,
+    /// Role a human must hold to decide HITL reviews; unset accepts any verified subject.
+    reviewer_role: Option<String>,
     spec_root: std::path::PathBuf,
     execution_root: std::path::PathBuf,
     allowed_executables: HashSet<String>,
     insecure_dev: bool,
 }
 
-#[derive(Clone)]
-struct AuthActor(String);
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum AuthMethod {
+    /// Identity verified against the OIDC issuer (signature, issuer, audience, expiry).
+    Oidc,
+    /// Shared service token; the actor name is not verified.
+    ServiceToken,
+    /// No authentication configured (isolated development only).
+    InsecureDev,
+}
+
+/// The authenticated caller attached to every protected request.
+#[derive(Clone, Debug)]
+struct AuthActor {
+    id: String,
+    method: AuthMethod,
+    roles: Vec<String>,
+    issuer: Option<String>,
+}
+
+impl AuthActor {
+    fn via(&self) -> String {
+        match self.method {
+            AuthMethod::Oidc => format!("oidc:{}", self.issuer.as_deref().unwrap_or_default()),
+            AuthMethod::ServiceToken => "service-token".into(),
+            AuthMethod::InsecureDev => "insecure-dev-header".into(),
+        }
+    }
+}
+
+fn header_actor(headers: &HeaderMap) -> String {
+    headers
+        .get("x-amap-actor")
+        .and_then(|value| value.to_str().ok())
+        .filter(|value| !value.is_empty() && value.len() <= 128)
+        .unwrap_or("api-client")
+        .to_string()
+}
 
 type ApiResult<T> = Result<Json<T>, (StatusCode, String)>;
 
@@ -46,29 +90,66 @@ fn constant_time_eq(expected: &str, supplied: &str) -> bool {
     expected.as_bytes().ct_eq(supplied.as_bytes()).into()
 }
 
+/// Resolve the caller. Order: shared service token, then an OIDC bearer token, then (only when
+/// nothing is configured, i.e. insecure development) the self-declared `X-AMAP-Actor` header.
+async fn resolve_actor(app: &App, headers: &HeaderMap) -> Result<AuthActor, StatusCode> {
+    let supplied = headers
+        .get(header::AUTHORIZATION)
+        .and_then(|value| value.to_str().ok())
+        .and_then(|value| value.strip_prefix("Bearer "))
+        .map(str::trim)
+        .unwrap_or_default();
+    if let Some(expected) = &app.api_token {
+        if !supplied.is_empty() && constant_time_eq(expected, supplied) {
+            return Ok(AuthActor {
+                // The header is only trusted where nothing can be trusted anyway.
+                id: if app.insecure_dev {
+                    header_actor(headers)
+                } else {
+                    "api-client".into()
+                },
+                method: AuthMethod::ServiceToken,
+                roles: vec![],
+                issuer: None,
+            });
+        }
+    }
+    if let Some(oidc) = &app.oidc {
+        if supplied.is_empty() {
+            return Err(StatusCode::UNAUTHORIZED);
+        }
+        return match oidc.verify(supplied).await {
+            Ok(identity) => Ok(AuthActor {
+                id: identity.subject,
+                method: AuthMethod::Oidc,
+                roles: identity.roles,
+                issuer: Some(identity.issuer),
+            }),
+            Err(error) => {
+                tracing::warn!(%error, "rejected bearer token");
+                Err(StatusCode::UNAUTHORIZED)
+            }
+        };
+    }
+    if app.api_token.is_none() {
+        return Ok(AuthActor {
+            id: header_actor(headers),
+            method: AuthMethod::InsecureDev,
+            roles: vec![],
+            issuer: None,
+        });
+    }
+    Err(StatusCode::UNAUTHORIZED)
+}
+
 async fn authenticate(
     State(app): State<App>,
     headers: HeaderMap,
     mut request: Request<axum::body::Body>,
     next: Next,
 ) -> Result<Response, StatusCode> {
-    if let Some(expected) = &app.api_token {
-        let supplied = headers
-            .get(header::AUTHORIZATION)
-            .and_then(|value| value.to_str().ok())
-            .and_then(|value| value.strip_prefix("Bearer "))
-            .unwrap_or_default();
-        if !constant_time_eq(expected, supplied) {
-            return Err(StatusCode::UNAUTHORIZED);
-        }
-    }
-    let actor = headers
-        .get("x-amap-actor")
-        .and_then(|value| value.to_str().ok())
-        .filter(|value| !value.is_empty() && value.len() <= 128)
-        .unwrap_or("api-client")
-        .to_string();
-    request.extensions_mut().insert(AuthActor(actor));
+    let actor = resolve_actor(&app, &headers).await?;
+    request.extensions_mut().insert(actor);
     Ok(next.run(request).await)
 }
 
@@ -221,8 +302,11 @@ fn launch_run(platform: Arc<Platform>, ctx: AgentContext) {
                         "failed".into()
                     };
                     let mut value = serde_json::to_value(&outcome).unwrap_or(Value::Null);
-                    if let Some(gateway) = &platform.gateway {
-                        value["llm_audit"] = json!(gateway.audit_log());
+                    match platform.knowledge.llm_audit(Some(&run_id), 10_000).await {
+                        Ok(entries) => value["llm_audit"] = json!(entries),
+                        Err(error) => {
+                            tracing::warn!(%error, %run_id, "could not attach the LLM audit ledger to the outcome")
+                        }
                     }
                     state.checkpoint =
                         serde_json::to_value(&outcome.final_outputs).unwrap_or(Value::Null);
@@ -440,6 +524,8 @@ struct Decide {
     status: ReviewStatus,
 }
 
+/// Record a HITL decision. The decider must be a human verified by the identity provider
+/// (outside insecure development), and Cedar decides whether that human may act.
 async fn decide(
     State(app): State<App>,
     axum::Extension(actor): axum::Extension<AuthActor>,
@@ -452,13 +538,69 @@ async fn decide(
             "a review decision must be approved or rejected".into(),
         ));
     }
+    if actor.method != AuthMethod::Oidc && !app.insecure_dev {
+        return Err((
+            StatusCode::FORBIDDEN,
+            "HITL decisions require a reviewer authenticated by the configured OIDC issuer; \
+             the service token cannot approve or reject reviews"
+                .into(),
+        ));
+    }
+    let review = app
+        .platform
+        .knowledge
+        .list_reviews()
+        .await
+        .map_err(internal)?
+        .into_iter()
+        .find(|review| review.id == id)
+        .ok_or((StatusCode::NOT_FOUND, format!("not found: {id}")))?;
+    let has_required_role = app
+        .reviewer_role
+        .as_ref()
+        .map(|role| actor.roles.iter().any(|held| held == role))
+        .unwrap_or(true);
+    let decision = app
+        .platform
+        .policy
+        .authorize(
+            &Principal::human(&actor.id),
+            "decide_review",
+            &id,
+            &ActionContext {
+                is_critical: review.tier == HitlTier::SmeMandatory,
+                role_required: app.reviewer_role.is_some(),
+                has_required_role,
+                ..ActionContext::default().with_uncertainty(review.uncertainty)
+            },
+        )
+        .map_err(internal)?;
+    if !decision.allowed {
+        return Err((
+            StatusCode::FORBIDDEN,
+            format!(
+                "policy denied decide_review for {}: {}",
+                actor.id,
+                decision.reasons.join(", ")
+            ),
+        ));
+    }
     app.platform
         .knowledge
-        .decide_review(&id, d.status, &actor.0)
+        .decide_review(&id, d.status, &actor.id, &actor.via())
         .await
-        .map_err(|e| (StatusCode::NOT_FOUND, e.to_string()))?;
-    amap_telemetry::Metrics::global().inc("amap_hitl_decisions_total", &[]);
-    Ok(Json(json!({ "ok": true })))
+        .map_err(|e| (StatusCode::CONFLICT, e.to_string()))?;
+    amap_telemetry::Metrics::global().inc(
+        "amap_hitl_decisions_total",
+        &[
+            ("via", &actor.via()),
+            ("status", &format!("{:?}", d.status)),
+        ],
+    );
+    tracing::info!(review = %id, actor = %actor.id, via = %actor.via(), status = ?d.status, "HITL decision recorded");
+    Ok(Json(
+        json!({ "ok": true, "decided_by": actor.id, "decided_via": actor.via() }),
+    ))
 }
 
 async fn events(State(app): State<App>) -> Json<Vec<amap_orchestrator::Event>> {
@@ -493,26 +635,46 @@ async fn graph_dot(State(app): State<App>) -> Result<String, (StatusCode, String
     Ok(amap_graph::KnowledgeGraph::from_snapshot(&snap).to_dot())
 }
 
-async fn audit(State(app): State<App>) -> Json<Value> {
-    Json(
-        app.platform
-            .gateway
-            .as_ref()
-            .map(|g| json!(g.audit_log()))
-            .unwrap_or(json!({ "note": "audit is served by the remote llm-gateway (/v1/audit)" })),
-    )
+#[derive(Deserialize)]
+struct AuditQuery {
+    run_id: Option<String>,
+    limit: Option<usize>,
+}
+
+/// Durable LLM audit ledger (newest first). Shared with a remote llm-gateway when both use the
+/// same database; without a database the ledger is process-local.
+async fn audit(
+    State(app): State<App>,
+    Query(q): Query<AuditQuery>,
+) -> ApiResult<Vec<LlmAuditEntry>> {
+    app.platform
+        .knowledge
+        .llm_audit(q.run_id.as_deref(), q.limit.unwrap_or(500).clamp(1, 10_000))
+        .await
+        .map(Json)
+        .map_err(internal)
 }
 
 async fn metrics() -> String {
     amap_telemetry::Metrics::global().render()
 }
 
+fn oidc_config(settings: &Settings) -> Option<OidcConfig> {
+    settings.oidc_issuer.as_ref().map(|issuer| OidcConfig {
+        issuer: issuer.trim_end_matches('/').to_string(),
+        audience: settings.oidc_audience.clone(),
+        jwks_url: settings.oidc_jwks_url.clone(),
+        roles_claim: settings.oidc_roles_claim.clone(),
+    })
+}
+
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     let settings = Settings::load(None)?;
-    if !settings.insecure_dev && settings.api_token.is_none() {
+    let oidc_settings = oidc_config(&settings);
+    if !settings.insecure_dev && settings.api_token.is_none() && oidc_settings.is_none() {
         anyhow::bail!(
-            "AMAP_API_TOKEN is required; set AMAP_INSECURE_DEV=true only for isolated local development"
+            "AMAP_API_TOKEN or AMAP_OIDC_ISSUER is required; set AMAP_INSECURE_DEV=true only for isolated local development"
         );
     }
     amap_telemetry::init(&amap_telemetry::TelemetryConfig {
@@ -520,6 +682,24 @@ async fn main() -> anyhow::Result<()> {
         json: settings.json_logs,
         otlp_endpoint: settings.otlp_endpoint.clone(),
     });
+    let oidc = match oidc_settings {
+        Some(config) => {
+            if config.audience.is_none() {
+                tracing::warn!("AMAP_OIDC_AUDIENCE is unset; tokens for other clients of the same issuer will be accepted");
+            }
+            let verifier = OidcVerifier::discover(config.clone())
+                .await
+                .map_err(|e| anyhow::anyhow!("OIDC setup failed: {e}"))?;
+            tracing::info!(issuer = %config.issuer, roles_claim = %config.roles_claim, reviewer_role = ?settings.oidc_reviewer_role, "OIDC reviewer authentication enabled");
+            Some(Arc::new(verifier))
+        }
+        None => {
+            if !settings.insecure_dev {
+                tracing::warn!("no OIDC issuer configured; HITL decisions will be rejected until AMAP_OIDC_ISSUER is set");
+            }
+            None
+        }
+    };
     let mock = std::env::var("AMAP_MOCK_LLM")
         .map(|v| v == "1" || v == "true")
         .unwrap_or(false);
@@ -534,6 +714,8 @@ async fn main() -> anyhow::Result<()> {
     let app = App {
         platform,
         api_token: settings.api_token.clone(),
+        oidc,
+        reviewer_role: settings.oidc_reviewer_role.clone(),
         spec_root: std::fs::canonicalize(&settings.spec_root)?,
         execution_root: std::fs::canonicalize(&settings.worker_root)?,
         allowed_executables: settings
@@ -545,6 +727,14 @@ async fn main() -> anyhow::Result<()> {
             .collect(),
         insecure_dev: settings.insecure_dev,
     };
+    let router = build_router(app, &settings.web_dist);
+    let listener = tokio::net::TcpListener::bind(&settings.control_plane_listen).await?;
+    tracing::info!(addr = %settings.control_plane_listen, "control-plane listening");
+    axum::serve(listener, router).await?;
+    Ok(())
+}
+
+fn build_router(app: App, web_dist: &FilePath) -> Router {
     let protected = Router::new()
         .route("/metrics", get(metrics))
         .route("/v1/specs", get(list_specs))
@@ -572,17 +762,12 @@ async fn main() -> anyhow::Result<()> {
         .merge(protected)
         .layer(tower_http::trace::TraceLayer::new_for_http())
         .with_state(app);
-    let web_index = settings.web_dist.join("index.html");
-    let router = if web_index.is_file() {
-        router
-            .fallback_service(ServeDir::new(&settings.web_dist).fallback(ServeFile::new(web_index)))
+    let web_index = web_dist.join("index.html");
+    if web_index.is_file() {
+        router.fallback_service(ServeDir::new(web_dist).fallback(ServeFile::new(web_index)))
     } else {
         router
-    };
-    let listener = tokio::net::TcpListener::bind(&settings.control_plane_listen).await?;
-    tracing::info!(addr = %settings.control_plane_listen, "control-plane listening");
-    axum::serve(listener, router).await?;
-    Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -599,6 +784,158 @@ mod tests {
         assert!(specs
             .iter()
             .any(|spec| spec.path == "examples/loan-demo/amap.toml"));
+    }
+
+    use amap_knowledge::ReviewRequest;
+    use auth::testing::{self, token};
+    use serde_json::json;
+
+    async fn test_app(reviewer_role: Option<&str>) -> (App, Arc<Platform>) {
+        let scratch = std::env::temp_dir().join(format!("amap-cp-{}", uuid::Uuid::new_v4()));
+        let settings = Settings {
+            lake: scratch.join("lake").display().to_string(),
+            ..Settings::default()
+        };
+        let platform = Arc::new(
+            PlatformBuilder::new(settings)
+                .with_mock_fixtures(None)
+                .build()
+                .await
+                .unwrap(),
+        );
+        platform
+            .knowledge
+            .queue_review(ReviewRequest {
+                id: "HITL-1".into(),
+                run_id: Some(RunId::new("RUN-1")),
+                function_id: FunctionId::new("FN-1"),
+                tier: HitlTier::SmeMandatory,
+                reason: "test".into(),
+                uncertainty: 0.3,
+                status: ReviewStatus::Pending,
+                requested_at: chrono::Utc::now(),
+                decided_by: None,
+                decided_via: None,
+                decided_at: None,
+            })
+            .await
+            .unwrap();
+        let app = App {
+            platform: platform.clone(),
+            api_token: Some("service-secret".into()),
+            oidc: Some(Arc::new(OidcVerifier::with_static_keys(
+                testing::config(),
+                testing::jwks(),
+            ))),
+            reviewer_role: reviewer_role.map(str::to_owned),
+            spec_root: std::env::temp_dir(),
+            execution_root: std::env::temp_dir(),
+            allowed_executables: HashSet::new(),
+            insecure_dev: false,
+        };
+        (app, platform)
+    }
+
+    async fn serve(app: App) -> String {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        let router = build_router(app, FilePath::new("/nonexistent"));
+        tokio::spawn(async move {
+            axum::serve(listener, router).await.unwrap();
+        });
+        format!("http://{addr}")
+    }
+
+    async fn decide_with(base: &str, bearer: &str, extra: &[(&str, &str)]) -> (u16, String) {
+        let client = reqwest::Client::new();
+        let mut request = client
+            .post(format!("{base}/v1/reviews/HITL-1/decide"))
+            .bearer_auth(bearer)
+            .json(&json!({ "status": "approved" }));
+        for (name, value) in extra {
+            request = request.header(*name, *value);
+        }
+        let response = request.send().await.unwrap();
+        (response.status().as_u16(), response.text().await.unwrap())
+    }
+
+    #[tokio::test]
+    async fn hitl_decision_requires_verified_human_with_role() {
+        let (app, platform) = test_app(Some("sme")).await;
+        let base = serve(app).await;
+
+        // The shared service token still serves ordinary API calls ...
+        let listed = reqwest::Client::new()
+            .get(format!("{base}/v1/reviews"))
+            .bearer_auth("service-secret")
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(listed.status().as_u16(), 200);
+
+        // ... but cannot decide a review, even with a self-declared actor header.
+        let (status, body) = decide_with(&base, "service-secret", &[("X-AMAP-Actor", "cto")]).await;
+        assert_eq!(status, 403, "{body}");
+
+        // Unauthenticated, expired, wrong-audience and forged tokens are rejected outright.
+        assert_eq!(decide_with(&base, "", &[]).await.0, 401);
+        assert_eq!(
+            decide_with(&base, &token(json!({ "exp": testing::now() - 60 })), &[])
+                .await
+                .0,
+            401
+        );
+        assert_eq!(
+            decide_with(&base, &token(json!({ "aud": "other" })), &[])
+                .await
+                .0,
+            401
+        );
+
+        // A verified human without the reviewer role is denied by policy.
+        let (status, body) = decide_with(
+            &base,
+            &token(json!({ "sub": "user-7", "realm_access": { "roles": ["viewer"] } })),
+            &[],
+        )
+        .await;
+        assert_eq!(status, 403, "{body}");
+        assert!(body.contains("policy denied"), "{body}");
+
+        // A verified human holding the role decides, and the ledger records who and how.
+        let (status, body) = decide_with(&base, &token(json!({})), &[]).await;
+        assert_eq!(status, 200, "{body}");
+        let review = platform
+            .knowledge
+            .list_reviews()
+            .await
+            .unwrap()
+            .into_iter()
+            .find(|r| r.id == "HITL-1")
+            .unwrap();
+        assert_eq!(review.status, ReviewStatus::Approved);
+        assert_eq!(review.decided_by.as_deref(), Some("user-42"));
+        assert_eq!(
+            review.decided_via.as_deref(),
+            Some(format!("oidc:{}", testing::ISSUER).as_str())
+        );
+
+        // A decided review is immutable.
+        let (status, _) = decide_with(&base, &token(json!({})), &[]).await;
+        assert_eq!(status, 409);
+    }
+
+    #[tokio::test]
+    async fn any_verified_human_may_decide_when_no_role_is_configured() {
+        let (app, _) = test_app(None).await;
+        let base = serve(app).await;
+        let (status, body) = decide_with(
+            &base,
+            &token(json!({ "sub": "user-9", "realm_access": { "roles": [] } })),
+            &[],
+        )
+        .await;
+        assert_eq!(status, 200, "{body}");
     }
 
     #[test]

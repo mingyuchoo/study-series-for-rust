@@ -8,6 +8,7 @@ pub struct InMemoryKnowledgeStore {
     inner: RwLock<KnowledgeSnapshot>,
     reviews: RwLock<BTreeMap<String, ReviewRequest>>,
     runs: RwLock<BTreeMap<String, WorkflowRun>>,
+    llm_audit: RwLock<Vec<LlmAuditEntry>>,
 }
 
 impl InMemoryKnowledgeStore {
@@ -19,6 +20,7 @@ impl InMemoryKnowledgeStore {
             inner: RwLock::new(s),
             reviews: RwLock::new(BTreeMap::new()),
             runs: RwLock::new(BTreeMap::new()),
+            llm_audit: RwLock::new(Vec::new()),
         }
     }
 }
@@ -214,7 +216,13 @@ impl KnowledgeStore for InMemoryKnowledgeStore {
     async fn list_reviews(&self) -> KResult<Vec<ReviewRequest>> {
         Ok(self.reviews.read().unwrap().values().cloned().collect())
     }
-    async fn decide_review(&self, id: &str, status: ReviewStatus, by: &str) -> KResult<()> {
+    async fn decide_review(
+        &self,
+        id: &str,
+        status: ReviewStatus,
+        by: &str,
+        via: &str,
+    ) -> KResult<()> {
         let mut r = self.reviews.write().unwrap();
         let req = r
             .get_mut(id)
@@ -226,8 +234,42 @@ impl KnowledgeStore for InMemoryKnowledgeStore {
         }
         req.status = status;
         req.decided_by = Some(by.to_string());
+        req.decided_via = Some(via.to_string());
         req.decided_at = Some(chrono::Utc::now());
         Ok(())
+    }
+    async fn record_llm_audit(&self, entry: LlmAuditEntry) -> KResult<()> {
+        let mut log = self.llm_audit.write().unwrap();
+        if log.iter().any(|e| e.audit_id == entry.audit_id) {
+            return Err(KnowledgeError::Storage(format!(
+                "llm audit entry {} already exists",
+                entry.audit_id
+            )));
+        }
+        log.push(entry);
+        Ok(())
+    }
+    async fn llm_audit(&self, run_id: Option<&str>, limit: usize) -> KResult<Vec<LlmAuditEntry>> {
+        Ok(self
+            .llm_audit
+            .read()
+            .unwrap()
+            .iter()
+            .filter(|e| run_id.is_none_or(|r| e.run_id.as_deref() == Some(r)))
+            .rev()
+            .take(limit)
+            .cloned()
+            .collect())
+    }
+    async fn llm_usage_for_run(&self, run_id: &str) -> KResult<u64> {
+        Ok(self
+            .llm_audit
+            .read()
+            .unwrap()
+            .iter()
+            .filter(|e| e.run_id.as_deref() == Some(run_id))
+            .map(LlmAuditEntry::billable_tokens)
+            .sum())
     }
     async fn upsert_workflow_run(&self, run: WorkflowRun) -> KResult<()> {
         self.runs.write().unwrap().insert(run.id.clone(), run);
@@ -259,6 +301,7 @@ mod tests {
             status: ReviewStatus::Pending,
             requested_at: chrono::Utc::now(),
             decided_by: None,
+            decided_via: None,
             decided_at: None,
         }
     }
@@ -268,17 +311,18 @@ mod tests {
         let store = InMemoryKnowledgeStore::new();
         store.queue_review(review()).await.unwrap();
         store
-            .decide_review("REVIEW-1", ReviewStatus::Approved, "reviewer")
+            .decide_review("REVIEW-1", ReviewStatus::Approved, "reviewer", "oidc:test")
             .await
             .unwrap();
 
         assert!(store
-            .decide_review("REVIEW-1", ReviewStatus::Rejected, "other")
+            .decide_review("REVIEW-1", ReviewStatus::Rejected, "other", "oidc:test")
             .await
             .is_err());
         assert!(store.queue_review(review()).await.is_err());
         let reviews = store.list_reviews().await.unwrap();
         assert_eq!(reviews[0].status, ReviewStatus::Approved);
         assert_eq!(reviews[0].decided_by.as_deref(), Some("reviewer"));
+        assert_eq!(reviews[0].decided_via.as_deref(), Some("oidc:test"));
     }
 }

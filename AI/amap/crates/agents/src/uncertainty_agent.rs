@@ -105,6 +105,11 @@ impl AgentTask for UncertaintyAgent {
                     } else {
                         None
                     },
+                    decided_via: if ctx.config.auto_approve_hitl {
+                        Some("auto_approve_hitl".into())
+                    } else {
+                        None
+                    },
                     decided_at: if ctx.config.auto_approve_hitl {
                         Some(ctx.clock.now())
                     } else {
