@@ -71,6 +71,8 @@ enum Cmd {
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
+    // Load provider credentials (AZURE_OPENAI_*, ANTHROPIC_API_KEY, ...) from ./.env when present.
+    let _ = dotenvy::dotenv();
     let cli = Cli::parse();
     let settings = Settings::load(cli.settings.as_deref())?;
     amap_telemetry::init(&amap_telemetry::TelemetryConfig {

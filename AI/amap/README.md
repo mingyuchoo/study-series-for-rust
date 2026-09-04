@@ -67,7 +67,7 @@ cargo run --locked --quiet --bin amap -- demo --out .amap/demo-outcome.json
 ./scripts/run.sh
 ```
 
-이 스크립트는 React 의존성을 설치하고 프로덕션 번들을 만든 뒤, mock LLM을 사용하는 로컬 Control Plane을 `http://127.0.0.1:8080`에서 실행합니다. 서버는 `Ctrl+C`로 종료합니다. `AMAP_INSECURE_DEV`와 `AMAP_MOCK_LLM`을 미리 지정하면 해당 값을 유지합니다.
+이 스크립트는 React 의존성을 설치하고 프로덕션 번들을 만든 뒤, 로컬 Control Plane을 `http://127.0.0.1:8080`에서 실행합니다. 서버는 `Ctrl+C`로 종료합니다. 저장소 루트에 `.env`가 있으면 먼저 읽으며, `AZURE_OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `OPENAI_API_KEY` 중 하나라도 있으면 해당 공급자를, 없으면 mock LLM을 사용합니다. `AMAP_INSECURE_DEV`와 `AMAP_MOCK_LLM`을 미리 지정하면 해당 값을 유지합니다.
 
 필요한 검증과 개별 작업은 다음 명령으로 실행할 수 있습니다.
 
@@ -121,7 +121,7 @@ cargo run --locked --bin amap -- \
 
 ### 2. 내장 LLM 게이트웨이 모드
 
-`AMAP_LLM_GATEWAY_URL`을 설정하지 않으면 CLI와 Control Plane이 프로세스 내부에 LLM 게이트웨이를 구성합니다. 다음 공급자 중 하나 이상을 설정합니다.
+`AMAP_LLM_GATEWAY_URL`을 설정하지 않으면 CLI와 Control Plane이 프로세스 내부에 LLM 게이트웨이를 구성합니다. 다음 공급자 중 하나 이상을 설정합니다. `amap`, `control-plane`, `llm-gateway` 바이너리는 시작 시 현재 디렉터리의 `.env`를 읽으므로(이미 설정된 환경 변수가 우선), `.env.example`을 `.env`로 복사해 값을 채우면 `export` 없이도 동작합니다.
 
 ```bash
 # Anthropic

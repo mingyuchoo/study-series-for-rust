@@ -17,4 +17,5 @@ tracing.workspace = true
 reqwest.workspace = true
 
 [dev-dependencies]
+dotenvy.workspace = true
 tokio.workspace = true

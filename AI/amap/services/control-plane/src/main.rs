@@ -670,6 +670,8 @@ fn oidc_config(settings: &Settings) -> Option<OidcConfig> {
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
+    // Load provider credentials (AZURE_OPENAI_*, ANTHROPIC_API_KEY, ...) from ./.env when present.
+    let _ = dotenvy::dotenv();
     let settings = Settings::load(None)?;
     let oidc_settings = oidc_config(&settings);
     if !settings.insecure_dev && settings.api_token.is_none() && oidc_settings.is_none() {

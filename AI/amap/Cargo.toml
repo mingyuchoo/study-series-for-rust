@@ -85,6 +85,7 @@ hex = "0.4"
 bytes = "1"
 subtle = "2"
 tempfile = "3"
+dotenvy = "0.15"
 reqwest = { version = "0.13", features = ["json"] }
 
 # --- Data / storage ---

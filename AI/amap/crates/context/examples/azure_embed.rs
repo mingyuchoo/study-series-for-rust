@@ -3,6 +3,7 @@ use amap_context::OpenAiEmbeddingProvider;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let _ = dotenvy::dotenv();
     let p = OpenAiEmbeddingProvider::from_env().ok_or("embedding env vars not set")?;
     println!("endpoint={}", p.endpoint());
     let rows = p

@@ -87,6 +87,8 @@ async fn metrics() -> String {
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
+    // Load provider credentials (AZURE_OPENAI_*, ANTHROPIC_API_KEY, ...) from ./.env when present.
+    let _ = dotenvy::dotenv();
     let settings = Settings::load(None)?;
     if !settings.insecure_dev && settings.llm_gateway_token.is_none() {
         anyhow::bail!(

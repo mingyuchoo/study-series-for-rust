@@ -19,3 +19,6 @@ hex.workspace = true
 tracing.workspace = true
 chrono.workspace = true
 uuid.workspace = true
+
+[dev-dependencies]
+dotenvy.workspace = true

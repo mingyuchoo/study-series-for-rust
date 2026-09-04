@@ -6,6 +6,7 @@ license.workspace = true
 rust-version.workspace = true
 
 [dependencies]
+dotenvy.workspace = true
 amap-domain.workspace = true
 amap-llm.workspace = true
 amap-telemetry.workspace = true

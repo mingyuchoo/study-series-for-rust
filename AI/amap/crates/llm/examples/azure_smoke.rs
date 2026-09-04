@@ -6,6 +6,7 @@ use serde_json::json;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let _ = dotenvy::dotenv();
     let p = AzureOpenAiProvider::from_env().ok_or("AZURE_OPENAI_* env vars not set")?;
     for effort in [Effort::Low, Effort::Medium, Effort::High] {
         let req = LlmRequest::new(
