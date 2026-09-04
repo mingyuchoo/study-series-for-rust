@@ -8,7 +8,12 @@ impl Comparator for ExactComparator {
     fn name(&self) -> &str {
         "exact"
     }
-    fn compare(&self, expected: &Value, actual: &Value, _: &ComparisonContext<'_>) -> Option<String> {
+    fn compare(
+        &self,
+        expected: &Value,
+        actual: &Value,
+        _: &ComparisonContext<'_>,
+    ) -> Option<String> {
         if json_eq(expected, actual) {
             None
         } else {
@@ -24,9 +29,13 @@ pub fn json_eq(a: &Value, b: &Value) -> bool {
             (Some(p), Some(q)) => p == q,
             _ => x == y,
         },
-        (Value::Array(x), Value::Array(y)) => x.len() == y.len() && x.iter().zip(y).all(|(p, q)| json_eq(p, q)),
+        (Value::Array(x), Value::Array(y)) => {
+            x.len() == y.len() && x.iter().zip(y).all(|(p, q)| json_eq(p, q))
+        }
         (Value::Object(x), Value::Object(y)) => {
-            x.len() == y.len() && x.iter().all(|(k, v)| y.get(k).map(|w| json_eq(v, w)).unwrap_or(false))
+            x.len() == y.len()
+                && x.iter()
+                    .all(|(k, v)| y.get(k).map(|w| json_eq(v, w)).unwrap_or(false))
         }
         _ => a == b,
     }
@@ -37,12 +46,21 @@ impl Comparator for NumericComparator {
     fn name(&self) -> &str {
         "numeric"
     }
-    fn compare(&self, expected: &Value, actual: &Value, ctx: &ComparisonContext<'_>) -> Option<String> {
+    fn compare(
+        &self,
+        expected: &Value,
+        actual: &Value,
+        ctx: &ComparisonContext<'_>,
+    ) -> Option<String> {
         let (Some(e), Some(a)) = (as_f64(expected), as_f64(actual)) else {
             return Some("not numeric".into());
         };
         let tol = ctx.rule.tolerance_f64().unwrap_or(0.0);
-        let limit = if ctx.rule.relative { tol * e.abs() } else { tol };
+        let limit = if ctx.rule.relative {
+            tol * e.abs()
+        } else {
+            tol
+        };
         if (e - a).abs() <= limit {
             None
         } else {
@@ -65,15 +83,28 @@ impl Comparator for TimestampComparator {
     fn name(&self) -> &str {
         "tolerance"
     }
-    fn compare(&self, expected: &Value, actual: &Value, ctx: &ComparisonContext<'_>) -> Option<String> {
-        let tol_ms = ctx.rule.tolerance_str().and_then(|s| parse_duration_ms(&s)).unwrap_or(0);
+    fn compare(
+        &self,
+        expected: &Value,
+        actual: &Value,
+        ctx: &ComparisonContext<'_>,
+    ) -> Option<String> {
+        let tol_ms = ctx
+            .rule
+            .tolerance_str()
+            .and_then(|s| parse_duration_ms(&s))
+            .unwrap_or(0);
         let (Some(e), Some(a)) = (to_epoch_ms(expected), to_epoch_ms(actual)) else {
             return Some("not a timestamp".into());
         };
         if (e - a).abs() <= tol_ms {
             None
         } else {
-            Some(format!("timestamps differ by {}ms (> {}ms)", (e - a).abs(), tol_ms))
+            Some(format!(
+                "timestamps differ by {}ms (> {}ms)",
+                (e - a).abs(),
+                tol_ms
+            ))
         }
     }
 }
@@ -95,7 +126,13 @@ pub fn parse_duration_ms(s: &str) -> Option<i64> {
 
 fn to_epoch_ms(v: &Value) -> Option<i64> {
     match v {
-        Value::Number(n) => n.as_f64().map(|f| if f > 1e12 { f as i64 } else { (f * 1000.0) as i64 }),
+        Value::Number(n) => n.as_f64().map(|f| {
+            if f > 1e12 {
+                f as i64
+            } else {
+                (f * 1000.0) as i64
+            }
+        }),
         Value::String(s) => DateTime::parse_from_rfc3339(s)
             .map(|d| d.with_timezone(&Utc).timestamp_millis())
             .ok()
@@ -110,8 +147,15 @@ impl Comparator for FormatComparator {
     fn name(&self) -> &str {
         "format"
     }
-    fn compare(&self, _expected: &Value, actual: &Value, ctx: &ComparisonContext<'_>) -> Option<String> {
-        let Some(pattern) = &ctx.rule.pattern else { return Some("format comparator without pattern".into()) };
+    fn compare(
+        &self,
+        _expected: &Value,
+        actual: &Value,
+        ctx: &ComparisonContext<'_>,
+    ) -> Option<String> {
+        let Some(pattern) = &ctx.rule.pattern else {
+            return Some("format comparator without pattern".into());
+        };
         let re = match regex::Regex::new(pattern) {
             Ok(r) => r,
             Err(e) => return Some(format!("bad pattern: {e}")),
@@ -140,9 +184,18 @@ impl Comparator for UnorderedComparator {
     fn name(&self) -> &str {
         "unordered"
     }
-    fn compare(&self, expected: &Value, actual: &Value, _: &ComparisonContext<'_>) -> Option<String> {
+    fn compare(
+        &self,
+        expected: &Value,
+        actual: &Value,
+        _: &ComparisonContext<'_>,
+    ) -> Option<String> {
         let (Value::Array(e), Value::Array(a)) = (expected, actual) else {
-            return if json_eq(expected, actual) { None } else { Some("not arrays".into()) };
+            return if json_eq(expected, actual) {
+                None
+            } else {
+                Some("not arrays".into())
+            };
         };
         let mut ec: Vec<String> = e.iter().map(canonical).collect();
         let mut ac: Vec<String> = a.iter().map(canonical).collect();
@@ -151,7 +204,11 @@ impl Comparator for UnorderedComparator {
         if ec == ac {
             None
         } else {
-            Some(format!("array contents differ ({} vs {} items)", e.len(), a.len()))
+            Some(format!(
+                "array contents differ ({} vs {} items)",
+                e.len(),
+                a.len()
+            ))
         }
     }
 }
@@ -161,11 +218,26 @@ pub fn canonical(v: &Value) -> String {
         Value::Object(m) => {
             let mut keys: Vec<_> = m.keys().collect();
             keys.sort();
-            let inner: Vec<String> = keys.iter().map(|k| format!("{}:{}", serde_json::to_string(k).unwrap(), canonical(&m[*k]))).collect();
+            let inner: Vec<String> = keys
+                .iter()
+                .map(|k| {
+                    format!(
+                        "{}:{}",
+                        serde_json::to_string(k).unwrap(),
+                        canonical(&m[*k])
+                    )
+                })
+                .collect();
             format!("{{{}}}", inner.join(","))
         }
-        Value::Array(a) => format!("[{}]", a.iter().map(canonical).collect::<Vec<_>>().join(",")),
-        Value::Number(n) => n.as_f64().map(|f| format!("{f}")).unwrap_or_else(|| n.to_string()),
+        Value::Array(a) => format!(
+            "[{}]",
+            a.iter().map(canonical).collect::<Vec<_>>().join(",")
+        ),
+        Value::Number(n) => n
+            .as_f64()
+            .map(|f| format!("{f}"))
+            .unwrap_or_else(|| n.to_string()),
         other => other.to_string(),
     }
 }

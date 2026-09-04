@@ -10,6 +10,8 @@ pub mod postgres;
 use amap_domain::*;
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
+use std::path::PathBuf;
 
 pub use memory::InMemoryKnowledgeStore;
 #[cfg(feature = "postgres")]
@@ -47,13 +49,35 @@ pub struct KnowledgeSnapshot {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct ReviewRequest {
     pub id: String,
+    #[serde(default)]
+    pub run_id: Option<RunId>,
     pub function_id: FunctionId,
     pub tier: HitlTier,
     pub reason: String,
     pub uncertainty: f64,
     pub status: ReviewStatus,
+    #[serde(default = "chrono::Utc::now")]
+    pub requested_at: chrono::DateTime<chrono::Utc>,
     #[serde(default)]
     pub decided_by: Option<String>,
+    #[serde(default)]
+    pub decided_at: Option<chrono::DateTime<chrono::Utc>>,
+}
+
+/// Durable control-plane state and the latest resumable workflow checkpoint.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct WorkflowRun {
+    pub id: String,
+    pub function_id: FunctionId,
+    pub status: String,
+    pub spec_path: PathBuf,
+    pub mock: bool,
+    pub started_at: chrono::DateTime<chrono::Utc>,
+    pub updated_at: chrono::DateTime<chrono::Utc>,
+    #[serde(default)]
+    pub outcome: Option<Value>,
+    #[serde(default)]
+    pub checkpoint: Value,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -104,6 +128,10 @@ pub trait KnowledgeStore: Send + Sync {
     async fn queue_review(&self, r: ReviewRequest) -> KResult<()>;
     async fn list_reviews(&self) -> KResult<Vec<ReviewRequest>>;
     async fn decide_review(&self, id: &str, status: ReviewStatus, by: &str) -> KResult<()>;
+
+    async fn upsert_workflow_run(&self, run: WorkflowRun) -> KResult<()>;
+    async fn get_workflow_run(&self, id: &str) -> KResult<Option<WorkflowRun>>;
+    async fn list_workflow_runs(&self) -> KResult<Vec<WorkflowRun>>;
 
     async fn snapshot(&self) -> KResult<KnowledgeSnapshot>;
 }

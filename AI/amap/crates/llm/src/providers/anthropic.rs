@@ -16,7 +16,10 @@ pub struct AnthropicProvider {
 impl AnthropicProvider {
     pub fn new(api_key: impl Into<String>) -> Self {
         Self {
-            http: reqwest::Client::builder().timeout(std::time::Duration::from_secs(600)).build().expect("http client"),
+            http: reqwest::Client::builder()
+                .timeout(std::time::Duration::from_secs(600))
+                .build()
+                .expect("http client"),
             api_key: api_key.into(),
             model: DEFAULT_MODEL.into(),
             base_url: "https://api.anthropic.com".into(),
@@ -86,7 +89,10 @@ impl LlmClient for AnthropicProvider {
             return Err(LlmError::Transient(format!("{status}: {text}")));
         }
         if !status.is_success() {
-            return Err(LlmError::Provider { status: status.as_u16(), body: text });
+            return Err(LlmError::Provider {
+                status: status.as_u16(),
+                body: text,
+            });
         }
         let v: Value = serde_json::from_str(&text).map_err(|e| LlmError::Invalid(e.to_string()))?;
         let stop_reason = v["stop_reason"].as_str().unwrap_or("").to_string();
@@ -95,9 +101,20 @@ impl LlmClient for AnthropicProvider {
         }
         let out: String = v["content"]
             .as_array()
-            .map(|blocks| blocks.iter().filter(|b| b["type"] == "text").filter_map(|b| b["text"].as_str()).collect::<Vec<_>>().join(""))
+            .map(|blocks| {
+                blocks
+                    .iter()
+                    .filter(|b| b["type"] == "text")
+                    .filter_map(|b| b["text"].as_str())
+                    .collect::<Vec<_>>()
+                    .join("")
+            })
             .unwrap_or_default();
-        let json = if req.schema.is_some() { crate::extract_json(&out) } else { None };
+        let json = if req.schema.is_some() {
+            crate::extract_json(&out)
+        } else {
+            None
+        };
         Ok(LlmResponse {
             text: out,
             json,

@@ -71,8 +71,23 @@ fn default_max_tokens() -> u32 {
 }
 
 impl LlmRequest {
-    pub fn new(task: TaskKind, role: AgentRole, system: impl Into<String>, prompt: impl Into<String>) -> Self {
-        Self { task, role, system: system.into(), prompt: prompt.into(), schema: None, max_tokens: 16_000, effort: Effort::High, provider: None, run_id: None }
+    pub fn new(
+        task: TaskKind,
+        role: AgentRole,
+        system: impl Into<String>,
+        prompt: impl Into<String>,
+    ) -> Self {
+        Self {
+            task,
+            role,
+            system: system.into(),
+            prompt: prompt.into(),
+            schema: None,
+            max_tokens: 16_000,
+            effort: Effort::High,
+            provider: None,
+            run_id: None,
+        }
     }
     pub fn with_schema(mut self, schema: Value) -> Self {
         self.schema = Some(schema);

@@ -11,7 +11,7 @@ use amap_replay::{ExecOptions, ProcessSystem, ReplayEngine, SystemUnderTest};
 use serde_json::{json, Value};
 
 pub fn build_engine(cfg: &RunConfig) -> Result<ReplayEngine, String> {
-    let mut engine = ReplayEngine::new();
+    let mut engine = ReplayEngine::new().with_timing_tolerance(cfg.timing_tolerance_ms);
     for p in &cfg.comparator_specs {
         let text = std::fs::read_to_string(p).map_err(|e| format!("{}: {e}", p.display()))?;
         engine = engine.with_spec(ComparatorSpec::from_yaml(&text).map_err(|e| e.to_string())?);
@@ -35,19 +35,43 @@ pub fn next_system(cfg: &RunConfig) -> Result<ProcessSystem, String> {
 }
 
 pub fn legacy_oracle(cfg: &RunConfig) -> Option<ProcessSystem> {
-    cfg.legacy_command.as_ref().and_then(|c| process_from(cfg, "legacy", c))
+    cfg.legacy_command
+        .as_ref()
+        .and_then(|c| process_from(cfg, "legacy", c))
 }
 
 /// Run one verification engine. Returns results and engine metrics.
-pub async fn run_engine(kind: VerificationKind, scenarios: &[TestScenario], cfg: &RunConfig, function_id: &FunctionId) -> Result<(Vec<VerificationResult>, Value), String> {
+pub async fn run_engine(
+    kind: VerificationKind,
+    scenarios: &[TestScenario],
+    cfg: &RunConfig,
+    function_id: &FunctionId,
+) -> Result<(Vec<VerificationResult>, Value), String> {
     match kind {
         VerificationKind::Static => Ok((static_check::run(cfg, function_id), json!({}))),
-        VerificationKind::GoldenReplay | VerificationKind::Differential | VerificationKind::Boundary | VerificationKind::Adversarial | VerificationKind::Property | VerificationKind::State | VerificationKind::Unit | VerificationKind::Interface => {
+        VerificationKind::GoldenReplay
+        | VerificationKind::Differential
+        | VerificationKind::Boundary
+        | VerificationKind::Adversarial
+        | VerificationKind::Property
+        | VerificationKind::State
+        | VerificationKind::Unit
+        | VerificationKind::Interface => {
             let engine = build_engine(cfg)?;
             let next = next_system(cfg)?;
-            let oracle = legacy_oracle(cfg);
+            let oracle = if kind == VerificationKind::Unit {
+                None
+            } else {
+                legacy_oracle(cfg)
+            };
             let results = engine
-                .replay(&next, oracle.as_ref().map(|o| o as &dyn SystemUnderTest), scenarios, kind, &ExecOptions::default())
+                .replay(
+                    &next,
+                    oracle.as_ref().map(|o| o as &dyn SystemUnderTest),
+                    scenarios,
+                    kind,
+                    &ExecOptions::default(),
+                )
                 .await
                 .map_err(|e| e.to_string())?;
             Ok((results, json!({ "oracle": oracle.is_some() })))

@@ -1,6 +1,7 @@
 # --- Rust / Cargo ---
 /target/
 **/target/
+!Cargo.lock
 # plugins/finance is a separate workspace (wasm32 target), keeps its own lock
 *.wasm
 *.rs.bk

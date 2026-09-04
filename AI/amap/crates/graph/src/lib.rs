@@ -37,17 +37,28 @@ pub struct KnowledgeGraph {
 
 impl KnowledgeGraph {
     pub fn from_snapshot(s: &KnowledgeSnapshot) -> Self {
-        let mut g = Self { graph: DiGraph::new(), index: HashMap::new() };
+        let mut g = Self {
+            graph: DiGraph::new(),
+            index: HashMap::new(),
+        };
         for f in &s.functions {
             g.node(&f.id.0, NodeKind::Function);
         }
         for r in &s.requirements {
             g.node(&r.id.0, NodeKind::Requirement);
-            g.edge(&r.id.0, &r.function_id.0, RelationKind::RequirementToFunction);
+            g.edge(
+                &r.id.0,
+                &r.function_id.0,
+                RelationKind::RequirementToFunction,
+            );
         }
         for r in &s.rules {
             g.node(&r.id.0, NodeKind::Rule);
             g.edge(&r.function_id.0, &r.id.0, RelationKind::FunctionToRule);
+            for requirement in &r.requirement_ids {
+                g.node(&requirement.0, NodeKind::Requirement);
+                g.edge(&requirement.0, &r.id.0, RelationKind::RequirementToRule);
+            }
             for src in &r.sources {
                 let sid = src.to_string();
                 g.node(&sid, NodeKind::Source);
@@ -101,7 +112,9 @@ impl KnowledgeGraph {
         }
         for rel in &s.relationships {
             let kind_from = match rel.kind {
-                RelationKind::SourceCalls | RelationKind::SourceReadsDb | RelationKind::SourceWritesDb => NodeKind::Source,
+                RelationKind::SourceCalls
+                | RelationKind::SourceReadsDb
+                | RelationKind::SourceWritesDb => NodeKind::Source,
                 _ => NodeKind::Rule,
             };
             let kind_to = match rel.kind {
@@ -120,14 +133,23 @@ impl KnowledgeGraph {
         if let Some(ix) = self.index.get(id) {
             return *ix;
         }
-        let ix = self.graph.add_node(Node { id: id.to_string(), kind });
+        let ix = self.graph.add_node(Node {
+            id: id.to_string(),
+            kind,
+        });
         self.index.insert(id.to_string(), ix);
         ix
     }
 
     fn edge(&mut self, from: &str, to: &str, kind: RelationKind) {
-        let (Some(&a), Some(&b)) = (self.index.get(from), self.index.get(to)) else { return };
-        if !self.graph.edges_connecting(a, b).any(|e| *e.weight() == kind) {
+        let (Some(&a), Some(&b)) = (self.index.get(from), self.index.get(to)) else {
+            return;
+        };
+        if !self
+            .graph
+            .edges_connecting(a, b)
+            .any(|e| *e.weight() == kind)
+        {
             self.graph.add_edge(a, b, kind);
         }
     }
@@ -150,7 +172,9 @@ impl KnowledgeGraph {
     }
 
     fn walk(&self, id: &str, dir: Direction) -> Vec<Node> {
-        let Some(&start) = self.index.get(id) else { return vec![] };
+        let Some(&start) = self.index.get(id) else {
+            return vec![];
+        };
         let mut out = Vec::new();
         match dir {
             Direction::Outgoing => {
@@ -176,7 +200,11 @@ impl KnowledgeGraph {
 
     /// Scenarios affected by a rule (used to scope RCA / re-verification).
     pub fn affected_scenarios(&self, rule_id: &str) -> Vec<String> {
-        self.downstream(rule_id).into_iter().filter(|n| n.kind == NodeKind::Scenario).map(|n| n.id).collect()
+        self.downstream(rule_id)
+            .into_iter()
+            .filter(|n| n.kind == NodeKind::Scenario)
+            .map(|n| n.id)
+            .collect()
     }
 
     /// Rules with no source evidence, no behavior evidence or no scenario — the "unknown-risk candidates".
@@ -186,7 +214,11 @@ impl KnowledgeGraph {
             if self.graph[ix].kind != NodeKind::Rule {
                 continue;
             }
-            let kinds: HashSet<NodeKind> = self.graph.neighbors_directed(ix, Direction::Outgoing).map(|n| self.graph[n].kind).collect();
+            let kinds: HashSet<NodeKind> = self
+                .graph
+                .neighbors_directed(ix, Direction::Outgoing)
+                .map(|n| self.graph[n].kind)
+                .collect();
             let mut missing = Vec::new();
             if !kinds.contains(&NodeKind::Source) {
                 missing.push("source");
@@ -209,10 +241,18 @@ impl KnowledgeGraph {
     pub fn to_dot(&self) -> String {
         let mut s = String::from("digraph amap {\n  rankdir=LR;\n");
         for n in self.graph.node_weights() {
-            s.push_str(&format!("  \"{}\" [shape=box,label=\"{}\\n{:?}\"];\n", n.id, n.id, n.kind));
+            s.push_str(&format!(
+                "  \"{}\" [shape=box,label=\"{}\\n{:?}\"];\n",
+                n.id, n.id, n.kind
+            ));
         }
         for e in self.graph.edge_references() {
-            s.push_str(&format!("  \"{}\" -> \"{}\" [label=\"{:?}\"];\n", self.graph[e.source()].id, self.graph[e.target()].id, e.weight()));
+            s.push_str(&format!(
+                "  \"{}\" -> \"{}\" [label=\"{:?}\"];\n",
+                self.graph[e.source()].id,
+                self.graph[e.target()].id,
+                e.weight()
+            ));
         }
         s.push_str("}\n");
         s
@@ -236,6 +276,7 @@ mod tests {
             sources: vec![SourceLocation::new("A.cbl", 1, 2)],
             db_entities: vec![],
             interfaces: vec![],
+            requirement_ids: vec![RequirementId::new("REQ-1")],
             observed_production_cases: 1,
             evidence: Default::default(),
             confidence: 0.9,
@@ -264,14 +305,28 @@ mod tests {
             input: json!({}),
             expected_output: None,
             expected_state_change: None,
-            expected_events: vec![],
+            expected_events: Some(vec![]),
+            expected_external_calls: Some(vec![]),
+            expected_timing_ms: None,
             priority: Priority::P0,
             comparator_spec: None,
             behavior_id: Some(BehaviorId::new("BH-1")),
         };
         let snap = KnowledgeSnapshot {
-            functions: vec![BusinessFunction { id: fid.clone(), name: "f".into(), domain: "loan".into(), priority: Priority::P0, description: String::new() }],
-            requirements: vec![Requirement { id: RequirementId::new("REQ-1"), function_id: fid, title: "t".into(), text: "x".into(), confidence: 0.9 }],
+            functions: vec![BusinessFunction {
+                id: fid.clone(),
+                name: "f".into(),
+                domain: "loan".into(),
+                priority: Priority::P0,
+                description: String::new(),
+            }],
+            requirements: vec![Requirement {
+                id: RequirementId::new("REQ-1"),
+                function_id: fid,
+                title: "t".into(),
+                text: "x".into(),
+                confidence: 0.9,
+            }],
             rules: vec![rule],
             behaviors: vec![beh],
             scenarios: vec![sc],

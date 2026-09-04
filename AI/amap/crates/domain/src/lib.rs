@@ -4,13 +4,13 @@
 //! the platform treats *evidence* — not an LLM's memory — as the source of truth,
 //! so everything here must be serialisable, diffable and storable.
 
+pub mod agents;
+pub mod behavior;
+pub mod evidence;
+pub mod gate;
 pub mod ids;
 pub mod rules;
-pub mod behavior;
 pub mod verification;
-pub mod evidence;
-pub mod agents;
-pub mod gate;
 
 pub use agents::*;
 pub use behavior::*;

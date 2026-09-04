@@ -16,7 +16,10 @@ impl OpenAiProvider {
     /// `model` must be the deployed model id (e.g. the GPT-5.6 Sol id used by the engagement).
     pub fn new(api_key: impl Into<String>, model: impl Into<String>) -> Self {
         Self {
-            http: reqwest::Client::builder().timeout(std::time::Duration::from_secs(600)).build().expect("http client"),
+            http: reqwest::Client::builder()
+                .timeout(std::time::Duration::from_secs(600))
+                .build()
+                .expect("http client"),
             api_key: api_key.into(),
             model: model.into(),
             base_url: "https://api.openai.com".into(),
@@ -57,18 +60,34 @@ impl LlmClient for OpenAiProvider {
         if let Some(schema) = &req.schema {
             body["response_format"] = json!({ "type": "json_schema", "json_schema": { "name": "amap_output", "schema": schema } });
         }
-        let resp = self.http.post(format!("{}/v1/chat/completions", self.base_url)).bearer_auth(&self.api_key).json(&body).send().await?;
+        let resp = self
+            .http
+            .post(format!("{}/v1/chat/completions", self.base_url))
+            .bearer_auth(&self.api_key)
+            .json(&body)
+            .send()
+            .await?;
         let status = resp.status();
         let text = resp.text().await?;
         if status.as_u16() == 429 || status.as_u16() >= 500 {
             return Err(LlmError::Transient(format!("{status}: {text}")));
         }
         if !status.is_success() {
-            return Err(LlmError::Provider { status: status.as_u16(), body: text });
+            return Err(LlmError::Provider {
+                status: status.as_u16(),
+                body: text,
+            });
         }
         let v: Value = serde_json::from_str(&text).map_err(|e| LlmError::Invalid(e.to_string()))?;
-        let out = v["choices"][0]["message"]["content"].as_str().unwrap_or("").to_string();
-        let json = if req.schema.is_some() { crate::extract_json(&out) } else { None };
+        let out = v["choices"][0]["message"]["content"]
+            .as_str()
+            .unwrap_or("")
+            .to_string();
+        let json = if req.schema.is_some() {
+            crate::extract_json(&out)
+        } else {
+            None
+        };
         Ok(LlmResponse {
             text: out,
             json,
@@ -76,7 +95,10 @@ impl LlmClient for OpenAiProvider {
             model: v["model"].as_str().unwrap_or(&self.model).to_string(),
             input_tokens: v["usage"]["prompt_tokens"].as_u64().unwrap_or(0),
             output_tokens: v["usage"]["completion_tokens"].as_u64().unwrap_or(0),
-            stop_reason: v["choices"][0]["finish_reason"].as_str().unwrap_or("").to_string(),
+            stop_reason: v["choices"][0]["finish_reason"]
+                .as_str()
+                .unwrap_or("")
+                .to_string(),
             cached: false,
         })
     }

@@ -27,7 +27,7 @@ exclude = ["plugins/finance"]
 version = "0.1.0"
 edition = "2021"
 license = "Apache-2.0"
-rust-version = "1.85"
+rust-version = "1.98"
 
 [workspace.dependencies]
 # --- AMAP crates ---
@@ -50,10 +50,11 @@ amap-cli = { path = "services/amap-cli" }
 # --- Core runtime ---
 tokio = { version = "1", features = ["full"] }
 axum = "0.8"
-tonic = "0.14"
+tonic = { version = "0.14", features = ["tls-ring"] }
 tonic-prost = "0.14"
 tonic-prost-build = "0.14"
 prost = "0.14"
+protoc-bin-vendored = "3"
 tower = "0.5"
 tower-http = { version = "0.6", features = ["trace", "cors", "timeout"] }
 serde = { version = "1", features = ["derive"] }
@@ -65,6 +66,10 @@ clap = { version = "4", features = ["derive", "env"] }
 figment = { version = "0.10", features = ["toml", "env"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+opentelemetry = "0.32"
+opentelemetry_sdk = "0.32"
+opentelemetry-otlp = { version = "0.32", default-features = false, features = ["trace", "grpc-tonic"] }
+tracing-opentelemetry = "0.33"
 async-trait = "0.1"
 futures = "0.3"
 uuid = { version = "1", features = ["v4", "serde"] }
@@ -74,11 +79,14 @@ regex = "1"
 sha2 = "0.10"
 hex = "0.4"
 bytes = "1"
+subtle = "2"
+tempfile = "3"
 reqwest = { version = "0.13", features = ["json"] }
 
 # --- Data / storage ---
 sqlx = { version = "0.9", default-features = false, features = ["runtime-tokio", "tls-rustls-ring", "postgres", "uuid", "chrono", "json", "migrate", "macros"] }
 async-nats = "0.50"
+rdkafka = "0.39"
 datafusion = "55"
 object_store = "0.13"
 
@@ -92,6 +100,9 @@ pest_derive = "2.9"
 tree-sitter = "0.27"
 tree-sitter-java = "0.23"
 tree-sitter-python = "0.25"
+tree-sitter-rust = "0.24"
+tree-sitter-javascript = "0.25"
+tree-sitter-c-sharp = "0.23"
 
 [profile.release]
 lto = "thin"

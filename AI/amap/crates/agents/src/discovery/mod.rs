@@ -1,5 +1,6 @@
 //! Discovery Agent (design §3): deterministic source analysis + LLM domain classification.
 pub mod cobol;
+pub mod structured;
 pub mod treesitter;
 
 use crate::{context_pack, str_list};
@@ -25,13 +26,29 @@ pub struct AnalyzedFile {
 /// Run the language-specific analyzers over a source tree.
 pub fn analyze_tree(root: &std::path::Path) -> Vec<(String, AnalyzedFile)> {
     let mut out = Vec::new();
-    for entry in WalkDir::new(root).into_iter().filter_map(|e| e.ok()).filter(|e| e.file_type().is_file()) {
-        let rel = entry.path().strip_prefix(root).unwrap_or(entry.path()).display().to_string();
-        let Ok(text) = std::fs::read_to_string(entry.path()) else { continue };
+    for entry in WalkDir::new(root)
+        .into_iter()
+        .filter_map(|e| e.ok())
+        .filter(|e| e.file_type().is_file())
+    {
+        let rel = entry
+            .path()
+            .strip_prefix(root)
+            .unwrap_or(entry.path())
+            .display()
+            .to_string();
+        let Ok(text) = std::fs::read_to_string(entry.path()) else {
+            continue;
+        };
         let analyzed = match Language::from_path(&rel) {
             Language::Cobol => Some(cobol::analyze(&rel, &text)),
             Language::Java => treesitter::analyze(&rel, &text, Language::Java),
             Language::Python => treesitter::analyze(&rel, &text, Language::Python),
+            Language::Rust => treesitter::analyze(&rel, &text, Language::Rust),
+            Language::Javascript => treesitter::analyze(&rel, &text, Language::Javascript),
+            Language::Csharp => treesitter::analyze(&rel, &text, Language::Csharp),
+            Language::Sql => Some(structured::analyze_sql(&rel, &text)),
+            Language::Jcl => Some(structured::analyze_jcl(&rel, &text)),
             _ => None,
         };
         if let Some(a) = analyzed {
@@ -76,9 +93,13 @@ impl AgentTask for DiscoveryAgent {
         }
 
         // Dead / suspicious code: paragraphs or methods nobody calls (excluding entry points).
-        let called: HashSet<String> = all_entities.iter().flat_map(|e| e.dependencies.iter().map(|d| d.0.clone())).collect();
+        let called: HashSet<String> = all_entities
+            .iter()
+            .flat_map(|e| e.dependencies.iter().map(|d| d.0.clone()))
+            .collect();
         for e in &all_entities {
-            let is_entry = matches!(e.kind, EntityKind::Program | EntityKind::Class) || e.symbol.to_uppercase().contains("MAIN");
+            let is_entry = matches!(e.kind, EntityKind::Program | EntityKind::Class)
+                || e.symbol.to_uppercase().contains("MAIN");
             if !is_entry && !called.contains(&e.id.0) && !suspicious.contains(&e.id.0) {
                 suspicious.push(e.id.0.clone());
                 let mut flagged = e.clone();
@@ -88,10 +109,31 @@ impl AgentTask for DiscoveryAgent {
         }
 
         // LLM: domain classification of the discovered entities (AI + deterministic tooling).
-        let pack = context_pack(ctx, "domain classification", ContextBudget { max_tokens: 30_000, ..Default::default() }).await?;
-        let entity_list: Vec<String> = all_entities.iter().map(|e| format!("{} ({:?}, {})", e.id, e.kind, e.location)).collect();
-        let prompt = format!("{}\n\n## Entities\n{}\n", pack.render(), entity_list.join("\n"));
-        let req = LlmRequest::new(TaskKind::DomainClassification, AgentRole::Discovery, "", prompt).with_run(ctx.run_id.0.clone());
+        let pack = context_pack(
+            ctx,
+            "domain classification",
+            ContextBudget {
+                max_tokens: 30_000,
+                ..Default::default()
+            },
+        )
+        .await?;
+        let entity_list: Vec<String> = all_entities
+            .iter()
+            .map(|e| format!("{} ({:?}, {})", e.id, e.kind, e.location))
+            .collect();
+        let prompt = format!(
+            "{}\n\n## Entities\n{}\n",
+            pack.render(),
+            entity_list.join("\n")
+        );
+        let req = LlmRequest::new(
+            TaskKind::DomainClassification,
+            AgentRole::Discovery,
+            "",
+            prompt,
+        )
+        .with_run(ctx.run_id.0.clone());
         let mut domains = json!([]);
         match ctx.llm.complete(req).await {
             Ok(resp) => {
@@ -108,7 +150,11 @@ impl AgentTask for DiscoveryAgent {
         }
 
         let dependency_edges: usize = all_entities.iter().map(|e| e.dependencies.len()).sum();
-        ctx.emit("discovery.completed", json!({ "entities": entity_count, "suspicious": suspicious.len() })).await;
+        ctx.emit(
+            "discovery.completed",
+            json!({ "entities": entity_count, "suspicious": suspicious.len() }),
+        )
+        .await;
         Ok(AgentResult::new(
             format!("discovered {entity_count} code entities, {dependency_edges} dependency edges, {} suspicious", suspicious.len()),
             json!({

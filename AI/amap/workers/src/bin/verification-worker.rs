@@ -12,5 +12,10 @@ struct Args {
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     let args = Args::parse();
-    amap_workers::serve("verification-worker", VerificationKind::ALL.to_vec(), args.listen).await
+    amap_workers::serve(
+        "verification-worker",
+        VerificationKind::ALL.to_vec(),
+        args.listen,
+    )
+    .await
 }

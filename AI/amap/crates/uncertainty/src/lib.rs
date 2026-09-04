@@ -23,7 +23,15 @@ pub struct ConfidenceVector {
 
 impl Default for ConfidenceVector {
     fn default() -> Self {
-        Self { requirement: 0.5, rule: 0.5, behavior: 0.0, test: 0.0, dependency: 1.0, equivalence: 0.0, complexity: 0.5 }
+        Self {
+            requirement: 0.5,
+            rule: 0.5,
+            behavior: 0.0,
+            test: 0.0,
+            dependency: 1.0,
+            equivalence: 0.0,
+            complexity: 0.5,
+        }
     }
 }
 
@@ -43,7 +51,15 @@ pub struct Weights {
 impl Default for Weights {
     fn default() -> Self {
         // Production behaviour and equivalence evidence dominate (design §29 ranking).
-        Self { requirement: 0.10, rule: 0.15, behavior: 0.25, test: 0.15, dependency: 0.10, equivalence: 0.25, complexity: 0.10 }
+        Self {
+            requirement: 0.10,
+            rule: 0.15,
+            behavior: 0.25,
+            test: 0.15,
+            dependency: 0.10,
+            equivalence: 0.25,
+            complexity: 0.10,
+        }
     }
 }
 
@@ -101,7 +117,11 @@ pub fn rule_confidence(sources: &EvidenceSources, signals: &EvidenceSignals) -> 
     let base = sources.baseline_confidence();
     // Adjustments move the residual gap (1-base) or the base itself proportionally.
     let adj = signals.adjustment();
-    let value = if adj >= 0.0 { base + (1.0 - base) * adj.min(1.0) } else { base * (1.0 + adj).max(0.0) };
+    let value = if adj >= 0.0 {
+        base + (1.0 - base) * adj.min(1.0)
+    } else {
+        base * (1.0 + adj).max(0.0)
+    };
     (clamp01(value) * 10_000.0).round() / 10_000.0
 }
 
@@ -125,16 +145,37 @@ pub fn assess(v: &ConfidenceVector, w: &Weights) -> UncertaintyReport {
     let confidence = clamp01(weighted * (1.0 - w.complexity * clamp01(v.complexity)));
     let uncertainty = 1.0 - confidence;
     let mut drivers = vec![
-        ("requirement".to_string(), w.requirement * (1.0 - clamp01(v.requirement))),
+        (
+            "requirement".to_string(),
+            w.requirement * (1.0 - clamp01(v.requirement)),
+        ),
         ("rule".to_string(), w.rule * (1.0 - clamp01(v.rule))),
-        ("behavior".to_string(), w.behavior * (1.0 - clamp01(v.behavior))),
+        (
+            "behavior".to_string(),
+            w.behavior * (1.0 - clamp01(v.behavior)),
+        ),
         ("test".to_string(), w.test * (1.0 - clamp01(v.test))),
-        ("dependency".to_string(), w.dependency * (1.0 - clamp01(v.dependency))),
-        ("equivalence".to_string(), w.equivalence * (1.0 - clamp01(v.equivalence))),
-        ("complexity".to_string(), w.complexity * clamp01(v.complexity)),
+        (
+            "dependency".to_string(),
+            w.dependency * (1.0 - clamp01(v.dependency)),
+        ),
+        (
+            "equivalence".to_string(),
+            w.equivalence * (1.0 - clamp01(v.equivalence)),
+        ),
+        (
+            "complexity".to_string(),
+            w.complexity * clamp01(v.complexity),
+        ),
     ];
     drivers.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
-    UncertaintyReport { confidence, uncertainty, tier: HitlTier::from_confidence(confidence), vector: *v, drivers }
+    UncertaintyReport {
+        confidence,
+        uncertainty,
+        tier: HitlTier::from_confidence(confidence),
+        vector: *v,
+        drivers,
+    }
 }
 
 /// Residual uncertainty across all capabilities (the single most important KPI).
@@ -151,7 +192,10 @@ impl ResidualUncertainty {
         if self.total_capabilities == 0 {
             return 1.0;
         }
-        (self.known_unresolved + self.unknown_risk_candidates) as f64 / self.total_capabilities as f64
+        self.known_unresolved
+            .saturating_add(self.unknown_risk_candidates)
+            .min(self.total_capabilities) as f64
+            / self.total_capabilities as f64
     }
 }
 
@@ -160,7 +204,15 @@ pub fn n_version_agreement(answers: &[String]) -> (bool, f64) {
     if answers.len() < 2 {
         return (false, 0.0);
     }
-    let norm: Vec<String> = answers.iter().map(|a| a.split_whitespace().collect::<Vec<_>>().join(" ").to_lowercase()).collect();
+    let norm: Vec<String> = answers
+        .iter()
+        .map(|a| {
+            a.split_whitespace()
+                .collect::<Vec<_>>()
+                .join(" ")
+                .to_lowercase()
+        })
+        .collect();
     let first = &norm[0];
     let agree = norm.iter().filter(|a| *a == first).count();
     let ratio = agree as f64 / norm.len() as f64;
@@ -173,18 +225,55 @@ mod tests {
 
     #[test]
     fn confidence_follows_evidence_not_llm() {
-        let code_only = EvidenceSources { code: true, ..Default::default() };
-        let full = EvidenceSources { code: true, document: true, production: true, inferred: false };
-        assert!(rule_confidence(&full, &EvidenceSignals::default()) > rule_confidence(&code_only, &EvidenceSignals::default()));
-        let bad = EvidenceSignals { unexplained_diff_exists: true, ..Default::default() };
+        let code_only = EvidenceSources {
+            code: true,
+            ..Default::default()
+        };
+        let full = EvidenceSources {
+            code: true,
+            document: true,
+            production: true,
+            inferred: false,
+        };
+        assert!(
+            rule_confidence(&full, &EvidenceSignals::default())
+                > rule_confidence(&code_only, &EvidenceSignals::default())
+        );
+        let bad = EvidenceSignals {
+            unexplained_diff_exists: true,
+            ..Default::default()
+        };
         assert!(rule_confidence(&full, &bad) < 0.6);
     }
 
     #[test]
     fn tiers() {
-        let hi = ConfidenceVector { requirement: 1.0, rule: 1.0, behavior: 1.0, test: 1.0, dependency: 1.0, equivalence: 1.0, complexity: 0.0 };
+        let hi = ConfidenceVector {
+            requirement: 1.0,
+            rule: 1.0,
+            behavior: 1.0,
+            test: 1.0,
+            dependency: 1.0,
+            equivalence: 1.0,
+            complexity: 0.0,
+        };
         assert_eq!(assess(&hi, &Weights::default()).tier, HitlTier::Auto);
-        let lo = ConfidenceVector { behavior: 0.0, equivalence: 0.0, ..hi };
+        let lo = ConfidenceVector {
+            behavior: 0.0,
+            equivalence: 0.0,
+            ..hi
+        };
         assert!(assess(&lo, &Weights::default()).tier.requires_human());
+    }
+
+    #[test]
+    fn residual_uncertainty_is_bounded() {
+        let residual = ResidualUncertainty {
+            total_capabilities: 10,
+            high_confidence_verified: 0,
+            known_unresolved: 10,
+            unknown_risk_candidates: 5,
+        };
+        assert_eq!(residual.ratio(), 1.0);
     }
 }

@@ -3,6 +3,11 @@ name = "amap-agents"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+rust-version.workspace = true
+
+[features]
+default = []
+kafka = ["dep:rdkafka"]
 
 [dependencies]
 amap-domain.workspace = true
@@ -26,10 +31,16 @@ tokio.workspace = true
 tracing.workspace = true
 chrono.workspace = true
 uuid.workspace = true
+sha2.workspace = true
+hex.workspace = true
 regex.workspace = true
 rand.workspace = true
 tonic.workspace = true
 tree-sitter.workspace = true
 tree-sitter-java.workspace = true
 tree-sitter-python.workspace = true
+tree-sitter-rust.workspace = true
+tree-sitter-javascript.workspace = true
+tree-sitter-c-sharp.workspace = true
+rdkafka = { workspace = true, optional = true }
 walkdir = "2"

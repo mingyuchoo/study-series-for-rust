@@ -31,7 +31,10 @@ impl Default for RouterConfig {
         routes.insert(Reviewer, vec![Anthropic, OpenAi]); // different from Builder
         routes.insert(BusinessReviewer, vec![Anthropic, OpenAi]);
         routes.insert(Rca, vec![OpenAi, Anthropic]);
-        Self { routes, fallback: vec![Anthropic, OpenAi, Local, Mock] }
+        Self {
+            routes,
+            fallback: vec![Anthropic, OpenAi, Local, Mock],
+        }
     }
 }
 
@@ -42,7 +45,10 @@ pub struct Router {
 
 impl Router {
     pub fn new(config: RouterConfig) -> Self {
-        Self { config, providers: HashMap::new() }
+        Self {
+            config,
+            providers: HashMap::new(),
+        }
     }
     pub fn with_provider(mut self, p: ModelProvider, client: Arc<dyn LlmClient>) -> Self {
         self.providers.insert(p, client);
@@ -58,15 +64,26 @@ impl Router {
     /// Resolve the provider for a request.
     pub fn resolve(&self, req: &LlmRequest) -> Result<ModelProvider, LlmError> {
         if let Some(p) = req.provider {
-            return if self.has(p) { Ok(p) } else { Err(LlmError::NotConfigured(p)) };
+            return if self.has(p) {
+                Ok(p)
+            } else {
+                Err(LlmError::NotConfigured(p))
+            };
         }
-        let prefs = self.config.routes.get(&req.role).cloned().unwrap_or_default();
+        let prefs = self
+            .config
+            .routes
+            .get(&req.role)
+            .cloned()
+            .unwrap_or_default();
         prefs
             .iter()
             .chain(self.config.fallback.iter())
             .find(|p| self.has(**p))
             .copied()
-            .ok_or(LlmError::NotConfigured(prefs.first().copied().unwrap_or(ModelProvider::Anthropic)))
+            .ok_or(LlmError::NotConfigured(
+                prefs.first().copied().unwrap_or(ModelProvider::Anthropic),
+            ))
     }
 
     pub fn provider(&self, p: ModelProvider) -> Option<Arc<dyn LlmClient>> {

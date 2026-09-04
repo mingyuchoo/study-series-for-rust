@@ -37,7 +37,9 @@ impl From<datafusion::error::DataFusionError> for EvidenceError {
 pub enum LakeLocation {
     Local(PathBuf),
     /// `s3://bucket/prefix` — credentials from the environment (AWS_* / MinIO endpoint via AWS_ENDPOINT_URL).
-    S3 { url: Url },
+    S3 {
+        url: Url,
+    },
 }
 
 pub struct EvidenceLake {
@@ -47,6 +49,8 @@ pub struct EvidenceLake {
 
 fn schema() -> SchemaRef {
     Arc::new(Schema::new(vec![
+        Field::new("evidence_id", DataType::Utf8, false),
+        Field::new("content_hash", DataType::Utf8, false),
         Field::new("run_id", DataType::Utf8, false),
         Field::new("function_id", DataType::Utf8, false),
         Field::new("kind", DataType::Utf8, false),
@@ -63,23 +67,45 @@ fn schema() -> SchemaRef {
 }
 
 fn kind_str(k: VerificationKind) -> String {
-    serde_json::to_value(k).ok().and_then(|v| v.as_str().map(|s| s.to_string())).unwrap_or_default()
+    serde_json::to_value(k)
+        .ok()
+        .and_then(|v| v.as_str().map(|s| s.to_string()))
+        .unwrap_or_default()
 }
 
 fn to_batch(records: &[EvidenceRecord]) -> RecordBatch {
-    let s = |f: &dyn Fn(&EvidenceRecord) -> String| -> ArrayRef { Arc::new(StringArray::from(records.iter().map(f).collect::<Vec<_>>())) };
+    let s = |f: &dyn Fn(&EvidenceRecord) -> String| -> ArrayRef {
+        Arc::new(StringArray::from(records.iter().map(f).collect::<Vec<_>>()))
+    };
     let cols: Vec<ArrayRef> = vec![
+        s(&|r| r.evidence_id.clone()),
+        s(&|r| r.content_hash.clone()),
         s(&|r| r.run_id.0.clone()),
         s(&|r| r.function_id.0.clone()),
         s(&|r| kind_str(r.kind)),
         s(&|r| r.scenario_id.clone()),
-        s(&|r| r.rule_ids.iter().map(|x| x.0.clone()).collect::<Vec<_>>().join(",")),
+        s(&|r| {
+            r.rule_ids
+                .iter()
+                .map(|x| x.0.clone())
+                .collect::<Vec<_>>()
+                .join(",")
+        }),
         s(&|r| format!("{:?}", r.priority)),
-        Arc::new(BooleanArray::from(records.iter().map(|r| r.passed).collect::<Vec<_>>())),
-        Arc::new(BooleanArray::from(records.iter().map(|r| r.explained).collect::<Vec<_>>())),
+        Arc::new(BooleanArray::from(
+            records.iter().map(|r| r.passed).collect::<Vec<_>>(),
+        )),
+        Arc::new(BooleanArray::from(
+            records.iter().map(|r| r.explained).collect::<Vec<_>>(),
+        )),
         s(&|r| r.producer.clone()),
         s(&|r| r.created_at.to_rfc3339()),
-        Arc::new(StringArray::from(records.iter().map(|r| r.payload_uri.clone()).collect::<Vec<Option<String>>>())),
+        Arc::new(StringArray::from(
+            records
+                .iter()
+                .map(|r| r.payload_uri.clone())
+                .collect::<Vec<Option<String>>>(),
+        )),
         s(&|r| r.details.to_string()),
     ];
     RecordBatch::try_new(schema(), cols).expect("schema matches columns")
@@ -90,13 +116,18 @@ impl EvidenceLake {
         let root = root.as_ref().to_path_buf();
         std::fs::create_dir_all(root.join("evidence"))?;
         let ctx = SessionContext::new();
-        Ok(Self { location: LakeLocation::Local(root), ctx })
+        Ok(Self {
+            location: LakeLocation::Local(root),
+            ctx,
+        })
     }
 
     /// Open an S3 / MinIO backed lake (`s3://bucket/prefix`).
     pub async fn open_s3(url: &str) -> Result<Self, EvidenceError> {
         let url = Url::parse(url).map_err(|e| EvidenceError::Storage(e.to_string()))?;
-        let bucket = url.host_str().ok_or_else(|| EvidenceError::Storage("s3 url needs bucket".into()))?;
+        let bucket = url
+            .host_str()
+            .ok_or_else(|| EvidenceError::Storage("s3 url needs bucket".into()))?;
         let store = object_store::aws::AmazonS3Builder::from_env()
             .with_bucket_name(bucket)
             .build()
@@ -104,7 +135,10 @@ impl EvidenceLake {
         let ctx = SessionContext::new();
         let base = Url::parse(&format!("s3://{bucket}/")).unwrap();
         ctx.register_object_store(&base, Arc::new(store));
-        Ok(Self { location: LakeLocation::S3 { url }, ctx })
+        Ok(Self {
+            location: LakeLocation::S3 { url },
+            ctx,
+        })
     }
 
     fn evidence_uri(&self) -> String {
@@ -119,19 +153,43 @@ impl EvidenceLake {
         if records.is_empty() {
             return Ok(String::new());
         }
-        let batch = to_batch(records);
+        let name = format!("{}-{}.parquet", records[0].run_id.0, uuid::Uuid::new_v4());
+        let uri = match &self.location {
+            LakeLocation::Local(root) => root.join("evidence").join(&name).display().to_string(),
+            LakeLocation::S3 { url } => {
+                let bucket = url.host_str().unwrap_or_default();
+                let prefix = url.path().trim_matches('/');
+                let key = if prefix.is_empty() {
+                    format!("evidence/{name}")
+                } else {
+                    format!("{prefix}/evidence/{name}")
+                };
+                format!("s3://{bucket}/{key}")
+            }
+        };
+        let stored: Vec<EvidenceRecord> = records
+            .iter()
+            .cloned()
+            .map(|mut record| {
+                record.payload_uri = Some(uri.clone());
+                record
+            })
+            .collect();
+        let batch = to_batch(&stored);
         let mut buf = Vec::new();
         {
-            let mut w = ArrowWriter::try_new(&mut buf, schema(), None).map_err(|e| EvidenceError::Storage(e.to_string()))?;
-            w.write(&batch).map_err(|e| EvidenceError::Storage(e.to_string()))?;
-            w.close().map_err(|e| EvidenceError::Storage(e.to_string()))?;
+            let mut w = ArrowWriter::try_new(&mut buf, schema(), None)
+                .map_err(|e| EvidenceError::Storage(e.to_string()))?;
+            w.write(&batch)
+                .map_err(|e| EvidenceError::Storage(e.to_string()))?;
+            w.close()
+                .map_err(|e| EvidenceError::Storage(e.to_string()))?;
         }
-        let name = format!("{}-{}.parquet", records[0].run_id.0, uuid::Uuid::new_v4());
         match &self.location {
             LakeLocation::Local(root) => {
                 let path = root.join("evidence").join(&name);
                 tokio::fs::write(&path, buf).await?;
-                Ok(path.display().to_string())
+                Ok(uri)
             }
             LakeLocation::S3 { url } => {
                 let bucket = url.host_str().unwrap_or_default();
@@ -140,10 +198,17 @@ impl EvidenceLake {
                     .build()
                     .map_err(|e| EvidenceError::Storage(e.to_string()))?;
                 let prefix = url.path().trim_matches('/');
-                let key = if prefix.is_empty() { format!("evidence/{name}") } else { format!("{prefix}/evidence/{name}") };
+                let key = if prefix.is_empty() {
+                    format!("evidence/{name}")
+                } else {
+                    format!("{prefix}/evidence/{name}")
+                };
                 use object_store::ObjectStoreExt;
-                store.put(&object_store::path::Path::from(key.clone()), buf.into()).await.map_err(|e| EvidenceError::Storage(e.to_string()))?;
-                Ok(format!("s3://{bucket}/{key}"))
+                store
+                    .put(&object_store::path::Path::from(key.clone()), buf.into())
+                    .await
+                    .map_err(|e| EvidenceError::Storage(e.to_string()))?;
+                Ok(uri)
             }
         }
     }
@@ -153,27 +218,48 @@ impl EvidenceLake {
         let ctx = SessionContext::new();
         if let LakeLocation::S3 { url } = &self.location {
             let bucket = url.host_str().unwrap_or_default();
-            let store = object_store::aws::AmazonS3Builder::from_env().with_bucket_name(bucket).build().map_err(|e| EvidenceError::Storage(e.to_string()))?;
-            ctx.register_object_store(&Url::parse(&format!("s3://{bucket}/")).unwrap(), Arc::new(store));
+            let store = object_store::aws::AmazonS3Builder::from_env()
+                .with_bucket_name(bucket)
+                .build()
+                .map_err(|e| EvidenceError::Storage(e.to_string()))?;
+            ctx.register_object_store(
+                &Url::parse(&format!("s3://{bucket}/")).unwrap(),
+                Arc::new(store),
+            );
         }
         let _ = &self.ctx;
         let uri = self.evidence_uri();
         let has_files = match &self.location {
-            LakeLocation::Local(root) => std::fs::read_dir(root.join("evidence"))?.any(|e| e.map(|e| e.path().extension().map(|x| x == "parquet").unwrap_or(false)).unwrap_or(false)),
+            LakeLocation::Local(root) => std::fs::read_dir(root.join("evidence"))?.any(|e| {
+                e.map(|e| {
+                    e.path()
+                        .extension()
+                        .map(|x| x == "parquet")
+                        .unwrap_or(false)
+                })
+                .unwrap_or(false)
+            }),
             LakeLocation::S3 { .. } => true,
         };
         if !has_files {
             ctx.register_batch("evidence", RecordBatch::new_empty(schema()))?;
         } else {
-            ctx.register_parquet("evidence", &uri, ParquetReadOptions::default().schema(&schema())).await?;
+            ctx.register_parquet(
+                "evidence",
+                &uri,
+                ParquetReadOptions::default().schema(&schema()),
+            )
+            .await?;
         }
         let df = ctx.sql(sql).await?;
         let batches = df.collect().await?;
         let mut out = Vec::new();
         {
             let mut w = ArrayWriter::new(&mut out);
-            w.write_batches(&batches.iter().collect::<Vec<_>>()).map_err(|e| EvidenceError::Query(e.to_string()))?;
-            w.finish().map_err(|e| EvidenceError::Query(e.to_string()))?;
+            w.write_batches(&batches.iter().collect::<Vec<_>>())
+                .map_err(|e| EvidenceError::Query(e.to_string()))?;
+            w.finish()
+                .map_err(|e| EvidenceError::Query(e.to_string()))?;
         }
         if out.is_empty() {
             return Ok(vec![]);
@@ -218,6 +304,7 @@ pub struct CertificateInputs {
     pub function_id: String,
     pub implemented: bool,
     pub requirements_total: u64,
+    pub requirements_covered: u64,
     pub rules_total: u64,
     pub rules_covered: u64,
     pub critical_rules_total: u64,
@@ -229,12 +316,15 @@ pub struct CertificateInputs {
     pub residual_uncertainty: f64,
 }
 
-pub fn build_certificate(rows: &[KindRow], inputs: CertificateInputs) -> (FunctionCertificate, EquivalenceMetrics) {
+pub fn build_certificate(
+    rows: &[KindRow],
+    inputs: CertificateInputs,
+) -> (FunctionCertificate, EquivalenceMetrics) {
     let mut cert = FunctionCertificate {
         function_id: inputs.function_id,
         implemented: inputs.implemented,
         requirements_total: inputs.requirements_total,
-        requirements_covered: inputs.requirements_total,
+        requirements_covered: inputs.requirements_covered,
         rules_total: inputs.rules_total,
         rules_covered: inputs.rules_covered,
         critical_rules_total: inputs.critical_rules_total,
@@ -244,16 +334,20 @@ pub fn build_certificate(rows: &[KindRow], inputs: CertificateInputs) -> (Functi
         residual_uncertainty: inputs.residual_uncertainty,
         ..Default::default()
     };
-    let mut eq = EquivalenceMetrics { behaviors_total: inputs.behaviors_total, behaviors_covered: inputs.behaviors_covered, ..Default::default() };
+    let mut eq = EquivalenceMetrics {
+        behaviors_total: inputs.behaviors_total,
+        behaviors_covered: inputs.behaviors_covered,
+        ..Default::default()
+    };
     for r in rows {
         let target = match r.kind.as_str() {
             "golden_replay" => Some(&mut cert.golden),
             "boundary" => Some(&mut cert.boundary),
-            "property" => Some(&mut cert.property),
+            "property" | "unit" => Some(&mut cert.property),
             "adversarial" => Some(&mut cert.adversarial),
             "fault" => Some(&mut cert.fault),
             "concurrency" => Some(&mut cert.concurrency),
-            "differential" | "state" => Some(&mut cert.production_replay),
+            "differential" | "state" | "interface" => Some(&mut cert.production_replay),
             _ => None,
         };
         if let Some(t) = target {
@@ -263,6 +357,8 @@ pub fn build_certificate(rows: &[KindRow], inputs: CertificateInputs) -> (Functi
         }
         if r.kind != "mutation" {
             cert.unexplained_differences += r.unexplained;
+        }
+        if matches!(r.kind.as_str(), "golden_replay" | "differential" | "unit") {
             eq.all_total += r.total;
             eq.all_passed += r.passed;
             match r.priority.as_str() {
@@ -297,6 +393,8 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("amap-lake-{}", uuid::Uuid::new_v4()));
         let lake = EvidenceLake::open_local(&dir).await.unwrap();
         let rec = |passed: bool| EvidenceRecord {
+            evidence_id: format!("EV-{}", uuid::Uuid::new_v4()),
+            content_hash: "test-hash".into(),
             run_id: RunId::new("RUN-1"),
             function_id: FunctionId::new("FN-1"),
             kind: VerificationKind::GoldenReplay,
@@ -310,7 +408,9 @@ mod tests {
             payload_uri: None,
             details: serde_json::json!({}),
         };
-        lake.append(&[rec(true), rec(true), rec(false)]).await.unwrap();
+        lake.append(&[rec(true), rec(true), rec(false)])
+            .await
+            .unwrap();
         let rows = lake.summary("FN-1").await.unwrap();
         assert_eq!(rows.len(), 1);
         assert_eq!(rows[0].total, 3);

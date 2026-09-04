@@ -22,11 +22,21 @@ fn collect(e: &Expr, out: &mut Vec<(Vec<String>, Vec<Value>)>) {
                 collect(l, out);
                 collect(r, out);
             }
-            (BinOp::Lt | BinOp::Le | BinOp::Gt | BinOp::Ge | BinOp::Eq | BinOp::Ne, Expr::Path(p), Expr::Num(n)) | (BinOp::Lt | BinOp::Le | BinOp::Gt | BinOp::Ge | BinOp::Eq | BinOp::Ne, Expr::Num(n), Expr::Path(p)) => {
+            (
+                BinOp::Lt | BinOp::Le | BinOp::Gt | BinOp::Ge | BinOp::Eq | BinOp::Ne,
+                Expr::Path(p),
+                Expr::Num(n),
+            )
+            | (
+                BinOp::Lt | BinOp::Le | BinOp::Gt | BinOp::Ge | BinOp::Eq | BinOp::Ne,
+                Expr::Num(n),
+                Expr::Path(p),
+            ) => {
                 let step = if n.fract() == 0.0 { 1.0 } else { 0.01 };
                 out.push((p.clone(), vec![json!(n - step), json!(*n), json!(n + step)]));
             }
-            (BinOp::Eq | BinOp::Ne, Expr::Path(p), Expr::Str(s)) | (BinOp::Eq | BinOp::Ne, Expr::Str(s), Expr::Path(p)) => {
+            (BinOp::Eq | BinOp::Ne, Expr::Path(p), Expr::Str(s))
+            | (BinOp::Eq | BinOp::Ne, Expr::Str(s), Expr::Path(p)) => {
                 out.push((p.clone(), vec![json!(s), json!(format!("NOT_{s}"))]));
             }
             _ => {}
@@ -41,7 +51,9 @@ fn set_path(target: &mut Value, path: &[String], value: Value) -> bool {
     if path.is_empty() {
         return false;
     }
-    let Value::Object(map) = target else { return false };
+    let Value::Object(map) = target else {
+        return false;
+    };
     if path.len() == 1 {
         map.insert(path[0].clone(), value);
         return true;
@@ -84,11 +96,16 @@ impl AgentTask for BoundaryAgent {
         let behaviors = ctx.knowledge.behaviors_for(&ctx.function_id).await?;
         let bases: Vec<&BehaviorRecord> = behaviors.iter().take(2).collect();
         if bases.is_empty() {
-            return Ok(AgentResult::new("no base behaviors for boundary generation", json!({ "scenarios": 0 })));
+            return Ok(AgentResult::new(
+                "no base behaviors for boundary generation",
+                json!({ "scenarios": 0 }),
+            ));
         }
         let mut count = 0;
         for rule in &rules {
-            let Ok(cond) = amap_invariant::parse_expr(&rule.condition) else { continue };
+            let Ok(cond) = amap_invariant::parse_expr(&rule.condition) else {
+                continue;
+            };
             let sets = boundary_sets(&cond);
             if sets.is_empty() {
                 continue;
@@ -105,8 +122,30 @@ impl AgentTask for BoundaryAgent {
                     if applied == 0 {
                         continue;
                     }
+                    let scenario_id = format!(
+                        "TEST-BND-{}-{}-{:03}",
+                        rule.id.0.rsplit('-').next().unwrap_or("r"),
+                        bi,
+                        ci
+                    );
+                    // A run-scoped UNIQUE comparator must not be tripped merely because every
+                    // generated boundary case inherited the same idempotency key from its seed.
+                    // Preserve the value only when request_id itself is the tested boundary.
+                    let tests_request_id = combo.iter().any(|(path, _)| {
+                        path.len() == 1 && path.first().is_some_and(|part| part == "request_id")
+                    });
+                    if !tests_request_id {
+                        if let Some(object) = input.as_object_mut() {
+                            if object.contains_key("request_id") {
+                                object.insert(
+                                    "request_id".into(),
+                                    json!(format!("BND-{scenario_id}")),
+                                );
+                            }
+                        }
+                    }
                     let scenario = TestScenario {
-                        id: ScenarioId::new(format!("TEST-BND-{}-{}-{:03}", rule.id.0.rsplit('-').next().unwrap_or("r"), bi, ci)),
+                        id: ScenarioId::new(scenario_id),
                         function_id: ctx.function_id.clone(),
                         origin: ScenarioOrigin::Boundary,
                         rule_ids: vec![rule.id.clone()],
@@ -114,7 +153,9 @@ impl AgentTask for BoundaryAgent {
                         input,
                         expected_output: None,
                         expected_state_change: None,
-                        expected_events: vec![],
+                        expected_events: None,
+                        expected_external_calls: None,
+                        expected_timing_ms: None,
                         priority: rule.priority,
                         comparator_spec: ctx.config.default_spec.clone(),
                         behavior_id: None,
@@ -124,7 +165,10 @@ impl AgentTask for BoundaryAgent {
                 }
             }
         }
-        Ok(AgentResult::new(format!("generated {count} boundary scenarios"), json!({ "scenarios": count })))
+        Ok(AgentResult::new(
+            format!("generated {count} boundary scenarios"),
+            json!({ "scenarios": count }),
+        ))
     }
 }
 
@@ -133,7 +177,9 @@ mod tests {
     use super::*;
     #[test]
     fn boundaries_from_condition() {
-        let e = amap_invariant::parse_expr(r#"age >= 65 AND balance > 100000000 AND grade == "VIP""#).unwrap();
+        let e =
+            amap_invariant::parse_expr(r#"age >= 65 AND balance > 100000000 AND grade == "VIP""#)
+                .unwrap();
         let sets = boundary_sets(&e);
         assert_eq!(sets.len(), 3);
         assert_eq!(sets[0].1, vec![json!(64.0), json!(65.0), json!(66.0)]);

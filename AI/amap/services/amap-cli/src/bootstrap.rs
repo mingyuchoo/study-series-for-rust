@@ -5,7 +5,10 @@ use crate::settings::Settings;
 use amap_domain::*;
 use amap_evidence::EvidenceLake;
 use amap_knowledge::{InMemoryKnowledgeStore, KnowledgeStore};
-use amap_llm::{AnthropicProvider, Gateway, GatewayConfig, LlmClient, MockProvider, OpenAiProvider, Router, RouterConfig, TaskKind};
+use amap_llm::{
+    AnthropicProvider, Gateway, GatewayConfig, LlmClient, MockProvider, OpenAiProvider, Router,
+    RouterConfig, TaskKind,
+};
 use amap_orchestrator::{AgentContext, EventBus, InMemoryBus, RunConfig};
 use amap_policy::PolicyEngine;
 use serde_json::{json, Value};
@@ -30,7 +33,10 @@ pub struct PlatformBuilder {
 
 impl PlatformBuilder {
     pub fn new(settings: Settings) -> Self {
-        Self { settings, mock_fixtures: None }
+        Self {
+            settings,
+            mock_fixtures: None,
+        }
     }
     /// Use fixture-driven mock LLM answers (offline demo / CI).
     pub fn with_mock_fixtures(mut self, dir: Option<&Path>) -> Self {
@@ -52,7 +58,11 @@ impl PlatformBuilder {
                 Arc::new(InMemoryKnowledgeStore::new())
             }
         };
-        let lake = Arc::new(if s.lake.starts_with("s3://") { EvidenceLake::open_s3(&s.lake).await? } else { EvidenceLake::open_local(&s.lake).await? });
+        let lake = Arc::new(if s.lake.starts_with("s3://") {
+            EvidenceLake::open_s3(&s.lake).await?
+        } else {
+            EvidenceLake::open_local(&s.lake).await?
+        });
         let bus: Arc<dyn EventBus> = match &s.nats_url {
             Some(url) => match amap_orchestrator::NatsBus::connect(url, "amap").await {
                 Ok(b) => {
@@ -69,13 +79,31 @@ impl PlatformBuilder {
         let policy = Arc::new(PolicyEngine::default());
 
         let mut mock = false;
-        let (llm, gateway): (Arc<dyn LlmClient>, Option<Arc<Gateway>>) = if let Some(fixtures) = &self.mock_fixtures {
+        let (llm, gateway): (Arc<dyn LlmClient>, Option<Arc<Gateway>>) = if let Some(fixtures) =
+            &self.mock_fixtures
+        {
             mock = true;
-            let router = Router::new(RouterConfig::default()).with_provider(ModelProvider::Mock, Arc::new(mock_provider(fixtures)));
-            let gw = Arc::new(Gateway::new(router, GatewayConfig { run_token_budget: s.token_budget, ..Default::default() }));
+            let router = Router::new(RouterConfig::default())
+                .with_provider(ModelProvider::Mock, Arc::new(mock_provider(fixtures)));
+            let gw = Arc::new(Gateway::new(
+                router,
+                GatewayConfig {
+                    run_token_budget: s.token_budget,
+                    ..Default::default()
+                },
+            ));
             (gw.clone(), Some(gw))
         } else if let Some(url) = &s.llm_gateway_url {
-            (Arc::new(amap_llm::GatewayClient::new(url)), None)
+            if !s.insecure_dev && s.llm_gateway_token.is_none() {
+                anyhow::bail!("AMAP_LLM_GATEWAY_TOKEN is required for a remote LLM gateway");
+            }
+            (
+                Arc::new(
+                    amap_llm::GatewayClient::new(url)
+                        .with_bearer_token(s.llm_gateway_token.clone()),
+                ),
+                None,
+            )
         } else {
             let mut router = Router::new(RouterConfig::default());
             if let Some(p) = AnthropicProvider::from_env() {
@@ -88,34 +116,87 @@ impl PlatformBuilder {
                 anyhow::bail!("no LLM provider configured: set ANTHROPIC_API_KEY (and/or OPENAI_API_KEY + AMAP_OPENAI_MODEL), AMAP_LLM_GATEWAY_URL, or run with --mock");
             }
             tracing::info!(providers = ?router.configured(), "embedded LLM gateway");
-            let gw = Arc::new(Gateway::new(router, GatewayConfig { run_token_budget: s.token_budget, ..Default::default() }));
+            let gw = Arc::new(Gateway::new(
+                router,
+                GatewayConfig {
+                    run_token_budget: s.token_budget,
+                    ..Default::default()
+                },
+            ));
             (gw.clone(), Some(gw))
         };
-        Ok(Platform { settings: s, knowledge, lake, bus, policy, llm, gateway, mock })
+        Ok(Platform {
+            settings: s,
+            knowledge,
+            lake,
+            bus,
+            policy,
+            llm,
+            gateway,
+            mock,
+        })
     }
 }
 
 impl Platform {
     /// A platform view that shares stores / bus / lake but answers LLM calls from fixtures.
     pub fn with_mock_fixtures(&self, dir: Option<&Path>) -> Platform {
-        let router = Router::new(RouterConfig::default()).with_provider(ModelProvider::Mock, Arc::new(mock_provider(dir.unwrap_or(Path::new("")))));
-        let gw = Arc::new(Gateway::new(router, GatewayConfig { run_token_budget: self.settings.token_budget, ..Default::default() }));
-        Platform { settings: self.settings.clone(), knowledge: self.knowledge.clone(), lake: self.lake.clone(), bus: self.bus.clone(), policy: self.policy.clone(), llm: gw.clone(), gateway: Some(gw), mock: true }
+        let router = Router::new(RouterConfig::default()).with_provider(
+            ModelProvider::Mock,
+            Arc::new(mock_provider(dir.unwrap_or(Path::new("")))),
+        );
+        let gw = Arc::new(Gateway::new(
+            router,
+            GatewayConfig {
+                run_token_budget: self.settings.token_budget,
+                ..Default::default()
+            },
+        ));
+        Platform {
+            settings: self.settings.clone(),
+            knowledge: self.knowledge.clone(),
+            lake: self.lake.clone(),
+            bus: self.bus.clone(),
+            policy: self.policy.clone(),
+            llm: gw.clone(),
+            gateway: Some(gw),
+            mock: true,
+        }
     }
 
     /// Seed the knowledge store from a run spec and build the root agent context.
-    pub async fn context_for(&self, spec: &RunSpec, run_id: Option<String>) -> anyhow::Result<AgentContext> {
+    pub async fn context_for(
+        &self,
+        spec: &RunSpec,
+        run_id: Option<String>,
+    ) -> anyhow::Result<AgentContext> {
         let function = spec.function();
         self.knowledge.upsert_function(function.clone()).await?;
         for r in spec.requirements() {
-            self.knowledge.add_relationship(Relationship::new(r.id.0.clone(), RelationKind::RequirementToFunction, function.id.0.clone())).await?;
+            self.knowledge
+                .add_relationship(Relationship::new(
+                    r.id.0.clone(),
+                    RelationKind::RequirementToFunction,
+                    function.id.0.clone(),
+                ))
+                .await?;
             self.knowledge.upsert_requirement(r).await?;
         }
         let mut config: RunConfig = spec.run.clone();
         config.token_budget = self.settings.token_budget;
+        config.verifier_endpoint = self.settings.verifier_endpoint.clone();
+        config.verifier_token = self.settings.worker_token.clone();
+        config.verifier_tls_ca = self.settings.verifier_tls_ca.clone();
+        config.verifier_tls_cert = self.settings.verifier_tls_cert.clone();
+        config.verifier_tls_key = self.settings.verifier_tls_key.clone();
+        config.verifier_tls_domain = self.settings.verifier_tls_domain.clone();
+        config.verifier_allow_insecure = self.settings.insecure_dev;
+        config.verifier_artifact_max_bytes = self.settings.worker_artifact_max_bytes;
         std::fs::create_dir_all(&config.workspace)?;
         Ok(AgentContext {
-            run_id: RunId::new(run_id.unwrap_or_else(|| format!("RUN-{}", &uuid::Uuid::new_v4().to_string()[..8]))),
+            run_id: RunId::new(
+                run_id.unwrap_or_else(|| format!("RUN-{}", &uuid::Uuid::new_v4().to_string()[..8])),
+            ),
             function_id: function.id,
             knowledge: self.knowledge.clone(),
             llm: self.llm.clone(),
@@ -137,7 +218,8 @@ fn read_fixture(dir: &Path, name: &str) -> Option<Value> {
 /// (verify → RCA → fix → review → verify) runs offline exactly as it would with real models.
 pub fn mock_provider(dir: &Path) -> MockProvider {
     let d = dir.to_path_buf();
-    let read_code = |d: &Path, name: &str| std::fs::read_to_string(d.join(name)).unwrap_or_default();
+    let read_code =
+        |d: &Path, name: &str| std::fs::read_to_string(d.join(name)).unwrap_or_default();
     let d1 = d.clone();
     let d2 = d.clone();
     let d3 = d.clone();

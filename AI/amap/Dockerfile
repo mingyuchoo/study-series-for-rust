@@ -1,8 +1,7 @@
 FROM rust:1.98-bookworm AS build
-RUN apt-get update && apt-get install -y protobuf-compiler && rm -rf /var/lib/apt/lists/*
 WORKDIR /src
 COPY . .
-RUN cargo build --release --workspace
+RUN cargo build --release --workspace --locked
 
 FROM debian:bookworm-slim
 RUN apt-get update && apt-get install -y ca-certificates python3 && rm -rf /var/lib/apt/lists/*

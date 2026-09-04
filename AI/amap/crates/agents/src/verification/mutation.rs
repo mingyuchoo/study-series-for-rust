@@ -38,7 +38,12 @@ pub fn generate_mutants(workspace: &std::path::Path, cap: usize) -> Vec<Mutant> 
         .filter(|e| e.file_type().is_file())
         .filter_map(|e| {
             let rel = e.path().strip_prefix(workspace).ok()?.display().to_string();
-            if rel.starts_with(".amap") || !matches!(Language::from_path(&rel), Language::Python | Language::Java | Language::Rust) {
+            if rel.starts_with(".amap")
+                || !matches!(
+                    Language::from_path(&rel),
+                    Language::Python | Language::Java | Language::Rust
+                )
+            {
                 return None;
             }
             Some((rel, std::fs::read_to_string(e.path()).ok()?))
@@ -51,17 +56,29 @@ pub fn generate_mutants(workspace: &std::path::Path, cap: usize) -> Vec<Mutant> 
                 let abs = start + pos;
                 // skip comments
                 let line_start = text[..abs].rfind('\n').map(|i| i + 1).unwrap_or(0);
-                let line_end = text[abs..].find('\n').map(|i| abs + i).unwrap_or(text.len());
+                let line_end = text[abs..]
+                    .find('\n')
+                    .map(|i| abs + i)
+                    .unwrap_or(text.len());
                 let line = &text[line_start..line_end];
                 let trimmed = line.trim_start();
-                let is_doc = trimmed.starts_with('#') || trimmed.starts_with("//") || trimmed.starts_with("/*") || trimmed.starts_with('*') || line.contains("\"\"\"") || line.contains("'''");
+                let is_doc = trimmed.starts_with('#')
+                    || trimmed.starts_with("//")
+                    || trimmed.starts_with("/*")
+                    || trimmed.starts_with('*')
+                    || line.contains("\"\"\"")
+                    || line.contains("'''");
                 if !is_doc {
                     let mut mutated = String::with_capacity(text.len());
                     mutated.push_str(&text[..abs]);
                     mutated.push_str(to);
                     mutated.push_str(&text[abs + from.len()..]);
                     let line_no = text[..abs].matches('\n').count() + 1;
-                    mutants.push(Mutant { file: rel.clone(), description: format!("{rel}:{line_no} `{from}` → `{to}`"), content: mutated });
+                    mutants.push(Mutant {
+                        file: rel.clone(),
+                        description: format!("{rel}:{line_no} `{from}` → `{to}`"),
+                        content: mutated,
+                    });
                 }
                 start = abs + from.len();
             }
@@ -81,10 +98,21 @@ pub fn generate_mutants(workspace: &std::path::Path, cap: usize) -> Vec<Mutant> 
     mutants
 }
 
-pub async fn run(scenarios: &[TestScenario], cfg: &RunConfig, function_id: &FunctionId) -> Result<(Vec<VerificationResult>, Value), String> {
-    let with_expected: Vec<TestScenario> = scenarios.iter().filter(|s| s.expected_output.is_some()).cloned().collect();
+pub async fn run(
+    scenarios: &[TestScenario],
+    cfg: &RunConfig,
+    function_id: &FunctionId,
+) -> Result<(Vec<VerificationResult>, Value), String> {
+    let with_expected: Vec<TestScenario> = scenarios
+        .iter()
+        .filter(|s| s.expected_output.is_some())
+        .cloned()
+        .collect();
     if with_expected.is_empty() {
-        return Ok((vec![], json!({ "injected": 0, "detected": 0, "reason": "no scenarios with expectations" })));
+        return Ok((
+            vec![],
+            json!({ "injected": 0, "detected": 0, "reason": "no scenarios with expectations" }),
+        ));
     }
     let engine = build_engine(cfg)?;
     let mutants = generate_mutants(&cfg.workspace, cfg.max_mutants);
@@ -96,11 +124,24 @@ pub async fn run(scenarios: &[TestScenario], cfg: &RunConfig, function_id: &Func
         let dir = sandbox_root.join(format!("m{i}"));
         copy_workspace(&cfg.workspace, &dir).map_err(|e| e.to_string())?;
         std::fs::write(dir.join(&m.file), &m.content).map_err(|e| e.to_string())?;
-        let cmd: Vec<String> = cfg.next_command.iter().map(|c| c.replace("{workspace}", &dir.display().to_string())).collect();
+        let cmd: Vec<String> = cfg
+            .next_command
+            .iter()
+            .map(|c| c.replace("{workspace}", &dir.display().to_string()))
+            .collect();
         let (program, args) = cmd.split_first().ok_or("next_command empty")?;
         let args: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
         let sut = ProcessSystem::new("mutant", program, &args);
-        let res = engine.replay(&sut, None, &with_expected, VerificationKind::Mutation, &ExecOptions::default()).await.map_err(|e| e.to_string())?;
+        let res = engine
+            .replay(
+                &sut,
+                None,
+                &with_expected,
+                VerificationKind::Mutation,
+                &ExecOptions::default(),
+            )
+            .await
+            .map_err(|e| e.to_string())?;
         let mut detected = res.iter().any(|r| !r.passed);
         if !detected && cfg.concurrency_template.is_some() {
             // Concurrency semantics are part of the killable surface too.
@@ -129,7 +170,10 @@ pub async fn run(scenarios: &[TestScenario], cfg: &RunConfig, function_id: &Func
     }
     let _ = std::fs::remove_dir_all(&sandbox_root);
     let detected = results.iter().filter(|r| r.passed).count();
-    Ok((results, json!({ "injected": mutants.len(), "detected": detected, "survivors": survivors })))
+    Ok((
+        results,
+        json!({ "injected": mutants.len(), "detected": detected, "survivors": survivors }),
+    ))
 }
 
 fn copy_workspace(src: &std::path::Path, dst: &std::path::Path) -> std::io::Result<()> {

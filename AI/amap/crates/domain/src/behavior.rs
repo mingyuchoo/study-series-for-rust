@@ -39,8 +39,15 @@ pub struct TestScenario {
     pub expected_output: Option<Value>,
     #[serde(default)]
     pub expected_state_change: Option<Value>,
+    /// `None` means no event assertion; `Some([])` asserts that no events are emitted.
     #[serde(default)]
-    pub expected_events: Vec<Value>,
+    pub expected_events: Option<Vec<Value>>,
+    /// `None` means no outbound-call assertion; `Some([])` asserts that no calls are made.
+    #[serde(default)]
+    pub expected_external_calls: Option<Vec<Value>>,
+    /// Captured reference latency. Enforced only when the replay engine has a timing tolerance.
+    #[serde(default)]
+    pub expected_timing_ms: Option<u64>,
     #[serde(default)]
     pub priority: Priority,
     /// Name of the comparator spec (data-driven equivalence policy).

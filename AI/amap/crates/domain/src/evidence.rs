@@ -7,6 +7,12 @@ use serde_json::Value;
 /// A single evidence entry. "Done" is not evidence — this is.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct EvidenceRecord {
+    /// Immutable ledger identity.
+    #[serde(default)]
+    pub evidence_id: String,
+    /// SHA-256 of the producing verification result.
+    #[serde(default)]
+    pub content_hash: String,
     pub run_id: RunId,
     pub function_id: FunctionId,
     pub kind: VerificationKind,

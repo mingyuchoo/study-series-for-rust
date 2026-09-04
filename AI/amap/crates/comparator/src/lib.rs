@@ -30,7 +30,12 @@ pub struct ComparisonContext<'a> {
 pub trait Comparator: Send + Sync {
     fn name(&self) -> &str;
     /// Returns `None` when equal, or a difference message when not.
-    fn compare(&self, expected: &Value, actual: &Value, ctx: &ComparisonContext<'_>) -> Option<String>;
+    fn compare(
+        &self,
+        expected: &Value,
+        actual: &Value,
+        ctx: &ComparisonContext<'_>,
+    ) -> Option<String>;
 }
 
 #[derive(Debug, thiserror::Error)]

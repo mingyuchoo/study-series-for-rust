@@ -42,11 +42,23 @@ macro_rules! typed_id {
 typed_id!(RequirementId, "REQ", "Requirement identifier (REQ-1203).");
 typed_id!(FunctionId, "FN", "Business function identifier (FN-01882).");
 typed_id!(RuleId, "BR", "Business rule identifier (BR-LOAN-000183).");
-typed_id!(BehaviorId, "BH", "Production behavior record identifier (BH-92182012).");
+typed_id!(
+    BehaviorId,
+    "BH",
+    "Production behavior record identifier (BH-92182012)."
+);
 typed_id!(ScenarioId, "TEST", "Test scenario identifier (TEST-88291).");
 typed_id!(InterfaceId, "IF", "Interface identifier (IF-238).");
-typed_id!(SourceUnitId, "SRC", "Source unit identifier (file / paragraph / method).");
-typed_id!(DbEntityId, "DB", "Database entity identifier (table / column).");
+typed_id!(
+    SourceUnitId,
+    "SRC",
+    "Source unit identifier (file / paragraph / method)."
+);
+typed_id!(
+    DbEntityId,
+    "DB",
+    "Database entity identifier (table / column)."
+);
 typed_id!(RunId, "RUN", "Orchestration run identifier.");
 typed_id!(DecisionId, "ADR", "Architecture decision identifier.");
 
@@ -60,7 +72,11 @@ pub struct SourceLocation {
 
 impl SourceLocation {
     pub fn new(file: impl Into<String>, start_line: u32, end_line: u32) -> Self {
-        Self { file: file.into(), start_line, end_line }
+        Self {
+            file: file.into(),
+            start_line,
+            end_line,
+        }
     }
 }
 
@@ -71,7 +87,9 @@ impl fmt::Display for SourceLocation {
 }
 
 /// Business priority. P0 must be 100% equivalent; P1 ≥ 99.999%.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
+#[derive(
+    Clone, Copy, Debug, Default, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize,
+)]
 pub enum Priority {
     P0,
     P1,

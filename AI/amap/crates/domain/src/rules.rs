@@ -43,6 +43,9 @@ pub struct BusinessRule {
     pub sources: Vec<SourceLocation>,
     pub db_entities: Vec<DbEntityId>,
     pub interfaces: Vec<InterfaceId>,
+    /// Requirements explicitly supported by this rule. Empty means untraced, never implicitly covered.
+    #[serde(default)]
+    pub requirement_ids: Vec<RequirementId>,
     pub observed_production_cases: u64,
     pub evidence: EvidenceSources,
     /// Deterministic confidence (never the LLM's self-reported number).
@@ -82,6 +85,9 @@ pub enum Language {
     Python,
     Sql,
     Rust,
+    Javascript,
+    Csharp,
+    Jcl,
     Other,
 }
 
@@ -98,6 +104,16 @@ impl Language {
             Language::Sql
         } else if lower.ends_with(".rs") {
             Language::Rust
+        } else if lower.ends_with(".js")
+            || lower.ends_with(".jsx")
+            || lower.ends_with(".ts")
+            || lower.ends_with(".tsx")
+        {
+            Language::Javascript
+        } else if lower.ends_with(".cs") {
+            Language::Csharp
+        } else if lower.ends_with(".jcl") {
+            Language::Jcl
         } else {
             Language::Other
         }
@@ -118,6 +134,8 @@ pub enum EntityKind {
     Interface,
     Batch,
     Copybook,
+    Procedure,
+    Job,
 }
 
 /// Canonical code entity produced by the source analysis engine.
@@ -157,6 +175,7 @@ pub struct InterfaceSpec {
 #[serde(rename_all = "snake_case")]
 pub enum RelationKind {
     RequirementToFunction,
+    RequirementToRule,
     FunctionToRule,
     RuleToSource,
     RuleToDb,
@@ -179,7 +198,11 @@ pub struct Relationship {
 
 impl Relationship {
     pub fn new(from: impl Into<String>, kind: RelationKind, to: impl Into<String>) -> Self {
-        Self { from: from.into(), to: to.into(), kind }
+        Self {
+            from: from.into(),
+            to: to.into(),
+            kind,
+        }
     }
 }
 

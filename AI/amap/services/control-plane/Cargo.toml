@@ -3,6 +3,7 @@ name = "control-plane"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+rust-version.workspace = true
 
 [dependencies]
 amap-domain.workspace = true
@@ -22,3 +23,4 @@ tokio.workspace = true
 tracing.workspace = true
 uuid.workspace = true
 chrono.workspace = true
+subtle.workspace = true

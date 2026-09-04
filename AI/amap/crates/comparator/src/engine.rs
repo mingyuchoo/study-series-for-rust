@@ -54,10 +54,30 @@ impl ComparisonEngine {
     }
 
     /// Compare `expected` (legacy) with `actual` (next) under `spec`.
-    pub fn compare(&self, spec: &ComparatorSpec, expected: &Value, actual: &Value) -> Result<ComparisonResult, ComparatorError> {
+    pub fn compare(
+        &self,
+        spec: &ComparatorSpec,
+        expected: &Value,
+        actual: &Value,
+    ) -> Result<ComparisonResult, ComparatorError> {
         let seen = Mutex::new(HashSet::new());
-        let mut result = ComparisonResult { equal: true, differences: Vec::new(), fields_compared: 0 };
-        self.walk(spec, "", expected, actual, &seen, &mut result)?;
+        self.compare_with_seen(spec, expected, actual, &seen)
+    }
+
+    /// Compare while retaining run-scoped uniqueness state across scenarios and documents.
+    pub fn compare_with_seen(
+        &self,
+        spec: &ComparatorSpec,
+        expected: &Value,
+        actual: &Value,
+        seen: &Mutex<HashSet<String>>,
+    ) -> Result<ComparisonResult, ComparatorError> {
+        let mut result = ComparisonResult {
+            equal: true,
+            differences: Vec::new(),
+            fields_compared: 0,
+        };
+        self.walk(spec, "", expected, actual, seen, &mut result)?;
         result.equal = result.differences.is_empty();
         Ok(result)
     }
@@ -71,7 +91,10 @@ impl ComparisonEngine {
         seen: &Mutex<HashSet<String>>,
         out: &mut ComparisonResult,
     ) -> Result<(), ComparatorError> {
-        let default_rule = FieldRule { comparator: spec.default, ..FieldRule::exact() };
+        let default_rule = FieldRule {
+            comparator: spec.default,
+            ..FieldRule::exact()
+        };
         let rule = spec.rule_for(path).unwrap_or(&default_rule);
 
         // Exact rules descend structurally so nested rules still apply.
@@ -83,17 +106,33 @@ impl ComparisonEngine {
                     keys.sort();
                     keys.dedup();
                     for k in keys {
-                        let child = if path.is_empty() { k.clone() } else { format!("{path}.{k}") };
+                        let child = if path.is_empty() {
+                            k.clone()
+                        } else {
+                            format!("{path}.{k}")
+                        };
                         match (e.get(k), a.get(k)) {
                             (Some(ev), Some(av)) => self.walk(spec, &child, ev, av, seen, out)?,
                             (Some(ev), None) => {
                                 if !self.is_ignored(spec, &child) {
-                                    out.differences.push(diff(&child, ev.clone(), Value::Null, "exact", "missing in actual"));
+                                    out.differences.push(diff(
+                                        &child,
+                                        ev.clone(),
+                                        Value::Null,
+                                        "exact",
+                                        "missing in actual",
+                                    ));
                                 }
                             }
                             (None, Some(av)) => {
                                 if !self.is_ignored(spec, &child) {
-                                    out.differences.push(diff(&child, Value::Null, av.clone(), "exact", "unexpected in actual"));
+                                    out.differences.push(diff(
+                                        &child,
+                                        Value::Null,
+                                        av.clone(),
+                                        "exact",
+                                        "unexpected in actual",
+                                    ));
                                 }
                             }
                             (None, None) => {}
@@ -103,7 +142,13 @@ impl ComparisonEngine {
                 }
                 (Value::Array(e), Value::Array(a)) => {
                     if e.len() != a.len() {
-                        out.differences.push(diff(path, expected.clone(), actual.clone(), "exact", &format!("array length {} vs {}", e.len(), a.len())));
+                        out.differences.push(diff(
+                            path,
+                            expected.clone(),
+                            actual.clone(),
+                            "exact",
+                            &format!("array length {} vs {}", e.len(), a.len()),
+                        ));
                         return Ok(());
                     }
                     for (i, (ev, av)) in e.iter().zip(a).enumerate() {
@@ -117,7 +162,11 @@ impl ComparisonEngine {
         }
 
         out.fields_compared += 1;
-        let ctx = ComparisonContext { path, rule, seen_unique: seen };
+        let ctx = ComparisonContext {
+            path,
+            rule,
+            seen_unique: seen,
+        };
         let comparator: &dyn Comparator = match rule.comparator {
             ComparatorKind::Exact => &self.exact,
             ComparatorKind::Numeric => &self.numeric,
@@ -127,22 +176,39 @@ impl ComparisonEngine {
             ComparatorKind::Ignore => &self.ignore,
             ComparatorKind::Plugin => {
                 let name = rule.plugin.as_deref().unwrap_or_default();
-                self.plugins.get(name).map(|c| c.as_ref()).ok_or_else(|| ComparatorError::Unknown(name.to_string()))?
+                self.plugins
+                    .get(name)
+                    .map(|c| c.as_ref())
+                    .ok_or_else(|| ComparatorError::Unknown(name.to_string()))?
             }
         };
         if let Some(msg) = comparator.compare(expected, actual, &ctx) {
-            out.differences.push(diff(path, expected.clone(), actual.clone(), comparator.name(), &msg));
+            out.differences.push(diff(
+                path,
+                expected.clone(),
+                actual.clone(),
+                comparator.name(),
+                &msg,
+            ));
         }
         Ok(())
     }
 
     fn is_ignored(&self, spec: &ComparatorSpec, path: &str) -> bool {
-        spec.rule_for(path).map(|r| r.comparator == ComparatorKind::Ignore).unwrap_or(false)
+        spec.rule_for(path)
+            .map(|r| r.comparator == ComparatorKind::Ignore)
+            .unwrap_or(false)
     }
 }
 
 fn diff(path: &str, expected: Value, actual: Value, comparator: &str, message: &str) -> Difference {
-    Difference { path: path.to_string(), expected, actual, comparator: comparator.to_string(), message: message.to_string() }
+    Difference {
+        path: path.to_string(),
+        expected,
+        actual,
+        comparator: comparator.to_string(),
+        message: message.to_string(),
+    }
 }
 
 #[cfg(test)]

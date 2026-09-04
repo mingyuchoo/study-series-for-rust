@@ -18,6 +18,15 @@ message VerifyRequest {
   bytes scenarios_json = 4;
   // JSON RunConfig (paths, commands, specs)
   bytes config_json = 5;
+  // Self-contained source/workspace/support snapshot; workers never rely on control-plane paths.
+  repeated Artifact artifacts = 6;
+}
+
+message Artifact {
+  string root = 1;
+  string path = 2;
+  string original_path = 3;
+  bytes data = 4;
 }
 
 message VerifyResponse {

@@ -17,12 +17,22 @@ pub struct MockProvider {
 
 impl MockProvider {
     pub fn new() -> Self {
-        Self { label: "mock".into(), ..Default::default() }
+        Self {
+            label: "mock".into(),
+            ..Default::default()
+        }
     }
     pub fn labelled(label: &str) -> Self {
-        Self { label: label.into(), ..Default::default() }
+        Self {
+            label: label.into(),
+            ..Default::default()
+        }
     }
-    pub fn on(self, task: TaskKind, f: impl Fn(&LlmRequest) -> Value + Send + Sync + 'static) -> Self {
+    pub fn on(
+        self,
+        task: TaskKind,
+        f: impl Fn(&LlmRequest) -> Value + Send + Sync + 'static,
+    ) -> Self {
         self.handlers.lock().unwrap().insert(task, Arc::new(f));
         self
     }

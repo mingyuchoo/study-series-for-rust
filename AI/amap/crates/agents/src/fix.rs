@@ -28,15 +28,36 @@ impl AgentTask for FixAgent {
         if root.is_null() {
             return Ok(AgentResult::new("nothing to fix", json!({ "patch": null })));
         }
-        ctx.authorize(&Principal::agent("fix"), "patch", &ctx.function_id.0, &ActionContext::default())?;
+        ctx.authorize(
+            &Principal::agent("fix"),
+            "patch",
+            &ctx.function_id.0,
+            &ActionContext::default(),
+        )?;
         let files = workspace_files(&ctx.config.workspace);
-        let src: String = files.iter().map(|f| format!("### {}\n```\n{}\n```", f.path, f.content)).collect::<Vec<_>>().join("\n");
+        let src: String = files
+            .iter()
+            .map(|f| format!("### {}\n```\n{}\n```", f.path, f.content))
+            .collect::<Vec<_>>()
+            .join("\n");
         let rules = ctx.knowledge.rules_for(&ctx.function_id).await?;
-        let rule_text: String = rules.iter().map(|r| format!("- {} WHEN {} THEN {}", r.id, r.condition, r.result)).collect::<Vec<_>>().join("\n");
-        let prompt = format!("## Root cause hypothesis\n{}\n\n## Business rules\n{}\n\n## Current source\n{}\n", serde_json::to_string_pretty(&root).unwrap(), rule_text, src);
-        let req = LlmRequest::new(TaskKind::PatchGeneration, AgentRole::Fix, "", prompt).with_run(ctx.run_id.0.clone());
+        let rule_text: String = rules
+            .iter()
+            .map(|r| format!("- {} WHEN {} THEN {}", r.id, r.condition, r.result))
+            .collect::<Vec<_>>()
+            .join("\n");
+        let prompt = format!(
+            "## Root cause hypothesis\n{}\n\n## Business rules\n{}\n\n## Current source\n{}\n",
+            serde_json::to_string_pretty(&root).unwrap(),
+            rule_text,
+            src
+        );
+        let req = LlmRequest::new(TaskKind::PatchGeneration, AgentRole::Fix, "", prompt)
+            .with_run(ctx.run_id.0.clone());
         let resp = ctx.llm.complete(req).await?;
-        let j = resp.json.ok_or_else(|| OrchestrationError::agent("fix", "no structured output"))?;
+        let j = resp
+            .json
+            .ok_or_else(|| OrchestrationError::agent("fix", "no structured output"))?;
         let changes = files_from_json(&j["files"]);
         if changes.is_empty() {
             return Err(OrchestrationError::agent("fix", "empty patch"));
@@ -45,8 +66,24 @@ impl AgentTask for FixAgent {
         let _ = std::fs::remove_dir_all(&staging);
         std::fs::create_dir_all(&staging).map_err(|e| OrchestrationError::Other(e.to_string()))?;
         write_files(&staging, &changes)?;
-        let patch = Patch { function_id: ctx.function_id.clone(), rationale: j["rationale"].as_str().unwrap_or("").to_string(), changes: changes.clone(), author_agent: "fix".into() };
-        ctx.emit("repair.staged", json!({ "files": changes.iter().map(|c| c.path.clone()).collect::<Vec<_>>() })).await;
-        Ok(AgentResult::new(format!("staged patch touching {} file(s): {}", changes.len(), patch.rationale), json!({ "patch": patch, "provider": resp.provider })))
+        let patch = Patch {
+            function_id: ctx.function_id.clone(),
+            rationale: j["rationale"].as_str().unwrap_or("").to_string(),
+            changes: changes.clone(),
+            author_agent: "fix".into(),
+        };
+        ctx.emit(
+            "repair.staged",
+            json!({ "files": changes.iter().map(|c| c.path.clone()).collect::<Vec<_>>() }),
+        )
+        .await;
+        Ok(AgentResult::new(
+            format!(
+                "staged patch touching {} file(s): {}",
+                changes.len(),
+                patch.rationale
+            ),
+            json!({ "patch": patch, "provider": resp.provider }),
+        ))
     }
 }

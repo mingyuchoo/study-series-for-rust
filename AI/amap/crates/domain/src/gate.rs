@@ -3,7 +3,9 @@ use serde::{Deserialize, Serialize};
 
 /// Final quality gate thresholds (design §23). All must hold; Unexplained Difference = 0 is absolute.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
 pub struct QualityGateThresholds {
+    pub requirements_coverage: f64,
     pub critical_rule_coverage: f64,
     pub p0_functional_equivalence: f64,
     pub p1_functional_equivalence: f64,
@@ -19,6 +21,7 @@ pub struct QualityGateThresholds {
 impl Default for QualityGateThresholds {
     fn default() -> Self {
         Self {
+            requirements_coverage: 1.0,
             critical_rule_coverage: 1.0,
             p0_functional_equivalence: 1.0,
             p1_functional_equivalence: 0.99999,
@@ -63,7 +66,7 @@ pub struct EquivalenceMetrics {
 
 fn ratio(n: u64, d: u64) -> f64 {
     if d == 0 {
-        1.0
+        0.0
     } else {
         n as f64 / d as f64
     }
@@ -77,30 +80,85 @@ pub fn evaluate_gate(
 ) -> GateReport {
     let mut checks = Vec::new();
     let mut push = |kpi: &str, required: String, actual: String, passed: bool| {
-        checks.push(GateCheck { kpi: kpi.to_string(), required, actual, passed });
+        checks.push(GateCheck {
+            kpi: kpi.to_string(),
+            required,
+            actual,
+            passed,
+        });
     };
     let pct = |v: f64| format!("{:.4}%", v * 100.0);
 
+    let requirements = ratio(cert.requirements_covered, cert.requirements_total);
+    push(
+        "Requirement Coverage",
+        pct(t.requirements_coverage),
+        pct(requirements),
+        requirements >= t.requirements_coverage,
+    );
+
+    push(
+        "Implementation Present",
+        "true".into(),
+        cert.implemented.to_string(),
+        cert.implemented,
+    );
+
     let crit = ratio(cert.critical_rules_covered, cert.critical_rules_total);
-    push("Critical Business Rule Coverage", pct(t.critical_rule_coverage), pct(crit), crit >= t.critical_rule_coverage);
+    push(
+        "Critical Business Rule Coverage",
+        pct(t.critical_rule_coverage),
+        pct(crit),
+        crit >= t.critical_rule_coverage,
+    );
 
     let p0 = ratio(eq.p0_passed, eq.p0_total);
-    push("P0 Functional Equivalence", pct(t.p0_functional_equivalence), pct(p0), p0 >= t.p0_functional_equivalence);
+    push(
+        "P0 Functional Equivalence",
+        pct(t.p0_functional_equivalence),
+        pct(p0),
+        p0 >= t.p0_functional_equivalence,
+    );
 
     let p1 = ratio(eq.p1_passed, eq.p1_total);
-    push("P1 Functional Equivalence", pct(t.p1_functional_equivalence), pct(p1), p1 >= t.p1_functional_equivalence);
+    push(
+        "P1 Functional Equivalence",
+        pct(t.p1_functional_equivalence),
+        pct(p1),
+        p1 >= t.p1_functional_equivalence,
+    );
 
     let all = ratio(eq.all_passed, eq.all_total);
-    push("Functional Equivalence", pct(t.overall_functional_equivalence), pct(all), all >= t.overall_functional_equivalence);
+    push(
+        "Functional Equivalence",
+        pct(t.overall_functional_equivalence),
+        pct(all),
+        all >= t.overall_functional_equivalence,
+    );
 
     let bcov = ratio(eq.behaviors_covered, eq.behaviors_total);
-    push("Production Behavior Coverage", pct(t.production_behavior_coverage), pct(bcov), bcov >= t.production_behavior_coverage);
+    push(
+        "Production Behavior Coverage",
+        pct(t.production_behavior_coverage),
+        pct(bcov),
+        bcov >= t.production_behavior_coverage,
+    );
 
     let rcov = ratio(cert.rules_covered, cert.rules_total);
-    push("Business Rule Coverage", pct(t.business_rule_coverage), pct(rcov), rcov >= t.business_rule_coverage);
+    push(
+        "Business Rule Coverage",
+        pct(t.business_rule_coverage),
+        pct(rcov),
+        rcov >= t.business_rule_coverage,
+    );
 
     let ms = cert.mutation_score();
-    push("Mutation Detection", pct(t.mutation_detection), pct(ms), ms >= t.mutation_detection);
+    push(
+        "Mutation Detection",
+        pct(t.mutation_detection),
+        pct(ms),
+        ms >= t.mutation_detection,
+    );
 
     push(
         "Unexplained Difference",
@@ -110,7 +168,12 @@ pub fn evaluate_gate(
     );
 
     let defects = cert.p0_defects_open + cert.p1_defects_open;
-    push("P0/P1 unresolved defect", t.max_open_p0_p1_defects.to_string(), defects.to_string(), defects <= t.max_open_p0_p1_defects);
+    push(
+        "P0/P1 unresolved defect",
+        t.max_open_p0_p1_defects.to_string(),
+        defects.to_string(),
+        defects <= t.max_open_p0_p1_defects,
+    );
 
     push(
         "Residual Uncertainty",
@@ -120,7 +183,11 @@ pub fn evaluate_gate(
     );
 
     let certified = cert.implemented && checks.iter().all(|c| c.passed);
-    GateReport { function_id: cert.function_id.clone(), certified, checks }
+    GateReport {
+        function_id: cert.function_id.clone(),
+        certified,
+        checks,
+    }
 }
 
 #[cfg(test)]
@@ -132,6 +199,8 @@ mod tests {
         let cert = FunctionCertificate {
             function_id: "FN-1".into(),
             implemented: true,
+            requirements_total: 1,
+            requirements_covered: 1,
             rules_total: 10,
             rules_covered: 10,
             critical_rules_total: 3,
@@ -141,9 +210,37 @@ mod tests {
             unexplained_differences: 1,
             ..Default::default()
         };
-        let eq = EquivalenceMetrics { all_total: 10, all_passed: 10, ..Default::default() };
+        let eq = EquivalenceMetrics {
+            all_total: 10,
+            all_passed: 10,
+            p0_total: 1,
+            p0_passed: 1,
+            p1_total: 1,
+            p1_passed: 1,
+            behaviors_total: 1,
+            behaviors_covered: 1,
+        };
         let report = evaluate_gate(&cert, &eq, &QualityGateThresholds::default());
         assert!(!report.certified);
-        assert!(report.checks.iter().any(|c| c.kpi == "Unexplained Difference" && !c.passed));
+        assert!(report
+            .checks
+            .iter()
+            .any(|c| c.kpi == "Unexplained Difference" && !c.passed));
+    }
+
+    #[test]
+    fn gate_fails_closed_when_evidence_is_missing() {
+        let cert = FunctionCertificate {
+            function_id: "FN-EMPTY".into(),
+            implemented: true,
+            ..Default::default()
+        };
+        let report = evaluate_gate(
+            &cert,
+            &EquivalenceMetrics::default(),
+            &QualityGateThresholds::default(),
+        );
+        assert!(!report.certified);
+        assert!(report.checks.iter().any(|c| !c.passed));
     }
 }

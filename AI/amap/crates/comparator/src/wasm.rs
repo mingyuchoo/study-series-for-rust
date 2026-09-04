@@ -26,7 +26,10 @@ pub struct WasmComparator {
 }
 
 impl WasmComparator {
-    pub fn from_file(name: impl Into<String>, path: impl AsRef<Path>) -> Result<Self, ComparatorError> {
+    pub fn from_file(
+        name: impl Into<String>,
+        path: impl AsRef<Path>,
+    ) -> Result<Self, ComparatorError> {
         let bytes = std::fs::read(path)?;
         Self::from_bytes(name, &bytes)
     }
@@ -35,8 +38,15 @@ impl WasmComparator {
         let mut config = Config::new();
         config.consume_fuel(true);
         let engine = Engine::new(&config).map_err(|e| ComparatorError::Plugin(e.to_string()))?;
-        let module = Module::new(&engine, bytes).map_err(|e| ComparatorError::Plugin(e.to_string()))?;
-        Ok(Self { name: name.into(), engine, module, fuel: 50_000_000, lock: Mutex::new(()) })
+        let module =
+            Module::new(&engine, bytes).map_err(|e| ComparatorError::Plugin(e.to_string()))?;
+        Ok(Self {
+            name: name.into(),
+            engine,
+            module,
+            fuel: 50_000_000,
+            lock: Mutex::new(()),
+        })
     }
 
     pub fn with_fuel(mut self, fuel: u64) -> Self {
@@ -47,19 +57,35 @@ impl WasmComparator {
     fn call(&self, expected: &Value, actual: &Value) -> Result<(i32, String), ComparatorError> {
         let _guard = self.lock.lock().unwrap();
         let mut store = Store::new(&self.engine, ());
-        store.set_fuel(self.fuel).map_err(|e| ComparatorError::Plugin(e.to_string()))?;
-        let instance = Instance::new(&mut store, &self.module, &[]).map_err(|e| ComparatorError::Plugin(e.to_string()))?;
-        let memory = instance.get_memory(&mut store, "memory").ok_or_else(|| ComparatorError::Plugin("no exported memory".into()))?;
-        let alloc: TypedFunc<i32, i32> = instance.get_typed_func(&mut store, "alloc").map_err(|e| ComparatorError::Plugin(e.to_string()))?;
-        let compare: TypedFunc<(i32, i32, i32, i32), i32> =
-            instance.get_typed_func(&mut store, "compare").map_err(|e| ComparatorError::Plugin(e.to_string()))?;
+        store
+            .set_fuel(self.fuel)
+            .map_err(|e| ComparatorError::Plugin(e.to_string()))?;
+        let instance = Instance::new(&mut store, &self.module, &[])
+            .map_err(|e| ComparatorError::Plugin(e.to_string()))?;
+        let memory = instance
+            .get_memory(&mut store, "memory")
+            .ok_or_else(|| ComparatorError::Plugin("no exported memory".into()))?;
+        let alloc: TypedFunc<i32, i32> = instance
+            .get_typed_func(&mut store, "alloc")
+            .map_err(|e| ComparatorError::Plugin(e.to_string()))?;
+        let compare: TypedFunc<(i32, i32, i32, i32), i32> = instance
+            .get_typed_func(&mut store, "compare")
+            .map_err(|e| ComparatorError::Plugin(e.to_string()))?;
 
         let e = serde_json::to_vec(expected).unwrap();
         let a = serde_json::to_vec(actual).unwrap();
-        let ep = alloc.call(&mut store, e.len() as i32).map_err(|e| ComparatorError::Plugin(e.to_string()))?;
-        memory.write(&mut store, ep as usize, &e).map_err(|e| ComparatorError::Plugin(e.to_string()))?;
-        let ap = alloc.call(&mut store, a.len() as i32).map_err(|e| ComparatorError::Plugin(e.to_string()))?;
-        memory.write(&mut store, ap as usize, &a).map_err(|e| ComparatorError::Plugin(e.to_string()))?;
+        let ep = alloc
+            .call(&mut store, e.len() as i32)
+            .map_err(|e| ComparatorError::Plugin(e.to_string()))?;
+        memory
+            .write(&mut store, ep as usize, &e)
+            .map_err(|e| ComparatorError::Plugin(e.to_string()))?;
+        let ap = alloc
+            .call(&mut store, a.len() as i32)
+            .map_err(|e| ComparatorError::Plugin(e.to_string()))?;
+        memory
+            .write(&mut store, ap as usize, &a)
+            .map_err(|e| ComparatorError::Plugin(e.to_string()))?;
 
         let code = compare
             .call(&mut store, (ep, e.len() as i32, ap, a.len() as i32))
@@ -87,10 +113,19 @@ impl Comparator for WasmComparator {
     fn name(&self) -> &str {
         &self.name
     }
-    fn compare(&self, expected: &Value, actual: &Value, _: &ComparisonContext<'_>) -> Option<String> {
+    fn compare(
+        &self,
+        expected: &Value,
+        actual: &Value,
+        _: &ComparisonContext<'_>,
+    ) -> Option<String> {
         match self.call(expected, actual) {
             Ok((0, _)) => None,
-            Ok((1, msg)) => Some(if msg.is_empty() { "plugin reported difference".into() } else { msg }),
+            Ok((1, msg)) => Some(if msg.is_empty() {
+                "plugin reported difference".into()
+            } else {
+                msg
+            }),
             Ok((code, msg)) => Some(format!("plugin error {code}: {msg}")),
             Err(e) => Some(e.to_string()),
         }
@@ -122,8 +157,16 @@ mod tests {
         let cmp = WasmComparator::from_bytes("len", WAT.as_bytes()).unwrap();
         let seen = Mutex::new(HashSet::new());
         let rule = FieldRule::exact();
-        let ctx = ComparisonContext { path: "x", rule: &rule, seen_unique: &seen };
-        assert!(cmp.compare(&serde_json::json!(12), &serde_json::json!(34), &ctx).is_none());
-        assert!(cmp.compare(&serde_json::json!(12), &serde_json::json!(345), &ctx).is_some());
+        let ctx = ComparisonContext {
+            path: "x",
+            rule: &rule,
+            seen_unique: &seen,
+        };
+        assert!(cmp
+            .compare(&serde_json::json!(12), &serde_json::json!(34), &ctx)
+            .is_none());
+        assert!(cmp
+            .compare(&serde_json::json!(12), &serde_json::json!(345), &ctx)
+            .is_some());
     }
 }

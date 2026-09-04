@@ -3,11 +3,11 @@ use crate::ReplayError;
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::path::PathBuf;
 use std::process::Stdio;
 use std::time::{Duration, Instant};
-use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
 use tokio::process::Command;
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
@@ -78,7 +78,14 @@ pub struct ProcessSystem {
 
 impl ProcessSystem {
     pub fn new(name: &str, program: &str, args: &[&str]) -> Self {
-        Self { name: name.into(), program: program.into(), args: args.iter().map(|s| s.to_string()).collect(), workdir: None, env: HashMap::new(), timeout: Duration::from_secs(120) }
+        Self {
+            name: name.into(),
+            program: program.into(),
+            args: args.iter().map(|s| s.to_string()).collect(),
+            workdir: None,
+            env: HashMap::new(),
+            timeout: Duration::from_secs(120),
+        }
     }
     pub fn with_workdir(mut self, d: impl Into<PathBuf>) -> Self {
         self.workdir = Some(d.into());
@@ -96,21 +103,31 @@ impl SystemUnderTest for ProcessSystem {
         &self.name
     }
     async fn execute(&self, case: &ReplayCase) -> Result<Execution, ReplayError> {
-        self.execute_batch(std::slice::from_ref(case)).await.pop().unwrap()
+        self.execute_batch(std::slice::from_ref(case))
+            .await
+            .pop()
+            .unwrap()
     }
     async fn execute_batch(&self, cases: &[ReplayCase]) -> Vec<Result<Execution, ReplayError>> {
         let run = async {
             let mut cmd = Command::new(&self.program);
-            cmd.args(&self.args).stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped()).kill_on_drop(true);
+            cmd.args(&self.args)
+                .stdin(Stdio::piped())
+                .stdout(Stdio::piped())
+                .stderr(Stdio::piped())
+                .kill_on_drop(true);
             if let Some(d) = &self.workdir {
                 cmd.current_dir(d);
             }
             for (k, v) in &self.env {
                 cmd.env(k, v);
             }
-            let mut child = cmd.spawn().map_err(|e| ReplayError::Sut(format!("spawn {}: {e}", self.program)))?;
+            let mut child = cmd
+                .spawn()
+                .map_err(|e| ReplayError::Sut(format!("spawn {}: {e}", self.program)))?;
             let mut stdin = child.stdin.take().unwrap();
             let stdout = child.stdout.take().unwrap();
+            let stderr = child.stderr.take().unwrap();
             let mut payload = String::new();
             for c in cases {
                 payload.push_str(&serde_json::to_string(c).unwrap());
@@ -120,37 +137,87 @@ impl SystemUnderTest for ProcessSystem {
                 let _ = stdin.write_all(payload.as_bytes()).await;
                 let _ = stdin.shutdown().await;
             });
+            let stderr_reader = tokio::spawn(async move {
+                let mut bytes = Vec::new();
+                let _ = stderr.take(64 * 1024).read_to_end(&mut bytes).await;
+                String::from_utf8_lossy(&bytes).trim().to_string()
+            });
             let mut lines = BufReader::new(stdout).lines();
-            let mut outputs: Vec<Result<Execution, ReplayError>> = Vec::with_capacity(cases.len());
+            let mut outputs_by_id: HashMap<String, Result<Execution, ReplayError>> = HashMap::new();
+            let mut sequential: VecDeque<Result<Execution, ReplayError>> = VecDeque::new();
             let started = Instant::now();
             while let Ok(Some(line)) = lines.next_line().await {
                 if line.trim().is_empty() {
                     continue;
                 }
                 match serde_json::from_str::<Value>(&line) {
-                    Ok(v) if v.get("error").is_some() => outputs.push(Err(ReplayError::Sut(v["error"].to_string()))),
-                    Ok(v) => {
-                        let mut e: Execution = serde_json::from_value(v).unwrap_or_default();
-                        e.duration_ms = started.elapsed().as_millis() as u64 / cases.len().max(1) as u64;
-                        outputs.push(Ok(e));
+                    Ok(v) if v.get("error").is_some() => {
+                        let error = Err(ReplayError::Sut(
+                            v["error"]
+                                .as_str()
+                                .map(str::to_owned)
+                                .unwrap_or_else(|| v["error"].to_string()),
+                        ));
+                        if let Some(id) = v.get("id").and_then(Value::as_str) {
+                            outputs_by_id.insert(id.to_string(), error);
+                        } else {
+                            sequential.push_back(error);
+                        }
                     }
-                    Err(e) => outputs.push(Err(ReplayError::Sut(format!("bad output line: {e}: {line}")))),
+                    Ok(v) => {
+                        let id = v.get("id").and_then(Value::as_str).map(str::to_owned);
+                        let mut e: Execution = serde_json::from_value(v).unwrap_or_default();
+                        if e.duration_ms == 0 {
+                            e.duration_ms =
+                                started.elapsed().as_millis() as u64 / cases.len().max(1) as u64;
+                        }
+                        if let Some(id) = id {
+                            outputs_by_id.insert(id, Ok(e));
+                        } else {
+                            sequential.push_back(Ok(e));
+                        }
+                    }
+                    Err(e) => sequential.push_back(Err(ReplayError::Sut(format!(
+                        "bad output line: {e}: {line}"
+                    )))),
                 }
             }
             let _ = writer.await;
-            let status = child.wait().await.map_err(|e| ReplayError::Sut(e.to_string()))?;
-            if !status.success() && outputs.is_empty() {
-                return Err(ReplayError::Sut(format!("{} exited with {status}", self.program)));
+            let status = child
+                .wait()
+                .await
+                .map_err(|e| ReplayError::Sut(e.to_string()))?;
+            let stderr = stderr_reader.await.unwrap_or_default();
+            if !status.success() && outputs_by_id.is_empty() && sequential.is_empty() {
+                return Err(ReplayError::Sut(format!(
+                    "{} exited with {status}: {stderr}",
+                    self.program,
+                )));
             }
-            while outputs.len() < cases.len() {
-                outputs.push(Err(ReplayError::Sut("missing output line".into())));
-            }
+            let outputs = cases
+                .iter()
+                .map(|case| {
+                    outputs_by_id
+                        .remove(&case.id)
+                        .or_else(|| sequential.pop_front())
+                        .unwrap_or_else(|| Err(ReplayError::Sut("missing output line".into())))
+                })
+                .collect();
             Ok::<_, ReplayError>(outputs)
         };
-        match tokio::time::timeout(self.timeout, run).await {
+        let case_timeout = cases
+            .iter()
+            .filter_map(|case| case.options.timeout_ms)
+            .min()
+            .map(Duration::from_millis);
+        let timeout = case_timeout.map_or(self.timeout, |value| value.min(self.timeout));
+        match tokio::time::timeout(timeout, run).await {
             Ok(Ok(v)) => v,
             Ok(Err(e)) => cases.iter().map(|_| Err(e.clone())).collect(),
-            Err(_) => cases.iter().map(|_| Err(ReplayError::Sut("timeout".into()))).collect(),
+            Err(_) => cases
+                .iter()
+                .map(|_| Err(ReplayError::Sut("timeout".into())))
+                .collect(),
         }
     }
 }
@@ -164,7 +231,11 @@ pub struct HttpSystem {
 
 impl HttpSystem {
     pub fn new(name: &str, url: &str) -> Self {
-        Self { name: name.into(), url: url.into(), http: reqwest::Client::new() }
+        Self {
+            name: name.into(),
+            url: url.into(),
+            http: reqwest::Client::new(),
+        }
     }
 }
 
@@ -175,11 +246,26 @@ impl SystemUnderTest for HttpSystem {
     }
     async fn execute(&self, case: &ReplayCase) -> Result<Execution, ReplayError> {
         let started = Instant::now();
-        let resp = self.http.post(&self.url).json(&json!(case)).send().await.map_err(|e| ReplayError::Sut(e.to_string()))?;
+        let resp = self
+            .http
+            .post(&self.url)
+            .json(&json!(case))
+            .timeout(
+                case.options
+                    .timeout_ms
+                    .map(Duration::from_millis)
+                    .unwrap_or(Duration::from_secs(120)),
+            )
+            .send()
+            .await
+            .map_err(|e| ReplayError::Sut(e.to_string()))?;
         if !resp.status().is_success() {
             return Err(ReplayError::Sut(format!("HTTP {}", resp.status())));
         }
-        let mut e: Execution = resp.json().await.map_err(|e| ReplayError::Sut(e.to_string()))?;
+        let mut e: Execution = resp
+            .json()
+            .await
+            .map_err(|e| ReplayError::Sut(e.to_string()))?;
         e.duration_ms = started.elapsed().as_millis() as u64;
         Ok(e)
     }

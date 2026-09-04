@@ -2,7 +2,10 @@
 //!
 //! Cedar decides *who can do what*. Business invariants live in `amap-invariant`.
 
-use cedar_policy::{Authorizer, Context, Decision, Entities, EntityId, EntityTypeName, EntityUid, PolicySet, Request, RestrictedExpression};
+use cedar_policy::{
+    Authorizer, Context, Decision, Entities, EntityId, EntityTypeName, EntityUid, PolicySet,
+    Request, RestrictedExpression,
+};
 use serde::{Deserialize, Serialize};
 use std::str::FromStr;
 
@@ -32,13 +35,22 @@ pub struct Principal {
 
 impl Principal {
     pub fn agent(id: &str) -> Self {
-        Self { kind: PrincipalKind::Agent, id: id.into() }
+        Self {
+            kind: PrincipalKind::Agent,
+            id: id.into(),
+        }
     }
     pub fn engine(id: &str) -> Self {
-        Self { kind: PrincipalKind::Engine, id: id.into() }
+        Self {
+            kind: PrincipalKind::Engine,
+            id: id.into(),
+        }
     }
     pub fn human(id: &str) -> Self {
-        Self { kind: PrincipalKind::Human, id: id.into() }
+        Self {
+            kind: PrincipalKind::Human,
+            id: id.into(),
+        }
     }
     fn uid(&self) -> EntityUid {
         let ty = match self.kind {
@@ -46,7 +58,10 @@ impl Principal {
             PrincipalKind::Engine => "Engine",
             PrincipalKind::Human => "Human",
         };
-        EntityUid::from_type_name_and_id(EntityTypeName::from_str(ty).unwrap(), EntityId::new(&self.id))
+        EntityUid::from_type_name_and_id(
+            EntityTypeName::from_str(ty).unwrap(),
+            EntityId::new(&self.id),
+        )
     }
 }
 
@@ -89,27 +104,68 @@ impl Default for PolicyEngine {
 impl PolicyEngine {
     pub fn from_source(src: &str) -> Result<Self, PolicyError> {
         let policies = PolicySet::from_str(src).map_err(|e| PolicyError::Parse(e.to_string()))?;
-        Ok(Self { policies, authorizer: Authorizer::new() })
+        Ok(Self {
+            policies,
+            authorizer: Authorizer::new(),
+        })
     }
 
-    pub fn authorize(&self, principal: &Principal, action: &str, resource: &str, ctx: &ActionContext) -> Result<PolicyDecision, PolicyError> {
-        let action_uid = EntityUid::from_type_name_and_id(EntityTypeName::from_str("Action").unwrap(), EntityId::new(action));
-        let resource_uid = EntityUid::from_type_name_and_id(EntityTypeName::from_str("Resource").unwrap(), EntityId::new(resource));
+    pub fn authorize(
+        &self,
+        principal: &Principal,
+        action: &str,
+        resource: &str,
+        ctx: &ActionContext,
+    ) -> Result<PolicyDecision, PolicyError> {
+        let action_uid = EntityUid::from_type_name_and_id(
+            EntityTypeName::from_str("Action").unwrap(),
+            EntityId::new(action),
+        );
+        let resource_uid = EntityUid::from_type_name_and_id(
+            EntityTypeName::from_str("Resource").unwrap(),
+            EntityId::new(resource),
+        );
 
         let mut pairs: Vec<(String, RestrictedExpression)> = vec![
-            ("is_critical".into(), RestrictedExpression::new_bool(ctx.is_critical)),
-            ("independent_verifier".into(), RestrictedExpression::new_bool(ctx.independent_verifier)),
-            ("uncertainty_bp".into(), RestrictedExpression::new_long(ctx.uncertainty_bp)),
-            ("human_approved".into(), RestrictedExpression::new_bool(ctx.human_approved)),
+            (
+                "is_critical".into(),
+                RestrictedExpression::new_bool(ctx.is_critical),
+            ),
+            (
+                "independent_verifier".into(),
+                RestrictedExpression::new_bool(ctx.independent_verifier),
+            ),
+            (
+                "uncertainty_bp".into(),
+                RestrictedExpression::new_long(ctx.uncertainty_bp),
+            ),
+            (
+                "human_approved".into(),
+                RestrictedExpression::new_bool(ctx.human_approved),
+            ),
         ];
         if let Some(author) = &ctx.author {
-            pairs.push(("author".into(), RestrictedExpression::new_entity_uid(author.uid())));
+            pairs.push((
+                "author".into(),
+                RestrictedExpression::new_entity_uid(author.uid()),
+            ));
         }
-        let context = Context::from_pairs(pairs).map_err(|e| PolicyError::Request(e.to_string()))?;
-        let request = Request::new(principal.uid(), action_uid, resource_uid, context, None).map_err(|e| PolicyError::Request(e.to_string()))?;
-        let response = self.authorizer.is_authorized(&request, &self.policies, &Entities::empty());
-        let reasons = response.diagnostics().reason().map(|p| p.to_string()).collect();
-        Ok(PolicyDecision { allowed: response.decision() == Decision::Allow, reasons })
+        let context =
+            Context::from_pairs(pairs).map_err(|e| PolicyError::Request(e.to_string()))?;
+        let request = Request::new(principal.uid(), action_uid, resource_uid, context, None)
+            .map_err(|e| PolicyError::Request(e.to_string()))?;
+        let response = self
+            .authorizer
+            .is_authorized(&request, &self.policies, &Entities::empty());
+        let reasons = response
+            .diagnostics()
+            .reason()
+            .map(|p| p.to_string())
+            .collect();
+        Ok(PolicyDecision {
+            allowed: response.decision() == Decision::Allow,
+            reasons,
+        })
     }
 }
 
@@ -120,25 +176,69 @@ mod tests {
     #[test]
     fn builder_cannot_approve_own_change() {
         let e = PolicyEngine::default();
-        let ctx = ActionContext { author: Some(Principal::agent("builder")), ..Default::default() };
-        assert!(!e.authorize(&Principal::agent("builder"), "approve", "patch-1", &ctx).unwrap().allowed);
-        assert!(e.authorize(&Principal::agent("reviewer"), "approve", "patch-1", &ctx).unwrap().allowed);
+        let ctx = ActionContext {
+            author: Some(Principal::agent("builder")),
+            ..Default::default()
+        };
+        assert!(
+            !e.authorize(&Principal::agent("builder"), "approve", "patch-1", &ctx)
+                .unwrap()
+                .allowed
+        );
+        assert!(
+            e.authorize(&Principal::agent("reviewer"), "approve", "patch-1", &ctx)
+                .unwrap()
+                .allowed
+        );
     }
 
     #[test]
     fn llm_never_decides_pass_fail() {
         let e = PolicyEngine::default();
         let ctx = ActionContext::default();
-        assert!(!e.authorize(&Principal::agent("reviewer"), "decide_pass_fail", "FN-1", &ctx).unwrap().allowed);
-        assert!(e.authorize(&Principal::engine("comparator"), "decide_pass_fail", "FN-1", &ctx).unwrap().allowed);
+        assert!(
+            !e.authorize(
+                &Principal::agent("reviewer"),
+                "decide_pass_fail",
+                "FN-1",
+                &ctx
+            )
+            .unwrap()
+            .allowed
+        );
+        assert!(
+            e.authorize(
+                &Principal::engine("comparator"),
+                "decide_pass_fail",
+                "FN-1",
+                &ctx
+            )
+            .unwrap()
+            .allowed
+        );
     }
 
     #[test]
     fn uncertainty_requires_human() {
         let e = PolicyEngine::default();
-        let ctx = ActionContext { independent_verifier: true, ..Default::default() }.with_uncertainty(0.25);
-        assert!(!e.authorize(&Principal::engine("gate"), "certify", "FN-1", &ctx).unwrap().allowed);
-        let ok = ActionContext { human_approved: true, ..ctx };
-        assert!(e.authorize(&Principal::engine("gate"), "certify", "FN-1", &ok).unwrap().allowed);
+        let ctx = ActionContext {
+            independent_verifier: true,
+            ..Default::default()
+        }
+        .with_uncertainty(0.25);
+        assert!(
+            !e.authorize(&Principal::engine("gate"), "certify", "FN-1", &ctx)
+                .unwrap()
+                .allowed
+        );
+        let ok = ActionContext {
+            human_approved: true,
+            ..ctx
+        };
+        assert!(
+            e.authorize(&Principal::engine("gate"), "certify", "FN-1", &ok)
+                .unwrap()
+                .allowed
+        );
     }
 }

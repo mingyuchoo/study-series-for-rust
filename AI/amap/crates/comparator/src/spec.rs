@@ -38,7 +38,14 @@ pub struct FieldRule {
 
 impl FieldRule {
     pub fn exact() -> Self {
-        Self { comparator: ComparatorKind::Exact, tolerance: None, relative: false, pattern: None, unique: false, plugin: None }
+        Self {
+            comparator: ComparatorKind::Exact,
+            tolerance: None,
+            relative: false,
+            pattern: None,
+            unique: false,
+            plugin: None,
+        }
     }
     pub fn tolerance_f64(&self) -> Option<f64> {
         match &self.tolerance {
@@ -83,7 +90,11 @@ fn default_kind() -> ComparatorKind {
 
 impl ComparatorSpec {
     pub fn exact(name: &str) -> Self {
-        Self { name: name.to_string(), default: ComparatorKind::Exact, fields: BTreeMap::new() }
+        Self {
+            name: name.to_string(),
+            default: ComparatorKind::Exact,
+            fields: BTreeMap::new(),
+        }
     }
 
     pub fn from_yaml(text: &str) -> Result<Self, ComparatorError> {
@@ -96,18 +107,25 @@ impl ComparatorSpec {
         for (path, rule) in &self.fields {
             match rule.comparator {
                 ComparatorKind::Format if rule.pattern.is_none() => {
-                    return Err(ComparatorError::Spec(format!("{path}: format comparator needs `pattern`")))
+                    return Err(ComparatorError::Spec(format!(
+                        "{path}: format comparator needs `pattern`"
+                    )))
                 }
                 ComparatorKind::Plugin if rule.plugin.is_none() => {
-                    return Err(ComparatorError::Spec(format!("{path}: plugin comparator needs `plugin`")))
+                    return Err(ComparatorError::Spec(format!(
+                        "{path}: plugin comparator needs `plugin`"
+                    )))
                 }
                 ComparatorKind::Numeric | ComparatorKind::Tolerance if rule.tolerance.is_none() => {
-                    return Err(ComparatorError::Spec(format!("{path}: comparator needs `tolerance`")))
+                    return Err(ComparatorError::Spec(format!(
+                        "{path}: comparator needs `tolerance`"
+                    )))
                 }
                 _ => {}
             }
             if let Some(p) = &rule.pattern {
-                regex::Regex::new(p).map_err(|e| ComparatorError::Spec(format!("{path}: bad pattern: {e}")))?;
+                regex::Regex::new(p)
+                    .map_err(|e| ComparatorError::Spec(format!("{path}: bad pattern: {e}")))?;
             }
         }
         Ok(())
@@ -131,10 +149,17 @@ impl ComparatorSpec {
 }
 
 fn normalise(path: &str) -> Vec<String> {
-    path.replace('[', ".").replace(']', "")
+    path.replace('[', ".")
+        .replace(']', "")
         .split('.')
         .filter(|s| !s.is_empty())
-        .map(|s| if s.chars().all(|c| c.is_ascii_digit()) { "*".to_string() } else { s.to_string() })
+        .map(|s| {
+            if s.chars().all(|c| c.is_ascii_digit()) {
+                "*".to_string()
+            } else {
+                s.to_string()
+            }
+        })
         .collect()
 }
 
@@ -160,8 +185,14 @@ fields:
   trace_id: { comparator: ignore }
 "#;
         let spec = ComparatorSpec::from_yaml(yaml).unwrap();
-        assert_eq!(spec.rule_for("events[3].ts").unwrap().comparator, ComparatorKind::Tolerance);
-        assert_eq!(spec.rule_for("trace_id").unwrap().comparator, ComparatorKind::Ignore);
+        assert_eq!(
+            spec.rule_for("events[3].ts").unwrap().comparator,
+            ComparatorKind::Tolerance
+        );
+        assert_eq!(
+            spec.rule_for("trace_id").unwrap().comparator,
+            ComparatorKind::Ignore
+        );
         assert!(spec.rule_for("other").is_none());
     }
 }

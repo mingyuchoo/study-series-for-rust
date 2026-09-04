@@ -37,7 +37,10 @@ impl Default for InMemoryBus {
 impl InMemoryBus {
     pub fn new() -> Self {
         let (tx, _) = broadcast::channel(4096);
-        Self { tx, history: Mutex::new(Vec::new()) }
+        Self {
+            tx,
+            history: Mutex::new(Vec::new()),
+        }
     }
 }
 
@@ -71,9 +74,17 @@ impl NatsBus {
         // Ensure a JetStream stream exists for durable control events (best effort).
         let js = async_nats::jetstream::new(client.clone());
         let _ = js
-            .get_or_create_stream(async_nats::jetstream::stream::Config { name: "AMAP_CONTROL".into(), subjects: vec![format!("{prefix}.>")], ..Default::default() })
+            .get_or_create_stream(async_nats::jetstream::stream::Config {
+                name: "AMAP_CONTROL".into(),
+                subjects: vec![format!("{prefix}.>")],
+                ..Default::default()
+            })
             .await;
-        Ok(Self { client, local: InMemoryBus::new(), prefix: prefix.to_string() })
+        Ok(Self {
+            client,
+            local: InMemoryBus::new(),
+            prefix: prefix.to_string(),
+        })
     }
 }
 

@@ -10,7 +10,11 @@ pub struct PgKnowledgeStore {
 
 impl PgKnowledgeStore {
     pub async fn connect(url: &str) -> KResult<Self> {
-        let pool = PgPoolOptions::new().max_connections(16).connect(url).await.map_err(|e| KnowledgeError::Storage(e.to_string()))?;
+        let pool = PgPoolOptions::new()
+            .max_connections(16)
+            .connect(url)
+            .await
+            .map_err(|e| KnowledgeError::Storage(e.to_string()))?;
         Ok(Self { pool })
     }
 
@@ -20,10 +24,19 @@ impl PgKnowledgeStore {
 
     /// Apply the SQL migrations embedded from `migrations/`.
     pub async fn migrate(&self) -> KResult<()> {
-        sqlx::migrate!("../../migrations").run(&self.pool).await.map_err(|e| KnowledgeError::Storage(e.to_string()))
+        sqlx::migrate!("../../migrations")
+            .run(&self.pool)
+            .await
+            .map_err(|e| KnowledgeError::Storage(e.to_string()))
     }
 
-    async fn upsert<T: Serialize>(&self, table: &str, id: &str, function_id: Option<&str>, doc: &T) -> KResult<()> {
+    async fn upsert<T: Serialize>(
+        &self,
+        table: &str,
+        id: &str,
+        function_id: Option<&str>,
+        doc: &T,
+    ) -> KResult<()> {
         let sql = format!(
             "INSERT INTO {table} (id, function_id, doc, updated_at) VALUES ($1, $2, $3, now()) \
              ON CONFLICT (id) DO UPDATE SET function_id = EXCLUDED.function_id, doc = EXCLUDED.doc, updated_at = now()"
@@ -38,31 +51,56 @@ impl PgKnowledgeStore {
         Ok(())
     }
 
-    async fn list<T: DeserializeOwned>(&self, table: &str, function_id: Option<&str>) -> KResult<Vec<T>> {
+    async fn list<T: DeserializeOwned>(
+        &self,
+        table: &str,
+        function_id: Option<&str>,
+    ) -> KResult<Vec<T>> {
         let rows = match function_id {
             Some(f) => {
-                sqlx::query(AssertSqlSafe(format!("SELECT doc FROM {table} WHERE function_id = $1 ORDER BY id"))).bind(f).fetch_all(&self.pool).await
+                sqlx::query(AssertSqlSafe(format!(
+                    "SELECT doc FROM {table} WHERE function_id = $1 ORDER BY id"
+                )))
+                .bind(f)
+                .fetch_all(&self.pool)
+                .await
             }
-            None => sqlx::query(AssertSqlSafe(format!("SELECT doc FROM {table} ORDER BY id"))).fetch_all(&self.pool).await,
+            None => {
+                sqlx::query(AssertSqlSafe(format!(
+                    "SELECT doc FROM {table} ORDER BY id"
+                )))
+                .fetch_all(&self.pool)
+                .await
+            }
         }
         .map_err(|e| KnowledgeError::Storage(e.to_string()))?;
-        rows.into_iter().map(|r| serde_json::from_value(r.get::<serde_json::Value, _>("doc")).map_err(Into::into)).collect()
+        rows.into_iter()
+            .map(|r| {
+                serde_json::from_value(r.get::<serde_json::Value, _>("doc")).map_err(Into::into)
+            })
+            .collect()
     }
 
     async fn get<T: DeserializeOwned>(&self, table: &str, id: &str) -> KResult<Option<T>> {
-        let row = sqlx::query(AssertSqlSafe(format!("SELECT doc FROM {table} WHERE id = $1")))
-            .bind(id)
-            .fetch_optional(&self.pool)
-            .await
-            .map_err(|e| KnowledgeError::Storage(e.to_string()))?;
-        row.map(|r| serde_json::from_value(r.get::<serde_json::Value, _>("doc")).map_err(Into::into)).transpose()
+        let row = sqlx::query(AssertSqlSafe(format!(
+            "SELECT doc FROM {table} WHERE id = $1"
+        )))
+        .bind(id)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|e| KnowledgeError::Storage(e.to_string()))?;
+        row.map(|r| {
+            serde_json::from_value(r.get::<serde_json::Value, _>("doc")).map_err(Into::into)
+        })
+        .transpose()
     }
 }
 
 #[async_trait]
 impl KnowledgeStore for PgKnowledgeStore {
     async fn upsert_function(&self, f: BusinessFunction) -> KResult<()> {
-        self.upsert("business_functions", f.id.as_str(), Some(f.id.as_str()), &f).await
+        self.upsert("business_functions", f.id.as_str(), Some(f.id.as_str()), &f)
+            .await
     }
     async fn get_function(&self, id: &FunctionId) -> KResult<Option<BusinessFunction>> {
         self.get("business_functions", id.as_str()).await
@@ -71,20 +109,33 @@ impl KnowledgeStore for PgKnowledgeStore {
         self.list("business_functions", None).await
     }
     async fn upsert_requirement(&self, r: Requirement) -> KResult<()> {
-        self.upsert("requirements", r.id.as_str(), Some(r.function_id.as_str()), &r).await
+        self.upsert(
+            "requirements",
+            r.id.as_str(),
+            Some(r.function_id.as_str()),
+            &r,
+        )
+        .await
     }
     async fn requirements_for(&self, f: &FunctionId) -> KResult<Vec<Requirement>> {
         self.list("requirements", Some(f.as_str())).await
     }
     async fn upsert_rule(&self, r: BusinessRule) -> KResult<()> {
-        self.upsert("business_rules", r.id.as_str(), Some(r.function_id.as_str()), &r).await
+        self.upsert(
+            "business_rules",
+            r.id.as_str(),
+            Some(r.function_id.as_str()),
+            &r,
+        )
+        .await
     }
     async fn rules_for(&self, f: &FunctionId) -> KResult<Vec<BusinessRule>> {
         self.list("business_rules", Some(f.as_str())).await
     }
     async fn upsert_source_unit(&self, e: CodeEntity) -> KResult<()> {
         let fid = e.function_id.as_ref().map(|f| f.as_str().to_string());
-        self.upsert("source_units", e.id.as_str(), fid.as_deref(), &e).await
+        self.upsert("source_units", e.id.as_str(), fid.as_deref(), &e)
+            .await
     }
     async fn source_units_for(&self, f: &FunctionId) -> KResult<Vec<CodeEntity>> {
         self.list("source_units", Some(f.as_str())).await
@@ -105,19 +156,32 @@ impl KnowledgeStore for PgKnowledgeStore {
         self.list("interfaces", None).await
     }
     async fn upsert_behavior(&self, b: BehaviorRecord) -> KResult<()> {
-        self.upsert("behaviors", b.id.as_str(), Some(b.function_id.as_str()), &b).await
+        self.upsert("behaviors", b.id.as_str(), Some(b.function_id.as_str()), &b)
+            .await
     }
     async fn behaviors_for(&self, f: &FunctionId) -> KResult<Vec<BehaviorRecord>> {
         self.list("behaviors", Some(f.as_str())).await
     }
     async fn upsert_scenario(&self, s: TestScenario) -> KResult<()> {
-        self.upsert("test_cases", s.id.as_str(), Some(s.function_id.as_str()), &s).await
+        self.upsert(
+            "test_cases",
+            s.id.as_str(),
+            Some(s.function_id.as_str()),
+            &s,
+        )
+        .await
     }
     async fn scenarios_for(&self, f: &FunctionId) -> KResult<Vec<TestScenario>> {
         self.list("test_cases", Some(f.as_str())).await
     }
     async fn upsert_decision(&self, d: ArchitectureDecision) -> KResult<()> {
-        self.upsert("architecture_decisions", d.id.as_str(), Some(d.function_id.as_str()), &d).await
+        self.upsert(
+            "architecture_decisions",
+            d.id.as_str(),
+            Some(d.function_id.as_str()),
+            &d,
+        )
+        .await
     }
     async fn decisions_for(&self, f: &FunctionId) -> KResult<Vec<ArchitectureDecision>> {
         self.list("architecture_decisions", Some(f.as_str())).await
@@ -150,9 +214,12 @@ impl KnowledgeStore for PgKnowledgeStore {
     }
     async fn record_evidence(&self, e: EvidenceRecord) -> KResult<()> {
         sqlx::query(
-            "INSERT INTO evidence (run_id, function_id, kind, scenario_id, priority, passed, explained, producer, created_at, doc) \
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)",
+            "INSERT INTO evidence (evidence_id, content_hash, payload_uri, run_id, function_id, kind, scenario_id, priority, passed, explained, producer, created_at, doc) \
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13) ON CONFLICT (evidence_id) DO NOTHING",
         )
+        .bind(&e.evidence_id)
+        .bind(&e.content_hash)
+        .bind(&e.payload_uri)
         .bind(e.run_id.as_str())
         .bind(e.function_id.as_str())
         .bind(serde_json::to_value(e.kind)?.as_str().unwrap_or("").to_string())
@@ -169,24 +236,81 @@ impl KnowledgeStore for PgKnowledgeStore {
         Ok(())
     }
     async fn evidence_for(&self, f: &FunctionId) -> KResult<Vec<EvidenceRecord>> {
-        let rows = sqlx::query("SELECT doc FROM evidence WHERE function_id = $1 ORDER BY created_at")
-            .bind(f.as_str())
-            .fetch_all(&self.pool)
-            .await
-            .map_err(|e| KnowledgeError::Storage(e.to_string()))?;
-        rows.into_iter().map(|r| serde_json::from_value(r.get::<serde_json::Value, _>("doc")).map_err(Into::into)).collect()
+        let rows =
+            sqlx::query("SELECT doc FROM evidence WHERE function_id = $1 ORDER BY created_at")
+                .bind(f.as_str())
+                .fetch_all(&self.pool)
+                .await
+                .map_err(|e| KnowledgeError::Storage(e.to_string()))?;
+        rows.into_iter()
+            .map(|r| {
+                serde_json::from_value(r.get::<serde_json::Value, _>("doc")).map_err(Into::into)
+            })
+            .collect()
     }
     async fn queue_review(&self, r: ReviewRequest) -> KResult<()> {
-        self.upsert("review_requests", &r.id, Some(r.function_id.as_str()), &r).await
+        let result = sqlx::query(
+            "INSERT INTO review_requests (id, function_id, doc, updated_at) VALUES ($1, $2, $3, now()) ON CONFLICT (id) DO NOTHING",
+        )
+        .bind(&r.id)
+        .bind(r.function_id.as_str())
+        .bind(serde_json::to_value(&r)?)
+        .execute(&self.pool)
+        .await
+        .map_err(|e| KnowledgeError::Storage(e.to_string()))?;
+        if result.rows_affected() == 0 {
+            return Err(KnowledgeError::Storage(format!(
+                "review {} already exists",
+                r.id
+            )));
+        }
+        Ok(())
     }
     async fn list_reviews(&self) -> KResult<Vec<ReviewRequest>> {
         self.list("review_requests", None).await
     }
     async fn decide_review(&self, id: &str, status: ReviewStatus, by: &str) -> KResult<()> {
-        let mut r: ReviewRequest = self.get("review_requests", id).await?.ok_or_else(|| KnowledgeError::NotFound(id.into()))?;
+        let mut r: ReviewRequest = self
+            .get("review_requests", id)
+            .await?
+            .ok_or_else(|| KnowledgeError::NotFound(id.into()))?;
+        if r.status != ReviewStatus::Pending {
+            return Err(KnowledgeError::Storage(format!(
+                "review {id} has already been decided"
+            )));
+        }
         r.status = status;
         r.decided_by = Some(by.to_string());
-        self.queue_review(r).await
+        r.decided_at = Some(chrono::Utc::now());
+        let result = sqlx::query(
+            "UPDATE review_requests SET doc = $2, updated_at = now() WHERE id = $1 AND doc->>'status' = 'pending'",
+        )
+        .bind(id)
+        .bind(serde_json::to_value(&r)?)
+        .execute(&self.pool)
+        .await
+        .map_err(|e| KnowledgeError::Storage(e.to_string()))?;
+        if result.rows_affected() == 0 {
+            return Err(KnowledgeError::Storage(format!(
+                "review {id} has already been decided"
+            )));
+        }
+        Ok(())
+    }
+    async fn upsert_workflow_run(&self, run: WorkflowRun) -> KResult<()> {
+        self.upsert(
+            "workflow_runs",
+            &run.id,
+            Some(run.function_id.as_str()),
+            &run,
+        )
+        .await
+    }
+    async fn get_workflow_run(&self, id: &str) -> KResult<Option<WorkflowRun>> {
+        self.get("workflow_runs", id).await
+    }
+    async fn list_workflow_runs(&self) -> KResult<Vec<WorkflowRun>> {
+        self.list("workflow_runs", None).await
     }
     async fn snapshot(&self) -> KResult<KnowledgeSnapshot> {
         let rows = sqlx::query("SELECT doc FROM evidence ORDER BY created_at")
@@ -195,7 +319,10 @@ impl KnowledgeStore for PgKnowledgeStore {
             .map_err(|e| KnowledgeError::Storage(e.to_string()))?;
         let evidence = rows
             .into_iter()
-            .map(|r| serde_json::from_value(r.get::<serde_json::Value, _>("doc")).map_err(KnowledgeError::from))
+            .map(|r| {
+                serde_json::from_value(r.get::<serde_json::Value, _>("doc"))
+                    .map_err(KnowledgeError::from)
+            })
             .collect::<KResult<Vec<_>>>()?;
         Ok(KnowledgeSnapshot {
             functions: self.list("business_functions", None).await?,

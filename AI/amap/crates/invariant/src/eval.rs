@@ -29,7 +29,10 @@ impl Val {
         match self {
             Val::Num(n) => Ok(*n),
             Val::Bool(b) => Ok(if *b { 1.0 } else { 0.0 }),
-            Val::Str(s) => s.trim().parse().map_err(|_| InvariantError::Type(format!("`{s}` is not numeric"))),
+            Val::Str(s) => s
+                .trim()
+                .parse()
+                .map_err(|_| InvariantError::Type(format!("`{s}` is not numeric"))),
             Val::Null => Ok(0.0),
             Val::List(_) => Err(InvariantError::Type("list used as number".into())),
         }
@@ -126,7 +129,10 @@ pub fn eval(expr: &Expr, data: &Value) -> Result<Val, InvariantError> {
             }
         }
         Expr::Call(func, args) => {
-            let vals = args.iter().map(|a| eval(a, data)).collect::<Result<Vec<_>, _>>()?;
+            let vals = args
+                .iter()
+                .map(|a| eval(a, data))
+                .collect::<Result<Vec<_>, _>>()?;
             let first = vals.first().cloned().unwrap_or(Val::Null);
             match func {
                 Func::Sum => Val::Num(first.flatten_nums()?.iter().sum()),
@@ -137,7 +143,11 @@ pub fn eval(expr: &Expr, data: &Value) -> Result<Val, InvariantError> {
                     _ => 1.0,
                 }),
                 Func::Min => Val::Num(all_nums(&vals)?.into_iter().fold(f64::INFINITY, f64::min)),
-                Func::Max => Val::Num(all_nums(&vals)?.into_iter().fold(f64::NEG_INFINITY, f64::max)),
+                Func::Max => Val::Num(
+                    all_nums(&vals)?
+                        .into_iter()
+                        .fold(f64::NEG_INFINITY, f64::max),
+                ),
                 Func::Abs => Val::Num(first.as_num()?.abs()),
                 Func::Round => {
                     let places = vals.get(1).map(|v| v.as_num()).transpose()?.unwrap_or(0.0);
@@ -178,7 +188,9 @@ fn equal(a: &Val, b: &Val) -> bool {
             (Ok(x), Ok(y)) => feq(x, y),
             _ => false,
         },
-        (Val::List(x), Val::List(y)) => x.len() == y.len() && x.iter().zip(y).all(|(p, q)| equal(p, q)),
+        (Val::List(x), Val::List(y)) => {
+            x.len() == y.len() && x.iter().zip(y).all(|(p, q)| equal(p, q))
+        }
         _ => a == b,
     }
 }
@@ -218,12 +230,32 @@ pub fn check(inv: &Invariant, data: &Value) -> InvariantOutcome {
         None => true,
     };
     if !applicable {
-        return InvariantOutcome { name: inv.name.clone(), applicable, holds: true, detail: "guard not satisfied".into() };
+        return InvariantOutcome {
+            name: inv.name.clone(),
+            applicable,
+            holds: true,
+            detail: "guard not satisfied".into(),
+        };
     }
     match eval_bool(&inv.body, data) {
-        Ok(true) => InvariantOutcome { name: inv.name.clone(), applicable, holds: true, detail: "holds".into() },
-        Ok(false) => InvariantOutcome { name: inv.name.clone(), applicable, holds: false, detail: describe(&inv.body, data) },
-        Err(e) => InvariantOutcome { name: inv.name.clone(), applicable, holds: false, detail: format!("evaluation error: {e}") },
+        Ok(true) => InvariantOutcome {
+            name: inv.name.clone(),
+            applicable,
+            holds: true,
+            detail: "holds".into(),
+        },
+        Ok(false) => InvariantOutcome {
+            name: inv.name.clone(),
+            applicable,
+            holds: false,
+            detail: describe(&inv.body, data),
+        },
+        Err(e) => InvariantOutcome {
+            name: inv.name.clone(),
+            applicable,
+            holds: false,
+            detail: format!("evaluation error: {e}"),
+        },
     }
 }
 

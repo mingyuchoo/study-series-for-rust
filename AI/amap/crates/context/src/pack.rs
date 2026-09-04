@@ -1,5 +1,5 @@
-use amap_domain::*;
 use crate::Hit;
+use amap_domain::*;
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -19,7 +19,12 @@ pub struct ContextBudget {
 
 impl Default for ContextBudget {
     fn default() -> Self {
-        Self { max_tokens: 60_000, max_behaviors: 12, max_tests: 12, max_search_hits: 10 }
+        Self {
+            max_tokens: 60_000,
+            max_behaviors: 12,
+            max_tests: 12,
+            max_search_hits: 10,
+        }
     }
 }
 
@@ -49,7 +54,10 @@ impl ContextPack {
     pub fn render(&self) -> String {
         let mut s = String::new();
         if let Some(f) = &self.function {
-            s.push_str(&format!("# Function {} — {} ({} / {:?})\n{}\n\n", f.id, f.name, f.domain, f.priority, f.description));
+            s.push_str(&format!(
+                "# Function {} — {} ({} / {:?})\n{}\n\n",
+                f.id, f.name, f.domain, f.priority, f.description
+            ));
         }
         if !self.requirements.is_empty() {
             s.push_str("## Requirements\n");
@@ -69,7 +77,11 @@ impl ContextPack {
                     r.name,
                     r.condition,
                     r.result,
-                    r.sources.iter().map(|l| l.to_string()).collect::<Vec<_>>().join(", ")
+                    r.sources
+                        .iter()
+                        .map(|l| l.to_string())
+                        .collect::<Vec<_>>()
+                        .join(", ")
                 ));
             }
             s.push('\n');
@@ -77,14 +89,25 @@ impl ContextPack {
         if !self.schema.is_empty() {
             s.push_str("## Database entities\n");
             for d in &self.schema {
-                s.push_str(&format!("- {} {}{}\n", d.id, d.table, d.column.as_ref().map(|c| format!(".{c}")).unwrap_or_default()));
+                s.push_str(&format!(
+                    "- {} {}{}\n",
+                    d.id,
+                    d.table,
+                    d.column
+                        .as_ref()
+                        .map(|c| format!(".{c}"))
+                        .unwrap_or_default()
+                ));
             }
             s.push('\n');
         }
         if !self.interfaces.is_empty() {
             s.push_str("## Interfaces\n");
             for i in &self.interfaces {
-                s.push_str(&format!("- {} {} ({} {})\n", i.id, i.name, i.kind, i.direction));
+                s.push_str(&format!(
+                    "- {} {} ({} {})\n",
+                    i.id, i.name, i.kind, i.direction
+                ));
             }
             s.push('\n');
         }
@@ -98,21 +121,33 @@ impl ContextPack {
         if !self.source.is_empty() {
             s.push_str("## Legacy source\n");
             for c in &self.source {
-                s.push_str(&format!("### {} ({})\n```\n{}\n```\n", c.symbol, c.location, c.text));
+                s.push_str(&format!(
+                    "### {} ({})\n```\n{}\n```\n",
+                    c.symbol, c.location, c.text
+                ));
             }
             s.push('\n');
         }
         if !self.behaviors.is_empty() {
             s.push_str("## Production behaviors (golden)\n");
             for b in &self.behaviors {
-                s.push_str(&format!("- {} input={} legacy_output={}\n", b.id, b.input, b.legacy_output));
+                s.push_str(&format!(
+                    "- {} input={} legacy_output={}\n",
+                    b.id, b.input, b.legacy_output
+                ));
             }
             s.push('\n');
         }
         if !self.tests.is_empty() {
             s.push_str("## Golden tests\n");
             for t in &self.tests {
-                s.push_str(&format!("- {} [{:?}] input={} expected={}\n", t.id, t.origin, t.input, t.expected_output.clone().unwrap_or_default()));
+                s.push_str(&format!(
+                    "- {} [{:?}] input={} expected={}\n",
+                    t.id,
+                    t.origin,
+                    t.input,
+                    t.expected_output.clone().unwrap_or_default()
+                ));
             }
             s.push('\n');
         }

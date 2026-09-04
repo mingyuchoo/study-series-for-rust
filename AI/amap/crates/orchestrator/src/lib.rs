@@ -12,10 +12,10 @@ pub mod proto {
     tonic::include_proto!("amap.v1");
 }
 
-pub use bus::{Event, EventBus, InMemoryBus};
 #[cfg(feature = "nats")]
 pub use bus::NatsBus;
-pub use config::RunConfig;
+pub use bus::{Event, EventBus, InMemoryBus};
+pub use config::{RunConfig, TraceSource};
 pub use dag::{Dag, DagNode, Executor, RunReport, StepReport, StepStatus};
 
 use amap_domain::*;
@@ -33,7 +33,11 @@ pub enum OrchestrationError {
     #[error("agent `{agent}` failed: {message}")]
     Agent { agent: String, message: String },
     #[error("policy denied {action} for {principal}: {reasons:?}")]
-    PolicyDenied { principal: String, action: String, reasons: Vec<String> },
+    PolicyDenied {
+        principal: String,
+        action: String,
+        reasons: Vec<String>,
+    },
     #[error("dependency cycle or unknown dependency: {0}")]
     InvalidDag(String),
     #[error(transparent)]
@@ -50,7 +54,10 @@ pub enum OrchestrationError {
 
 impl OrchestrationError {
     pub fn agent(agent: &str, e: impl std::fmt::Display) -> Self {
-        Self::Agent { agent: agent.into(), message: e.to_string() }
+        Self::Agent {
+            agent: agent.into(),
+            message: e.to_string(),
+        }
     }
 }
 
@@ -75,17 +82,35 @@ impl AgentContext {
     }
 
     /// Enforce a governance policy before an agent acts.
-    pub fn authorize(&self, principal: &amap_policy::Principal, action: &str, resource: &str, ctx: &amap_policy::ActionContext) -> Result<(), OrchestrationError> {
+    pub fn authorize(
+        &self,
+        principal: &amap_policy::Principal,
+        action: &str,
+        resource: &str,
+        ctx: &amap_policy::ActionContext,
+    ) -> Result<(), OrchestrationError> {
         let d = self.policy.authorize(principal, action, resource, ctx)?;
         if d.allowed {
             Ok(())
         } else {
-            Err(OrchestrationError::PolicyDenied { principal: principal.id.clone(), action: action.into(), reasons: d.reasons })
+            Err(OrchestrationError::PolicyDenied {
+                principal: principal.id.clone(),
+                action: action.into(),
+                reasons: d.reasons,
+            })
         }
     }
 
     pub async fn emit(&self, subject: &str, payload: Value) {
-        self.bus.publish(Event { subject: subject.to_string(), run_id: self.run_id.0.clone(), function_id: self.function_id.0.clone(), payload, at: chrono::Utc::now() }).await;
+        self.bus
+            .publish(Event {
+                subject: subject.to_string(),
+                run_id: self.run_id.0.clone(),
+                function_id: self.function_id.0.clone(),
+                payload,
+                at: chrono::Utc::now(),
+            })
+            .await;
     }
 }
 
@@ -102,10 +127,20 @@ pub struct AgentResult {
 
 impl AgentResult {
     pub fn new(summary: impl Into<String>, outputs: Value) -> Self {
-        Self { outputs, summary: summary.into(), evidence: vec![], halt: None }
+        Self {
+            outputs,
+            summary: summary.into(),
+            evidence: vec![],
+            halt: None,
+        }
     }
     pub fn halt(summary: impl Into<String>, reason: impl Into<String>) -> Self {
-        Self { outputs: Value::Null, summary: summary.into(), evidence: vec![], halt: Some(reason.into()) }
+        Self {
+            outputs: Value::Null,
+            summary: summary.into(),
+            evidence: vec![],
+            halt: Some(reason.into()),
+        }
     }
 }
 

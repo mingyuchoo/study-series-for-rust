@@ -34,8 +34,9 @@ pub fn template(task: TaskKind) -> PromptTemplate {
                 "name":{"type":"string"},"condition":{"type":"string"},"result":{"type":"string"},
                 "source":{"type":"object","properties":{"file":{"type":"string"},"start_line":{"type":"integer"},"end_line":{"type":"integer"}},"required":["file","start_line","end_line"],"additionalProperties":false},
                 "db_entities":{"type":"array","items":{"type":"string"}},"interfaces":{"type":"array","items":{"type":"string"}},
+                "requirement_ids":{"type":"array","items":{"type":"string"}},
                 "in_document":{"type":"boolean"},"priority":{"type":"string","enum":["P0","P1","P2","P3"]}},
-                "required":["name","condition","result","source","db_entities","interfaces","in_document","priority"],"additionalProperties":false}}},
+                "required":["name","condition","result","source","db_entities","interfaces","requirement_ids","in_document","priority"],"additionalProperties":false}}},
                 "required":["rules"],"additionalProperties":false}),
         },
         TaskKind::BehaviorLinking => PromptTemplate {
@@ -67,7 +68,7 @@ pub fn template(task: TaskKind) -> PromptTemplate {
         TaskKind::AdversarialProbe => PromptTemplate {
             version: PROMPT_VERSION,
             system: "Your only question: how can this system be broken? Produce hostile inputs (timezone, leap year, month/year end, duplicates, out-of-order events, negative/max values, encoding, null, partial failure, retry, concurrent update). You are independent from the builder.",
-            schema: json!({"type":"object","properties":{"probes":{"type":"array","items":{"type":"object","properties":{"name":{"type":"string"},"category":{"type":"string"},"initial_state":{"type":"object"},"input":{"type":"object"},"expectation":{"type":"string"}},"required":["name","category","initial_state","input","expectation"],"additionalProperties":false}}},"required":["probes"],"additionalProperties":false}),
+            schema: json!({"type":"object","properties":{"probes":{"type":"array","items":{"type":"object","properties":{"name":{"type":"string"},"category":{"type":"string"},"initial_state":{"type":"object"},"input":{"type":"object"},"rule_ids":{"type":"array","items":{"type":"string"}},"expectation":{"type":"string"}},"required":["name","category","initial_state","input","rule_ids","expectation"],"additionalProperties":false}}},"required":["probes"],"additionalProperties":false}),
         },
         TaskKind::RootCauseAnalysis => PromptTemplate {
             version: PROMPT_VERSION,
