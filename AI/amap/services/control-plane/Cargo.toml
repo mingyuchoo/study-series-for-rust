@@ -24,3 +24,4 @@ tracing.workspace = true
 uuid.workspace = true
 chrono.workspace = true
 subtle.workspace = true
+futures.workspace = true

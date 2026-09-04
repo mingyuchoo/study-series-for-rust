@@ -31,6 +31,8 @@ pub struct Settings {
     pub verifier_endpoint: Option<String>,
     /// Root containing run specifications accepted by the control plane.
     pub spec_root: PathBuf,
+    /// Optional compiled web UI served by the control plane when index.html exists.
+    pub web_dist: PathBuf,
     /// Filesystem boundary for commands executed by verification workers.
     pub worker_root: PathBuf,
     /// Comma-separated executable basenames accepted by workers.
@@ -65,6 +67,7 @@ impl Default for Settings {
             worker_token: None,
             verifier_endpoint: None,
             spec_root: ".".into(),
+            web_dist: "web/dist".into(),
             worker_root: ".".into(),
             worker_allowed_executables: "python3,python,cargo,java,javac".into(),
             worker_artifact_max_bytes: 64 * 1024 * 1024,

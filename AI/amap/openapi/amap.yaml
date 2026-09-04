@@ -1,0 +1,515 @@
+openapi: 3.1.0
+info:
+  title: AMAP Control Plane API
+  version: 0.1.0
+  description: |
+    Evidence-driven modernization control-plane contract. Protected endpoints require
+    the operator bearer token unless the server runs in isolated insecure development mode.
+servers:
+  - url: /
+security:
+  - bearerAuth: []
+paths:
+  /healthz:
+    get:
+      operationId: health
+      security: []
+      responses:
+        "200":
+          description: Service is healthy.
+          content:
+            text/plain:
+              schema:
+                type: string
+  /openapi.yaml:
+    get:
+      operationId: getOpenApi
+      security: []
+      responses:
+        "200":
+          description: This OpenAPI contract.
+          content:
+            application/yaml:
+              schema:
+                type: string
+  /v1/specs:
+    get:
+      operationId: listSpecs
+      responses:
+        "200":
+          description: Run specifications available beneath the configured specification root.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/SpecSummary"
+  /v1/runs:
+    get:
+      operationId: listRuns
+      responses:
+        "200":
+          description: Known workflow runs.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/WorkflowRun"
+    post:
+      operationId: startRun
+      parameters:
+        - $ref: "#/components/parameters/Actor"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/StartRunRequest"
+      responses:
+        "200":
+          description: The newly started run.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkflowRun"
+        "400":
+          $ref: "#/components/responses/TextError"
+        "403":
+          $ref: "#/components/responses/TextError"
+  /v1/runs/{id}:
+    parameters:
+      - $ref: "#/components/parameters/RunId"
+    get:
+      operationId: getRun
+      responses:
+        "200":
+          description: Workflow run state, checkpoint, and final outcome when complete.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkflowRun"
+        "404":
+          $ref: "#/components/responses/TextError"
+  /v1/runs/{id}/events:
+    parameters:
+      - $ref: "#/components/parameters/RunId"
+    get:
+      operationId: streamRunEvents
+      description: Replays in-memory history for the run and then streams new control-plane events.
+      responses:
+        "200":
+          description: Server-sent event stream. Each data field is a serialized ControlEvent.
+          content:
+            text/event-stream:
+              schema:
+                type: string
+        "404":
+          $ref: "#/components/responses/TextError"
+  /v1/runs/{id}/resume:
+    parameters:
+      - $ref: "#/components/parameters/RunId"
+    post:
+      operationId: resumeRun
+      parameters:
+        - $ref: "#/components/parameters/Actor"
+      responses:
+        "200":
+          description: The resumed run.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkflowRun"
+        "404":
+          $ref: "#/components/responses/TextError"
+        "409":
+          $ref: "#/components/responses/TextError"
+  /v1/functions:
+    get:
+      operationId: listFunctions
+      responses:
+        "200":
+          description: Discovered business functions.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/BusinessFunction"
+  /v1/functions/{id}/{resource}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: resource
+        in: path
+        required: true
+        schema:
+          type: string
+          enum: [requirements, rules, behaviors, scenarios, decisions, evidence, certificate]
+    get:
+      operationId: getFunctionResource
+      responses:
+        "200":
+          description: Requested function resource. Shape depends on the resource parameter.
+          content:
+            application/json:
+              schema: {}
+        "404":
+          $ref: "#/components/responses/TextError"
+  /v1/reviews:
+    get:
+      operationId: listReviews
+      responses:
+        "200":
+          description: Human review requests.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ReviewRequest"
+  /v1/reviews/{id}/decide:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+    post:
+      operationId: decideReview
+      parameters:
+        - $ref: "#/components/parameters/Actor"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReviewDecision"
+      responses:
+        "200":
+          description: Decision recorded.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ok]
+                properties:
+                  ok:
+                    type: boolean
+        "400":
+          $ref: "#/components/responses/TextError"
+        "404":
+          $ref: "#/components/responses/TextError"
+  /v1/events:
+    get:
+      operationId: listEvents
+      responses:
+        "200":
+          description: In-memory event history for all runs.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ControlEvent"
+  /v1/evidence/query:
+    get:
+      operationId: queryEvidence
+      parameters:
+        - name: sql
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Rows returned by a read-only DataFusion SELECT query.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  additionalProperties: true
+        "400":
+          $ref: "#/components/responses/TextError"
+  /v1/graph.dot:
+    get:
+      operationId: getKnowledgeGraphDot
+      responses:
+        "200":
+          description: Current knowledge graph in Graphviz DOT format.
+          content:
+            text/plain:
+              schema:
+                type: string
+  /v1/llm/audit:
+    get:
+      operationId: getLlmAudit
+      responses:
+        "200":
+          description: Embedded LLM gateway audit records or a remote-gateway notice.
+          content:
+            application/json:
+              schema: {}
+  /metrics:
+    get:
+      operationId: getMetrics
+      responses:
+        "200":
+          description: Prometheus metrics.
+          content:
+            text/plain:
+              schema:
+                type: string
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+  parameters:
+    Actor:
+      name: X-AMAP-Actor
+      in: header
+      required: false
+      schema:
+        type: string
+        maxLength: 128
+    RunId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+  responses:
+    TextError:
+      description: Request failed.
+      content:
+        text/plain:
+          schema:
+            type: string
+  schemas:
+    Priority:
+      type: string
+      enum: [P0, P1, P2, P3]
+    SpecSummary:
+      type: object
+      required: [path, function_id, name, domain, priority, description, mock_available]
+      properties:
+        path:
+          type: string
+        function_id:
+          type: string
+        name:
+          type: string
+        domain:
+          type: string
+        priority:
+          $ref: "#/components/schemas/Priority"
+        description:
+          type: string
+        mock_available:
+          type: boolean
+    StartRunRequest:
+      type: object
+      required: [spec]
+      properties:
+        spec:
+          type: string
+        mock:
+          type: boolean
+          default: false
+    WorkflowRun:
+      type: object
+      required: [id, function_id, status, spec_path, mock, started_at, updated_at, checkpoint]
+      properties:
+        id:
+          type: string
+        function_id:
+          type: string
+        status:
+          type: string
+          enum: [running, halted, certified, failed, error]
+        spec_path:
+          type: string
+        mock:
+          type: boolean
+        started_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        outcome:
+          oneOf:
+            - $ref: "#/components/schemas/WorkflowOutcome"
+            - $ref: "#/components/schemas/ErrorOutcome"
+            - type: "null"
+        checkpoint:
+          type: object
+          additionalProperties: true
+    BusinessFunction:
+      type: object
+      required: [id, name, domain, priority, description]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        domain:
+          type: string
+        priority:
+          $ref: "#/components/schemas/Priority"
+        description:
+          type: string
+    ReviewStatus:
+      type: string
+      enum: [pending, approved, rejected]
+    HitlTier:
+      type: string
+      enum: [auto, ai_cross_review, expert_review, sme_mandatory]
+    ReviewRequest:
+      type: object
+      required: [id, function_id, tier, reason, uncertainty, status, requested_at]
+      properties:
+        id:
+          type: string
+        run_id:
+          type: [string, "null"]
+        function_id:
+          type: string
+        tier:
+          $ref: "#/components/schemas/HitlTier"
+        reason:
+          type: string
+        uncertainty:
+          type: number
+          format: double
+        status:
+          $ref: "#/components/schemas/ReviewStatus"
+        requested_at:
+          type: string
+          format: date-time
+        decided_by:
+          type: [string, "null"]
+        decided_at:
+          type: [string, "null"]
+          format: date-time
+    ReviewDecision:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [approved, rejected]
+    ControlEvent:
+      type: object
+      required: [subject, run_id, function_id, payload, at]
+      properties:
+        subject:
+          type: string
+        run_id:
+          type: string
+        function_id:
+          type: string
+        payload: {}
+        at:
+          type: string
+          format: date-time
+    StepStatus:
+      type: string
+      enum: [succeeded, failed, halted, skipped]
+    StepReport:
+      type: object
+      required: [name, role, status, attempts, summary, duration_ms]
+      properties:
+        name:
+          type: string
+        role:
+          type: string
+        status:
+          $ref: "#/components/schemas/StepStatus"
+        attempts:
+          type: integer
+          minimum: 0
+        summary:
+          type: string
+        duration_ms:
+          type: integer
+          minimum: 0
+    RunReport:
+      type: object
+      required: [run_id, function_id, steps, outputs]
+      properties:
+        run_id:
+          type: string
+        function_id:
+          type: string
+        steps:
+          type: array
+          items:
+            $ref: "#/components/schemas/StepReport"
+        outputs:
+          type: object
+          additionalProperties: true
+        halted:
+          type: [string, "null"]
+        failed:
+          type: [string, "null"]
+    GateCheck:
+      type: object
+      required: [kpi, required, actual, passed]
+      properties:
+        kpi:
+          type: string
+        required:
+          type: string
+        actual:
+          type: string
+        passed:
+          type: boolean
+    GateReport:
+      type: object
+      required: [function_id, certified, checks]
+      properties:
+        function_id:
+          type: string
+        certified:
+          type: boolean
+        checks:
+          type: array
+          items:
+            $ref: "#/components/schemas/GateCheck"
+    WorkflowOutcome:
+      type: object
+      required: [reports, certified, iterations, final_outputs]
+      properties:
+        reports:
+          type: array
+          items:
+            $ref: "#/components/schemas/RunReport"
+        certified:
+          type: boolean
+        gate:
+          oneOf:
+            - $ref: "#/components/schemas/GateReport"
+            - type: "null"
+        iterations:
+          type: integer
+          minimum: 0
+        halted:
+          type: [string, "null"]
+        failed:
+          type: [string, "null"]
+        final_outputs:
+          type: object
+          additionalProperties: true
+    ErrorOutcome:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string

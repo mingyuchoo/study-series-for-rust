@@ -23,6 +23,11 @@ __pycache__/
 .venv/
 venv/
 
+# --- React / Vite ---
+web/node_modules/
+web/dist/
+web/*.tsbuildinfo
+
 # --- Secrets / local env ---
 # ANTHROPIC_API_KEY, OPENAI_API_KEY, AWS_ENDPOINT_URL, ... belong in .env, never in git
 .env

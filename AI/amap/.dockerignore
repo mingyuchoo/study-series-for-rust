@@ -1,0 +1,8 @@
+.git
+.amap
+target
+**/target
+web/node_modules
+web/dist
+**/.workspace
+*.log

@@ -14,6 +14,7 @@ token_budget = 0
 # worker_token = "replace-with-a-different-long-random-secret"
 # verifier_endpoint = "https://verification-worker.internal:50051"
 spec_root = "."
+web_dist = "web/dist"
 worker_root = "."
 worker_allowed_executables = "python3,python,cargo,java,javac"
 worker_artifact_max_bytes = 67108864

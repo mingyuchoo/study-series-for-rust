@@ -60,7 +60,7 @@ tonic-prost-build = "0.14"
 prost = "0.14"
 protoc-bin-vendored = "3"
 tower = "0.5"
-tower-http = { version = "0.6", features = ["trace", "cors", "timeout"] }
+tower-http = { version = "0.6", features = ["trace", "cors", "timeout", "fs"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 serde_yaml = "0.9"

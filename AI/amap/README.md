@@ -78,6 +78,34 @@ make wasm
 make demo
 ```
 
+## 웹 운영 콘솔
+
+`web/`은 OpenAPI 계약에서 TypeScript 타입을 생성하는 React 운영 콘솔입니다. 실행 명세 선택, 실행 시작, 에이전트 단계의 SSE 실시간 추적, HITL 승인 및 거절, 중단 실행 재개, 품질 게이트 확인을 한 화면에서 제공합니다.
+
+로컬에서는 두 터미널을 사용합니다.
+
+```bash
+# 터미널 1: API 키가 필요 없는 로컬 Control Plane
+AMAP_INSECURE_DEV=true AMAP_MOCK_LLM=true cargo run --bin control-plane
+
+# 터미널 2: React 개발 서버
+npm --prefix web install
+npm --prefix web run dev
+```
+
+브라우저에서 `http://127.0.0.1:5173`을 엽니다. Vite가 `/v1`, `/healthz`, `/metrics`, `/openapi.yaml` 요청을 Control Plane으로 전달합니다.
+
+프로덕션 번들은 다음 명령으로 만듭니다.
+
+```bash
+npm --prefix web run build
+cargo run --release --bin control-plane
+```
+
+`web/dist/index.html`이 존재하면 Control Plane이 정적 파일과 SPA 경로를 같은 출처에서 제공합니다. 위치는 `AMAP_WEB_DIST`로 변경할 수 있습니다. Docker 이미지도 React 빌드를 포함합니다.
+
+API 계약의 원본은 [`openapi/amap.yaml`](openapi/amap.yaml)이며 `npm --prefix web run generate:api`가 [`web/src/api/schema.d.ts`](web/src/api/schema.d.ts)를 생성합니다. 실행별 실시간 이벤트는 `GET /v1/runs/{id}/events`의 `text/event-stream` 응답으로 전달됩니다.
+
 ## 실행 모드
 
 ### 1. 오프라인 또는 CI 모드
@@ -218,6 +246,7 @@ fixtures = "mock"
 | `worker_listen`, `AMAP_WORKER_LISTEN` | `127.0.0.1:50051` | gRPC 워커 수신 주소입니다. |
 | `token_budget`, `AMAP_TOKEN_BUDGET` | `0` | 실행별 LLM 토큰 한도입니다. 0은 무제한입니다. |
 | `spec_root`, `AMAP_SPEC_ROOT` | `.` | Control Plane이 허용하는 run spec 루트입니다. |
+| `web_dist`, `AMAP_WEB_DIST` | `web/dist` | Control Plane이 제공할 React 프로덕션 빌드 디렉터리입니다. |
 | `worker_root`, `AMAP_WORKER_ROOT` | `.` | 소스, 작업공간, 지원 파일, 실행 명령의 파일시스템 경계입니다. |
 | `worker_allowed_executables`, `AMAP_WORKER_ALLOWED_EXECUTABLES` | `python3,python,cargo,java,javac` | 워커가 실행할 수 있는 프로그램 basename 목록입니다. |
 | `worker_artifact_max_bytes`, `AMAP_WORKER_ARTIFACT_MAX_BYTES` | `67108864` | 원격 워커 아티팩트 번들의 최대 크기입니다. |
@@ -237,13 +266,15 @@ LLM 관련 추가 환경 변수는 다음과 같습니다.
 
 ## Control Plane API
 
-`GET /healthz`만 공개됩니다. 그 밖의 엔드포인트는 `AMAP_API_TOKEN`이 설정된 경우 Bearer 인증을 요구합니다. 변경 주체는 `X-AMAP-Actor` 헤더로 기록하며 생략 시 `api-client`를 사용합니다.
+`GET /healthz`와 `GET /openapi.yaml`은 공개됩니다. 그 밖의 엔드포인트는 `AMAP_API_TOKEN`이 설정된 경우 Bearer 인증을 요구합니다. 변경 주체는 `X-AMAP-Actor` 헤더로 기록하며 생략 시 `api-client`를 사용합니다.
 
 | 메서드와 경로 | 설명 |
 |---|---|
+| `GET /v1/specs` | 설정된 루트에서 실행 가능한 run spec 목록을 조회합니다. |
 | `POST /v1/runs` | run spec으로 비동기 실행을 시작합니다. |
 | `GET /v1/runs` | 실행 목록을 조회합니다. |
 | `GET /v1/runs/{id}` | 실행 상태, 체크포인트, 결과를 조회합니다. |
+| `GET /v1/runs/{id}/events` | 과거 이벤트를 재생한 뒤 새 이벤트를 SSE로 전달합니다. |
 | `POST /v1/runs/{id}/resume` | 승인된 HITL 검토가 있는 중단 실행을 재개합니다. |
 | `GET /v1/functions` | 비즈니스 기능 목록을 조회합니다. |
 | `GET /v1/functions/{id}/{resource}` | `requirements`, `rules`, `behaviors`, `scenarios`, `decisions`, `evidence`, `certificate`를 조회합니다. |

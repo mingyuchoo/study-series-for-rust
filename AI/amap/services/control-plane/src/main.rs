@@ -8,13 +8,19 @@ use amap_platform::{Platform, PlatformBuilder, RunSpec, Settings};
 use axum::extract::{DefaultBodyLimit, Path, Query, State};
 use axum::http::{header, HeaderMap, Request, StatusCode};
 use axum::middleware::{self, Next};
-use axum::response::Response;
-use axum::routing::{get, post};
+use axum::response::sse::{Event as SseEvent, KeepAlive, Sse};
+use axum::response::{IntoResponse, Response};
+use axum::routing::{any, get, post};
 use axum::{Json, Router};
-use serde::Deserialize;
+use futures::{stream, Stream, StreamExt};
+use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::collections::HashSet;
+use std::convert::Infallible;
+use std::path::Path as FilePath;
 use std::sync::Arc;
+use std::time::Duration;
+use tower_http::services::{ServeDir, ServeFile};
 
 #[derive(Clone)]
 struct App {
@@ -72,6 +78,131 @@ struct StartRun {
     spec: String,
     #[serde(default)]
     mock: bool,
+}
+
+#[derive(Clone, Debug, Serialize)]
+struct SpecSummary {
+    path: String,
+    function_id: String,
+    name: String,
+    domain: String,
+    priority: Priority,
+    description: String,
+    mock_available: bool,
+}
+
+fn discover_run_specs(root: &FilePath) -> Vec<SpecSummary> {
+    let mut pending = vec![root.to_path_buf()];
+    let mut specs = Vec::new();
+
+    while let Some(directory) = pending.pop() {
+        let Ok(entries) = std::fs::read_dir(&directory) else {
+            continue;
+        };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            let Ok(file_type) = entry.file_type() else {
+                continue;
+            };
+            if file_type.is_symlink() {
+                continue;
+            }
+            if file_type.is_dir() {
+                let name = entry.file_name();
+                let name = name.to_string_lossy();
+                if !name.starts_with('.') && name != "target" && name != "node_modules" {
+                    pending.push(path);
+                }
+                continue;
+            }
+            if path.extension().and_then(|value| value.to_str()) != Some("toml") {
+                continue;
+            }
+            let Ok(spec) = RunSpec::load(&path) else {
+                continue;
+            };
+            let Ok(relative) = path.strip_prefix(root) else {
+                continue;
+            };
+            specs.push(SpecSummary {
+                path: relative.to_string_lossy().replace('\\', "/"),
+                function_id: spec.function.id,
+                name: spec.function.name,
+                domain: spec.function.domain,
+                priority: spec.function.priority,
+                description: spec.function.description,
+                mock_available: spec.mock.fixtures.is_some(),
+            });
+        }
+    }
+    specs.sort_by(|left, right| left.path.cmp(&right.path));
+    specs
+}
+
+async fn list_specs(State(app): State<App>) -> Json<Vec<SpecSummary>> {
+    Json(discover_run_specs(&app.spec_root))
+}
+
+async fn openapi() -> impl IntoResponse {
+    (
+        [(header::CONTENT_TYPE, "application/yaml; charset=utf-8")],
+        include_str!("../../../openapi/amap.yaml"),
+    )
+}
+
+fn to_sse_event(event: amap_orchestrator::Event) -> SseEvent {
+    let id = format!(
+        "{}:{}",
+        event.at.timestamp_micros(),
+        event.subject.replace(' ', "-")
+    );
+    let data = serde_json::to_string(&event).unwrap_or_else(|_| "{}".to_string());
+    SseEvent::default().id(id).event(event.subject).data(data)
+}
+
+async fn run_events(
+    State(app): State<App>,
+    Path(id): Path<String>,
+) -> Result<Sse<impl Stream<Item = Result<SseEvent, Infallible>>>, (StatusCode, String)> {
+    if app
+        .platform
+        .knowledge
+        .get_workflow_run(&id)
+        .await
+        .map_err(internal)?
+        .is_none()
+    {
+        return Err((StatusCode::NOT_FOUND, "run not found".into()));
+    }
+
+    // Subscribe before taking the history snapshot so no event can be lost during hand-off.
+    // A client may see a duplicate at this boundary and should de-duplicate by the SSE id.
+    let receiver = app.platform.bus.subscribe();
+    let history_run_id = id.clone();
+    let history = app
+        .platform
+        .bus
+        .history()
+        .into_iter()
+        .filter(move |event| event.run_id == history_run_id)
+        .map(|event| Ok(to_sse_event(event)));
+    let live = stream::unfold((receiver, id), |(mut receiver, id)| async move {
+        loop {
+            match receiver.recv().await {
+                Ok(event) if event.run_id == id => {
+                    return Some((Ok(to_sse_event(event)), (receiver, id)));
+                }
+                Ok(_) | Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => continue,
+                Err(tokio::sync::broadcast::error::RecvError::Closed) => return None,
+            }
+        }
+    });
+
+    Ok(Sse::new(stream::iter(history).chain(live)).keep_alive(
+        KeepAlive::new()
+            .interval(Duration::from_secs(15))
+            .text("keep-alive"),
+    ))
 }
 
 fn launch_run(platform: Arc<Platform>, ctx: AgentContext) {
@@ -416,8 +547,10 @@ async fn main() -> anyhow::Result<()> {
     };
     let protected = Router::new()
         .route("/metrics", get(metrics))
+        .route("/v1/specs", get(list_specs))
         .route("/v1/runs", post(start_run).get(list_runs))
         .route("/v1/runs/{id}", get(get_run))
+        .route("/v1/runs/{id}/events", get(run_events))
         .route("/v1/runs/{id}/resume", post(resume_run))
         .route("/v1/functions", get(functions))
         .route("/v1/functions/{id}/{what}", get(function_detail))
@@ -427,15 +560,60 @@ async fn main() -> anyhow::Result<()> {
         .route("/v1/evidence/query", get(evidence_query))
         .route("/v1/graph.dot", get(graph_dot))
         .route("/v1/llm/audit", get(audit))
+        .route(
+            "/v1/{*path}",
+            any(|| async { (StatusCode::NOT_FOUND, "API route not found") }),
+        )
         .layer(DefaultBodyLimit::max(1024 * 1024))
         .route_layer(middleware::from_fn_with_state(app.clone(), authenticate));
     let router = Router::new()
         .route("/healthz", get(|| async { "ok" }))
+        .route("/openapi.yaml", get(openapi))
         .merge(protected)
         .layer(tower_http::trace::TraceLayer::new_for_http())
         .with_state(app);
+    let web_index = settings.web_dist.join("index.html");
+    let router = if web_index.is_file() {
+        router
+            .fallback_service(ServeDir::new(&settings.web_dist).fallback(ServeFile::new(web_index)))
+    } else {
+        router
+    };
     let listener = tokio::net::TcpListener::bind(&settings.control_plane_listen).await?;
     tracing::info!(addr = %settings.control_plane_listen, "control-plane listening");
     axum::serve(listener, router).await?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn bundled_run_spec_is_discoverable() {
+        let root = FilePath::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .and_then(FilePath::parent)
+            .unwrap();
+        let specs = discover_run_specs(root);
+        assert!(specs
+            .iter()
+            .any(|spec| spec.path == "examples/loan-demo/amap.toml"));
+    }
+
+    #[test]
+    fn openapi_contract_covers_control_plane_routes() {
+        let contract = include_str!("../../../openapi/amap.yaml");
+        for path in [
+            "/v1/specs:",
+            "/v1/runs:",
+            "/v1/runs/{id}:",
+            "/v1/runs/{id}/events:",
+            "/v1/runs/{id}/resume:",
+            "/v1/functions:",
+            "/v1/reviews:",
+        ] {
+            assert!(contract.contains(path), "missing OpenAPI path {path}");
+        }
+    }
 }
