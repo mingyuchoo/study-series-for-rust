@@ -24,6 +24,8 @@ __pycache__/
 venv/
 
 # --- React / Vite ---
+# the repo-root .gitignore drops every package-lock.json; run.sh, Dockerfile and CI need this one
+!web/package-lock.json
 web/node_modules/
 web/dist/
 web/*.tsbuildinfo

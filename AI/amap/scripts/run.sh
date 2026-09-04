@@ -22,7 +22,12 @@ require_command cargo
 require_command npm
 
 log_step "1/3" "React 웹 UI 의존성을 설치합니다."
-npm --prefix web ci
+if [[ -f web/package-lock.json ]]; then
+    npm --prefix web ci
+else
+    printf 'web/package-lock.json이 없어 npm install로 대체합니다.\n'
+    npm --prefix web install
+fi
 
 log_step "2/3" "React 웹 UI의 프로덕션 번들을 빌드합니다."
 npm --prefix web run build
