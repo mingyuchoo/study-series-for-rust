@@ -61,13 +61,15 @@ cargo run --locked --quiet --bin amap -- demo
 cargo run --locked --quiet --bin amap -- demo --out .amap/demo-outcome.json
 ```
 
-### 전체 검증
+### 웹 서버 한 번에 실행
 
 ```bash
 ./scripts/run.sh
 ```
 
-이 스크립트는 워크스페이스 전체 타깃 빌드, Finance WASM 플러그인 빌드, 전체 테스트, 플러그인 테스트, 오프라인 데모를 순서대로 실행합니다. 개별 작업은 다음 명령으로 실행할 수 있습니다.
+이 스크립트는 React 의존성을 설치하고 프로덕션 번들을 만든 뒤, mock LLM을 사용하는 로컬 Control Plane을 `http://127.0.0.1:8080`에서 실행합니다. 서버는 `Ctrl+C`로 종료합니다. `AMAP_INSECURE_DEV`와 `AMAP_MOCK_LLM`을 미리 지정하면 해당 값을 유지합니다.
+
+필요한 검증과 개별 작업은 다음 명령으로 실행할 수 있습니다.
 
 ```bash
 make architecture
