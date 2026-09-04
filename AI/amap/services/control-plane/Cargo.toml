@@ -26,7 +26,12 @@ tracing.workspace = true
 uuid.workspace = true
 chrono.workspace = true
 subtle.workspace = true
+sha2.workspace = true
+hex.workspace = true
 futures.workspace = true
 jsonwebtoken = { version = "11", default-features = false, features = ["rust_crypto"] }
 reqwest.workspace = true
 thiserror.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true

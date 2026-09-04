@@ -2,12 +2,15 @@ import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Activity,
+  ArrowLeft,
   AlertTriangle,
   Check,
   CheckCircle2,
   ChevronRight,
   Circle,
   Clock3,
+  Folder,
+  FolderOpen,
   KeyRound,
   LoaderCircle,
   Pause,
@@ -25,8 +28,11 @@ import {
   setApiToken,
   streamRunEvents,
   type ControlEvent,
+  type PathListing,
+  type PreflightResponse,
   type ReviewRequest,
   type SpecSummary,
+  type StartRunRequest,
   type WorkflowRun
 } from "./api/client";
 
@@ -161,8 +167,8 @@ function RunList({ runs, selectedId }: { runs: WorkflowRun[]; selectedId?: strin
           type="button"
         >
           <span className="run-row-main">
-            <strong>{run.function_id}</strong>
-            <small>{formatDate(run.started_at)}</small>
+            <strong>{run.display_name || run.function_id}</strong>
+            <small>{run.function_id} · {formatDate(run.started_at)}</small>
           </span>
           <StatusBadge status={run.status} />
           <ChevronRight aria-hidden="true" size={17} />
@@ -172,68 +178,379 @@ function RunList({ runs, selectedId }: { runs: WorkflowRun[]; selectedId?: strin
   );
 }
 
+function suggestedName(spec: SpecSummary): string {
+  const date = new Intl.DateTimeFormat("sv-SE", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit"
+  }).format(new Date());
+  return `${spec.name} - ${date}`;
+}
+
+function directoryParent(path: string): string {
+  const parts = path.split("/").filter((part) => part && part !== ".");
+  parts.pop();
+  return parts.join("/") || ".";
+}
+
+function joinPath(parent: string, name: string): string {
+  return [parent === "." ? "" : parent, name.trim()].filter(Boolean).join("/");
+}
+
+function PathPicker({
+  initialPath,
+  onClose,
+  onSelect,
+  purpose
+}: {
+  initialPath: string;
+  onClose: () => void;
+  onSelect: (path: string) => void;
+  purpose: "source" | "destination";
+}) {
+  const [current, setCurrent] = useState(
+    purpose === "destination" ? directoryParent(initialPath) : initialPath || "."
+  );
+  const [search, setSearch] = useState("");
+  const [newDirectory, setNewDirectory] = useState(
+    purpose === "destination" ? initialPath.split("/").filter(Boolean).at(-1) ?? "" : ""
+  );
+  const listing = useQuery<PathListing>({
+    queryKey: ["paths", purpose, current, search],
+    queryFn: () => api.listPaths(purpose, current, search),
+    retry: false
+  });
+
+  useEffect(() => {
+    const close = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", close);
+    return () => window.removeEventListener("keydown", close);
+  }, [onClose]);
+
+  useEffect(() => {
+    if (purpose !== "destination" || !listing.isError || current === ".") return;
+    const missing = current.split("/").filter(Boolean).at(-1);
+    if (missing) setNewDirectory((value) => joinPath(missing, value));
+    setCurrent(directoryParent(current));
+  }, [current, listing.isError, purpose]);
+
+  return (
+    <div className="dialog-backdrop path-picker-layer" role="presentation">
+      <section aria-labelledby="path-picker-title" aria-modal="true" className="path-picker" role="dialog">
+        <div className="dialog-heading">
+          <div>
+            <p className="eyebrow">SERVER WORKSPACE</p>
+            <h2 id="path-picker-title">{purpose === "source" ? "원본 소스 선택" : "결과 위치 선택"}</h2>
+          </div>
+          <button aria-label="경로 선택 닫기" className="icon-button" onClick={onClose} type="button">
+            <X size={18} />
+          </button>
+        </div>
+        <div className="path-toolbar">
+          <button
+            aria-label="상위 디렉터리"
+            disabled={!listing.data?.parent}
+            onClick={() => listing.data?.parent && setCurrent(listing.data.parent)}
+            type="button"
+          >
+            <ArrowLeft size={17} />
+          </button>
+          <code>{listing.data?.path ?? current}</code>
+          <input
+            aria-label="디렉터리 검색"
+            onChange={(event) => setSearch(event.target.value)}
+            placeholder="디렉터리 검색"
+            value={search}
+          />
+        </div>
+        <div className="directory-list" aria-live="polite">
+          {listing.isLoading ? (
+            <div className="picker-state"><LoaderCircle className="spin" size={22} /> 불러오는 중</div>
+          ) : listing.error ? (
+            <div className="picker-state error"><AlertTriangle size={20} /> {listing.error.message}</div>
+          ) : listing.data?.entries.length ? (
+            listing.data.entries.map((entry) => (
+              <button key={entry.path} onClick={() => setCurrent(entry.path)} type="button">
+                <Folder size={18} />
+                <span>{entry.name}</span>
+                <ChevronRight size={16} />
+              </button>
+            ))
+          ) : (
+            <div className="picker-state">표시할 하위 디렉터리가 없습니다.</div>
+          )}
+        </div>
+        {purpose === "destination" ? (
+          <div className="new-directory-row">
+            <label htmlFor="new-directory">새 결과 디렉터리</label>
+            <input
+              id="new-directory"
+              onChange={(event) => setNewDirectory(event.target.value)}
+              placeholder="예: modernized-loan"
+              value={newDirectory}
+            />
+          </div>
+        ) : null}
+        <div className="dialog-actions">
+          <button className="secondary-button" onClick={onClose} type="button">취소</button>
+          <button
+            className="primary-button fit"
+            disabled={!listing.data || (purpose === "destination" && !newDirectory.trim())}
+            onClick={() => {
+              const path = purpose === "destination" ? joinPath(current, newDirectory) : current;
+              onSelect(path);
+              onClose();
+            }}
+            type="button"
+          >
+            이 경로 사용
+          </button>
+        </div>
+      </section>
+    </div>
+  );
+}
+
 function NewRunPanel({ specs }: { specs: SpecSummary[] }) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const [specPath, setSpecPath] = useState("");
+  const firstSpec = specs.find((spec) => spec.runnable);
+  const [open, setOpen] = useState(false);
+  const [specPath, setSpecPath] = useState(firstSpec?.path ?? "");
+  const [name, setName] = useState(firstSpec ? suggestedName(firstSpec) : "");
+  const [nameEdited, setNameEdited] = useState(false);
+  const [sourcePath, setSourcePath] = useState(firstSpec?.defaults?.source_path ?? "");
+  const [destinationPath, setDestinationPath] = useState(firstSpec?.defaults?.destination_path ?? "");
   const [mock, setMock] = useState(false);
+  const [picker, setPicker] = useState<"source" | "destination" | null>(null);
+  const [preflightResult, setPreflightResult] = useState<PreflightResponse | null>(null);
   const selected = specs.find((spec) => spec.path === specPath);
 
-  useEffect(() => {
-    if (!specPath && specs[0]) setSpecPath(specs[0].path);
-  }, [specPath, specs]);
+  const requestInput = (): StartRunRequest => ({
+    name,
+    spec: specPath,
+    source: { type: "local_path", path: sourcePath },
+    destination: { type: "local_path", path: destinationPath },
+    mock
+  });
+
+  const invalidatePreflight = () => setPreflightResult(null);
+
+  const chooseSpec = (path: string) => {
+    const next = specs.find((spec) => spec.path === path);
+    setSpecPath(path);
+    setSourcePath(next?.defaults?.source_path ?? "");
+    setDestinationPath(next?.defaults?.destination_path ?? "");
+    if (next && !nameEdited) setName(suggestedName(next));
+    setMock(false);
+    invalidatePreflight();
+  };
+
+  const preflight = useMutation({
+    mutationFn: () => api.preflightRun(requestInput()),
+    onSuccess: setPreflightResult
+  });
 
   const start = useMutation({
-    mutationFn: () => api.startRun(specPath, mock),
+    mutationFn: () =>
+      api.startRun({
+        ...requestInput(),
+        validation_token: preflightResult?.validation_token
+      }),
     onSuccess: (run) => {
       void queryClient.invalidateQueries({ queryKey: ["runs"] });
+      setOpen(false);
       navigate(`/runs/${run.id}`);
     }
   });
 
+  const ready = Boolean(name.trim() && specPath && sourcePath.trim() && destinationPath.trim());
+  const canStart = Boolean(preflightResult?.valid && preflightResult.validation_token);
+  const fieldError = (field: string) =>
+    preflightResult && !preflightResult.valid
+      ? preflightResult.errors.find((error) => error.field === field)
+      : undefined;
+
+  useEffect(() => {
+    if (!open || picker) return;
+    const close = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setOpen(false);
+    };
+    window.addEventListener("keydown", close);
+    return () => window.removeEventListener("keydown", close);
+  }, [open, picker]);
+
   return (
-    <section className="launch-panel" aria-labelledby="launch-title">
-      <div className="section-heading compact">
-        <div>
-          <p className="eyebrow">새 워크플로</p>
-          <h2 id="launch-title">현대화 실행</h2>
+    <>
+      <section className="launch-panel" aria-labelledby="launch-title">
+        <div className="section-heading compact">
+          <div>
+            <p className="eyebrow">새 워크플로</p>
+            <h2 id="launch-title">현대화 작업</h2>
+          </div>
+          <FolderOpen aria-hidden="true" size={18} />
         </div>
-        <Play aria-hidden="true" size={18} />
-      </div>
-      <label className="field-label" htmlFor="run-spec">
-        실행 명세
-      </label>
-      <select id="run-spec" value={specPath} onChange={(event) => setSpecPath(event.target.value)}>
-        {specs.map((spec) => (
-          <option key={spec.path} value={spec.path}>
-            {spec.name}
-          </option>
-        ))}
-      </select>
-      {selected ? (
-        <div className="spec-summary">
-          <span className={`priority ${selected.priority.toLowerCase()}`}>{selected.priority}</span>
-          <span>{selected.domain}</span>
-          <span>{selected.function_id}</span>
+        <p className="launch-copy">작업 이름과 원본·결과 위치를 확인한 뒤 실행합니다.</p>
+        <button className="primary-button" disabled={!firstSpec} onClick={() => setOpen(true)} type="button">
+          <Play size={18} /> 새 작업 만들기
+        </button>
+      </section>
+
+      {open ? (
+        <div className="dialog-backdrop" role="presentation">
+          <section aria-labelledby="new-run-title" aria-modal="true" className="new-run-dialog" role="dialog">
+            <div className="dialog-heading">
+              <div>
+                <p className="eyebrow">NEW MODERNIZATION RUN</p>
+                <h2 id="new-run-title">새 현대화 작업</h2>
+              </div>
+              <button aria-label="작업 생성 닫기" className="icon-button" onClick={() => setOpen(false)} type="button">
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="form-section">
+              <h3>작업 정보</h3>
+              <label className="field-label" htmlFor="run-name">작업 이름 <span>*</span></label>
+              <input
+                aria-describedby="run-name-help"
+                aria-invalid={Boolean(fieldError("name"))}
+                autoFocus
+                id="run-name"
+                maxLength={80}
+                onChange={(event) => {
+                  setName(event.target.value);
+                  setNameEdited(true);
+                  invalidatePreflight();
+                }}
+                required
+                value={name}
+              />
+              <small className="field-help" id="run-name-help">최근 실행과 감사 기록에서 이 이름으로 표시됩니다.</small>
+              {fieldError("name") ? <small className="field-error">{fieldError("name")?.message}</small> : null}
+
+              <label className="field-label" htmlFor="run-spec">실행 명세 <span>*</span></label>
+              <select aria-invalid={Boolean(fieldError("spec"))} id="run-spec" onChange={(event) => chooseSpec(event.target.value)} required value={specPath}>
+                {specs.map((spec) => (
+                  <option disabled={!spec.runnable} key={spec.path} value={spec.path}>
+                    {spec.name}{spec.runnable ? "" : " (실행 불가)"}
+                  </option>
+                ))}
+              </select>
+              {fieldError("spec") ? <small className="field-error">{fieldError("spec")?.message}</small> : null}
+              {selected ? (
+                <div className="spec-summary">
+                  <span className={`priority ${selected.priority.toLowerCase()}`}>{selected.priority}</span>
+                  <span>{selected.domain}</span>
+                  <span>{selected.function_id}</span>
+                </div>
+              ) : null}
+            </div>
+
+            <div className="form-grid">
+              <div className="form-section">
+                <h3>원본 소스</h3>
+                <label className="field-label" htmlFor="source-path">소스 경로 <span>*</span></label>
+                <div className="path-input-row">
+                  <input
+                    aria-invalid={Boolean(fieldError("source.path"))}
+                    id="source-path"
+                    onChange={(event) => { setSourcePath(event.target.value); invalidatePreflight(); }}
+                    required
+                    value={sourcePath}
+                  />
+                  <button onClick={() => setPicker("source")} type="button"><FolderOpen size={17} /> 선택</button>
+                </div>
+                <small className="field-help">worker_root 기준 상대 경로입니다.</small>
+                {fieldError("source.path") ? <small className="field-error">{fieldError("source.path")?.message}</small> : null}
+              </div>
+
+              <div className="form-section">
+                <h3>결과 위치</h3>
+                <label className="field-label" htmlFor="destination-path">결과 경로 <span>*</span></label>
+                <div className="path-input-row">
+                  <input
+                    aria-invalid={Boolean(fieldError("destination.path"))}
+                    id="destination-path"
+                    onChange={(event) => { setDestinationPath(event.target.value); invalidatePreflight(); }}
+                    required
+                    value={destinationPath}
+                  />
+                  <button onClick={() => setPicker("destination")} type="button"><FolderOpen size={17} /> 선택</button>
+                </div>
+                <small className="field-help">원본과 겹치지 않는 새 디렉터리를 사용하십시오.</small>
+                {fieldError("destination.path") ? <small className="field-error">{fieldError("destination.path")?.message}</small> : null}
+              </div>
+            </div>
+
+            {selected?.mock_available ? (
+              <label className="checkbox-row run-option">
+                <input
+                  checked={mock}
+                  onChange={(event) => { setMock(event.target.checked); invalidatePreflight(); }}
+                  type="checkbox"
+                />
+                fixture 기반 모의 LLM 사용
+              </label>
+            ) : null}
+
+            <div className="preflight-result" aria-live="polite">
+              {preflight.isPending ? <p><LoaderCircle className="spin" size={17} /> 입력을 점검하고 있습니다.</p> : null}
+              {preflight.error ? <p className="error"><AlertTriangle size={17} /> {preflight.error.message}</p> : null}
+              {preflightResult?.valid ? (
+                <div className="success">
+                  <p><CheckCircle2 size={17} /> 실행 준비가 완료되었습니다.</p>
+                  <small>
+                    지원 소스 {preflightResult.effective?.source_file_count ?? 0}개 · 결과 위치 {preflightResult.effective?.destination_state === "will_create" ? "새로 생성" : "빈 디렉터리"}
+                  </small>
+                </div>
+              ) : null}
+              {preflightResult && !preflightResult.valid
+                ? preflightResult.errors.map((error) => <p className="error" key={`${error.field}-${error.code}`}><XCircle size={17} /> {error.message}</p>)
+                : null}
+              {preflightResult?.warnings.map((warning) => <p className="warning" key={`${warning.field}-${warning.code}`}><AlertTriangle size={17} /> {warning.message}</p>)}
+            </div>
+
+            <div className="dialog-actions">
+              <button className="secondary-button" onClick={() => setOpen(false)} type="button">취소</button>
+              <button
+                className="secondary-button preflight-button"
+                disabled={!ready || preflight.isPending || start.isPending}
+                onClick={() => preflight.mutate()}
+                type="button"
+              >
+                {preflight.isPending ? <LoaderCircle className="spin" size={17} /> : <ShieldCheck size={17} />}
+                사전 점검
+              </button>
+              <button
+                className="primary-button fit"
+                disabled={!canStart || start.isPending}
+                onClick={() => start.mutate()}
+                type="button"
+              >
+                {start.isPending ? <LoaderCircle className="spin" size={18} /> : <Play size={18} />}
+                실행 시작
+              </button>
+            </div>
+            {start.error ? <p className="inline-error dialog-error">{start.error.message}</p> : null}
+          </section>
+          {picker ? (
+            <PathPicker
+              initialPath={picker === "source" ? sourcePath : destinationPath}
+              onClose={() => setPicker(null)}
+              onSelect={(path) => {
+                if (picker === "source") setSourcePath(path);
+                else setDestinationPath(path);
+                invalidatePreflight();
+              }}
+              purpose={picker}
+            />
+          ) : null}
         </div>
       ) : null}
-      {selected?.mock_available ? (
-        <label className="checkbox-row">
-          <input checked={mock} onChange={(event) => setMock(event.target.checked)} type="checkbox" />
-          fixture 기반 모의 LLM 사용
-        </label>
-      ) : null}
-      <button
-        className="primary-button"
-        disabled={!specPath || start.isPending}
-        onClick={() => start.mutate()}
-        type="button"
-      >
-        {start.isPending ? <LoaderCircle className="spin" size={18} /> : <Play size={18} />}
-        실행 시작
-      </button>
-      {start.error ? <p className="inline-error">{start.error.message}</p> : null}
-    </section>
+    </>
   );
 }
 
@@ -507,8 +824,8 @@ function Console() {
                     <span /> {connected ? "실시간 이벤트 연결" : "이벤트 연결 중"}
                   </span>
                 </div>
-                <h2>{run.data.function_id}</h2>
-                <p className="run-id">{run.data.id}</p>
+                <h2>{run.data.display_name || run.data.function_id}</h2>
+                <p className="run-id">{run.data.function_id} · {run.data.id}</p>
               </div>
               <div className="run-meta">
                 <span>
@@ -519,6 +836,23 @@ function Console() {
                 </span>
               </div>
             </section>
+            {run.data.inputs ? (
+              <section className="run-input-summary" aria-label="실행 입력">
+                <div>
+                  <span>원본 소스</span>
+                  <code>{run.data.inputs.source.path}</code>
+                </div>
+                <ChevronRight aria-hidden="true" size={18} />
+                <div>
+                  <span>결과 위치</span>
+                  <code>{run.data.inputs.destination.path}</code>
+                </div>
+                <div className="run-owner">
+                  <span>시작한 사용자</span>
+                  <strong>{run.data.started_by || "unknown"}</strong>
+                </div>
+              </section>
+            ) : null}
 
             {run.data.status === "halted" && selectedReviews.some((review) => review.status === "approved") ? (
               <div className="resume-banner">

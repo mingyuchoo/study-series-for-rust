@@ -6,6 +6,10 @@ export type WorkflowOutcome = components["schemas"]["WorkflowOutcome"];
 export type ControlEvent = components["schemas"]["ControlEvent"];
 export type ReviewRequest = components["schemas"]["ReviewRequest"];
 export type ReviewDecision = components["schemas"]["ReviewDecision"];
+export type StartRunRequest = components["schemas"]["StartRunRequest"];
+export type PreflightResponse = components["schemas"]["PreflightResponse"];
+export type PathListing = components["schemas"]["PathListing"];
+export type ApiProblem = components["schemas"]["ApiProblem"];
 
 const TOKEN_KEY = "amap.api-token";
 const ACTOR = "web-operator";
@@ -37,6 +41,11 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     headers: { ...headers(Boolean(init?.body)), ...init?.headers }
   });
   if (!response.ok) {
+    const contentType = response.headers.get("content-type") ?? "";
+    if (contentType.includes("application/json")) {
+      const problem = (await response.json()) as Partial<ApiProblem>;
+      throw new Error(problem.message || `요청에 실패했습니다. (${response.status})`);
+    }
     const message = await response.text();
     throw new Error(message || `요청에 실패했습니다. (${response.status})`);
   }
@@ -47,10 +56,20 @@ export const api = {
   listSpecs: () => request<SpecSummary[]>("/v1/specs"),
   listRuns: () => request<WorkflowRun[]>("/v1/runs"),
   getRun: (runId: string) => request<WorkflowRun>(`/v1/runs/${encodeURIComponent(runId)}`),
-  startRun: (spec: string, mock: boolean) =>
+  listPaths: (purpose: "source" | "destination", parent = ".", search = "") => {
+    const query = new URLSearchParams({ purpose, parent });
+    if (search.trim()) query.set("search", search.trim());
+    return request<PathListing>(`/v1/paths?${query.toString()}`);
+  },
+  preflightRun: (input: StartRunRequest) =>
+    request<PreflightResponse>("/v1/runs/preflight", {
+      method: "POST",
+      body: JSON.stringify(input)
+    }),
+  startRun: (input: StartRunRequest) =>
     request<WorkflowRun>("/v1/runs", {
       method: "POST",
-      body: JSON.stringify({ spec, mock })
+      body: JSON.stringify(input)
     }),
   listReviews: () => request<ReviewRequest[]>("/v1/reviews"),
   decideReview: (reviewId: string, decision: ReviewDecision) =>

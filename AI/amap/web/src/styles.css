@@ -244,6 +244,13 @@ select:focus-visible {
   background: linear-gradient(145deg, rgba(18, 43, 67, 0.96), rgba(11, 25, 41, 0.96));
 }
 
+.launch-copy {
+  margin: 0 0 14px;
+  color: var(--muted);
+  font-size: 0.8rem;
+  line-height: 1.55;
+}
+
 .section-heading {
   display: flex;
   align-items: center;
@@ -335,6 +342,281 @@ select:focus-visible {
 .resume-banner button:disabled {
   cursor: wait;
   opacity: 0.55;
+}
+
+.dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: grid;
+  place-items: center;
+  overflow: auto;
+  padding: 32px;
+  background: rgba(2, 8, 15, 0.82);
+  backdrop-filter: blur(8px);
+}
+
+.new-run-dialog,
+.path-picker {
+  width: min(920px, 100%);
+  max-height: calc(100vh - 64px);
+  overflow: auto;
+  padding: 26px;
+  color: var(--text);
+  border: 1px solid var(--border-strong);
+  border-top: 2px solid var(--teal);
+  background: #0b1828;
+  box-shadow: 0 28px 80px rgba(0, 0, 0, 0.48);
+}
+
+.dialog-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+  margin-bottom: 24px;
+  padding-bottom: 18px;
+  border-bottom: 1px solid var(--border);
+}
+
+.dialog-heading h2 {
+  margin: 5px 0 0;
+  font-size: 1.45rem;
+}
+
+.form-section {
+  padding: 18px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.form-section h3 {
+  margin: 0 0 16px;
+  font-size: 0.9rem;
+}
+
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  margin-top: 14px;
+}
+
+.new-run-dialog .field-label {
+  margin-top: 14px;
+}
+
+.new-run-dialog .field-label:first-of-type {
+  margin-top: 0;
+}
+
+.field-label > span {
+  color: var(--red);
+}
+
+.new-run-dialog input:not([type="checkbox"]),
+.new-run-dialog select,
+.path-picker input {
+  width: 100%;
+  min-height: 42px;
+  padding: 0 11px;
+  color: var(--text);
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  background: var(--bg);
+}
+
+.field-help {
+  display: block;
+  margin-top: 7px;
+  color: var(--dim);
+  font-size: 0.74rem;
+  line-height: 1.45;
+}
+
+.field-error {
+  display: block;
+  margin-top: 6px;
+  color: var(--red);
+  font-size: 0.74rem;
+}
+
+[aria-invalid="true"] {
+  border-color: var(--red) !important;
+}
+
+.path-input-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+}
+
+.path-input-row button,
+.secondary-button,
+.path-toolbar button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 40px;
+  padding: 0 13px;
+  color: var(--text);
+  white-space: nowrap;
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  background: var(--surface-2);
+}
+
+.run-option {
+  margin: 16px 2px 0;
+}
+
+.preflight-result {
+  min-height: 52px;
+  margin-top: 16px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  background: rgba(7, 17, 31, 0.6);
+}
+
+.preflight-result:empty {
+  display: none;
+}
+
+.preflight-result p {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.preflight-result p + p,
+.preflight-result small {
+  margin-top: 7px;
+}
+
+.preflight-result .success p {
+  color: var(--teal);
+}
+
+.preflight-result .error {
+  color: var(--red);
+}
+
+.preflight-result .warning {
+  color: var(--amber);
+}
+
+.preflight-result small {
+  display: block;
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+
+.dialog-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 9px;
+  margin-top: 20px;
+}
+
+.primary-button.fit {
+  width: auto;
+  min-width: 135px;
+  padding: 0 18px;
+}
+
+.preflight-button {
+  color: var(--teal);
+}
+
+.dialog-error {
+  text-align: right;
+}
+
+.path-picker-layer {
+  z-index: 110;
+  background: rgba(2, 8, 15, 0.72);
+}
+
+.path-picker {
+  width: min(680px, 100%);
+}
+
+.path-toolbar {
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr) minmax(150px, 220px);
+  align-items: center;
+  gap: 8px;
+}
+
+.path-toolbar code {
+  overflow-wrap: anywhere;
+  color: var(--teal);
+  font-size: 0.78rem;
+}
+
+.path-toolbar button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.directory-list {
+  min-height: 260px;
+  max-height: 360px;
+  overflow-y: auto;
+  margin-top: 14px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+}
+
+.directory-list > button {
+  width: 100%;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 13px;
+  color: var(--text);
+  text-align: left;
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  background: transparent;
+}
+
+.directory-list > button:hover {
+  color: var(--teal);
+  background: var(--surface-2);
+}
+
+.picker-state {
+  min-height: 260px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: var(--dim);
+  font-size: 0.82rem;
+}
+
+.picker-state.error {
+  color: var(--red);
+}
+
+.new-directory-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.new-directory-row label {
+  color: var(--muted);
+  font-size: 0.8rem;
 }
 
 .run-list {
@@ -504,6 +786,45 @@ select:focus-visible {
   display: flex;
   align-items: center;
   gap: 7px;
+}
+
+.run-input-summary {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 14px;
+  margin-top: 14px;
+  padding: 12px 16px;
+  border: 1px solid var(--border);
+  background: rgba(11, 24, 40, 0.72);
+}
+
+.run-input-summary div {
+  min-width: 0;
+}
+
+.run-input-summary span,
+.run-input-summary code,
+.run-input-summary strong {
+  display: block;
+}
+
+.run-input-summary span {
+  color: var(--dim);
+  font-size: 0.7rem;
+}
+
+.run-input-summary code,
+.run-input-summary strong {
+  margin-top: 4px;
+  overflow-wrap: anywhere;
+  color: var(--muted);
+  font-size: 0.76rem;
+}
+
+.run-owner {
+  padding-left: 14px;
+  border-left: 1px solid var(--border);
 }
 
 .resume-banner {
@@ -963,13 +1284,46 @@ select:focus-visible {
   }
 
   .run-hero,
-  .resume-banner {
+  .resume-banner,
+  .dialog-actions {
     align-items: flex-start;
     flex-direction: column;
   }
 
   .run-meta {
     justify-content: flex-start;
+  }
+
+  .dialog-backdrop {
+    align-items: start;
+    padding: 10px;
+  }
+
+  .new-run-dialog,
+  .path-picker {
+    max-height: none;
+    padding: 18px;
+  }
+
+  .form-grid,
+  .path-toolbar,
+  .new-directory-row,
+  .run-input-summary {
+    grid-template-columns: 1fr;
+  }
+
+  .run-input-summary > svg {
+    transform: rotate(90deg);
+  }
+
+  .run-owner {
+    padding: 0;
+    border: 0;
+  }
+
+  .dialog-actions button,
+  .primary-button.fit {
+    width: 100%;
   }
 
   .workspace-grid {

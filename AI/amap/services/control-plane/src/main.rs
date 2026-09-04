@@ -3,13 +3,13 @@
 mod auth;
 
 use amap_domain::*;
-use amap_knowledge::{ReviewStatus, WorkflowRun};
+use amap_knowledge::{LocalPathInput, ReviewStatus, RunInputs, WorkflowRun};
 use amap_orchestrator::AgentContext;
 #[allow(unused_imports)]
 use amap_platform::{Platform, PlatformBuilder, RunSpec, Settings};
 use amap_policy::{ActionContext, Principal};
 use auth::{OidcConfig, OidcVerifier};
-use axum::extract::{DefaultBodyLimit, Path, Query, State};
+use axum::extract::{DefaultBodyLimit, Extension, Path, Query, State};
 use axum::http::{header, HeaderMap, Request, StatusCode};
 use axum::middleware::{self, Next};
 use axum::response::sse::{Event as SseEvent, KeepAlive, Sse};
@@ -19,9 +19,12 @@ use axum::{Json, Router};
 use futures::{stream, Stream, StreamExt};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
+use sha2::{Digest, Sha256};
 use std::collections::HashSet;
 use std::convert::Infallible;
-use std::path::Path as FilePath;
+use std::fs::OpenOptions;
+use std::io::Write;
+use std::path::{Component, Path as FilePath, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
 use tower_http::services::{ServeDir, ServeFile};
@@ -39,6 +42,8 @@ struct App {
     execution_root: std::path::PathBuf,
     allowed_executables: HashSet<String>,
     insecure_dev: bool,
+    /// Per-process secret used to bind short-lived preflight tokens to normalized inputs.
+    preflight_secret: String,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -153,12 +158,33 @@ async fn authenticate(
     Ok(next.run(request).await)
 }
 
-#[derive(Deserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 struct StartRun {
     /// Path to an `amap.toml` run spec on the control-plane host.
     spec: String,
     #[serde(default)]
+    name: Option<String>,
+    #[serde(default)]
+    source: Option<PathInput>,
+    #[serde(default)]
+    destination: Option<PathInput>,
+    #[serde(default)]
     mock: bool,
+    #[serde(default)]
+    validation_token: Option<String>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+struct PathInput {
+    #[serde(rename = "type")]
+    kind: String,
+    path: String,
+}
+
+#[derive(Clone, Debug, Serialize)]
+struct SpecDefaults {
+    source_path: String,
+    destination_path: String,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -170,9 +196,14 @@ struct SpecSummary {
     priority: Priority,
     description: String,
     mock_available: bool,
+    runnable: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    unavailable_reason: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    defaults: Option<SpecDefaults>,
 }
 
-fn discover_run_specs(root: &FilePath) -> Vec<SpecSummary> {
+fn discover_run_specs(root: &FilePath, execution_root: &FilePath) -> Vec<SpecSummary> {
     let mut pending = vec![root.to_path_buf()];
     let mut specs = Vec::new();
 
@@ -205,6 +236,15 @@ fn discover_run_specs(root: &FilePath) -> Vec<SpecSummary> {
             let Ok(relative) = path.strip_prefix(root) else {
                 continue;
             };
+            let source_path = worker_relative_path(execution_root, &spec.run.source_root);
+            let destination_path = worker_relative_path(execution_root, &spec.run.workspace);
+            let defaults = source_path
+                .zip(destination_path)
+                .map(|(source, destination)| SpecDefaults {
+                    source_path: path_text(&source),
+                    destination_path: path_text(&destination),
+                });
+            let runnable = defaults.is_some();
             specs.push(SpecSummary {
                 path: relative.to_string_lossy().replace('\\', "/"),
                 function_id: spec.function.id,
@@ -213,6 +253,9 @@ fn discover_run_specs(root: &FilePath) -> Vec<SpecSummary> {
                 priority: spec.function.priority,
                 description: spec.function.description,
                 mock_available: spec.mock.fixtures.is_some(),
+                runnable,
+                unavailable_reason: (!runnable).then(|| "path_outside_worker_root".into()),
+                defaults,
             });
         }
     }
@@ -221,7 +264,693 @@ fn discover_run_specs(root: &FilePath) -> Vec<SpecSummary> {
 }
 
 async fn list_specs(State(app): State<App>) -> Json<Vec<SpecSummary>> {
-    Json(discover_run_specs(&app.spec_root))
+    Json(discover_run_specs(&app.spec_root, &app.execution_root))
+}
+
+const RUN_MARKER: &str = ".amap/run.json";
+const SOURCE_EXTENSIONS: &[&str] = &[
+    "cbl", "cob", "cpy", "rs", "js", "jsx", "ts", "tsx", "cs", "sql", "jcl",
+];
+
+#[derive(Clone, Debug, Serialize)]
+struct FieldIssue {
+    field: String,
+    code: String,
+    message: String,
+}
+
+impl FieldIssue {
+    fn new(field: &str, code: &str, message: impl Into<String>) -> Self {
+        Self {
+            field: field.into(),
+            code: code.into(),
+            message: message.into(),
+        }
+    }
+}
+
+#[derive(Debug)]
+struct RunRequestError {
+    status: StatusCode,
+    issue: FieldIssue,
+}
+
+impl RunRequestError {
+    fn bad(field: &str, code: &str, message: impl Into<String>) -> Self {
+        Self {
+            status: StatusCode::BAD_REQUEST,
+            issue: FieldIssue::new(field, code, message),
+        }
+    }
+
+    fn forbidden(field: &str, code: &str, message: impl Into<String>) -> Self {
+        Self {
+            status: StatusCode::FORBIDDEN,
+            issue: FieldIssue::new(field, code, message),
+        }
+    }
+
+    fn conflict(field: &str, code: &str, message: impl Into<String>) -> Self {
+        Self {
+            status: StatusCode::CONFLICT,
+            issue: FieldIssue::new(field, code, message),
+        }
+    }
+
+    fn response(self) -> (StatusCode, Json<ApiProblem>) {
+        (
+            self.status,
+            Json(ApiProblem {
+                code: self.issue.code,
+                message: self.issue.message,
+                field: Some(self.issue.field),
+                request_id: format!("REQ-{}", uuid::Uuid::new_v4()),
+            }),
+        )
+    }
+}
+
+#[derive(Debug, Serialize)]
+struct ApiProblem {
+    code: String,
+    message: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    field: Option<String>,
+    request_id: String,
+}
+
+#[derive(Debug)]
+struct ValidatedRun {
+    display_name: String,
+    spec_path: PathBuf,
+    spec: RunSpec,
+    inputs: RunInputs,
+    destination_path: PathBuf,
+    source_file_count: usize,
+    destination_state: String,
+    warnings: Vec<FieldIssue>,
+    mock: bool,
+}
+
+#[derive(Debug, Serialize)]
+struct PreflightEffective {
+    name: String,
+    function_id: String,
+    spec: String,
+    source_path: String,
+    destination_path: String,
+    source_file_count: usize,
+    destination_state: String,
+}
+
+#[derive(Debug, Serialize)]
+struct PreflightResponse {
+    valid: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    validation_token: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    expires_at: Option<chrono::DateTime<chrono::Utc>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    effective: Option<PreflightEffective>,
+    errors: Vec<FieldIssue>,
+    warnings: Vec<FieldIssue>,
+}
+
+#[derive(Debug, Deserialize)]
+struct PathQuery {
+    purpose: String,
+    #[serde(default)]
+    parent: String,
+    #[serde(default)]
+    search: String,
+}
+
+#[derive(Debug, Serialize)]
+struct PathEntry {
+    name: String,
+    path: String,
+    kind: &'static str,
+    readable: bool,
+    writable: bool,
+}
+
+#[derive(Debug, Serialize)]
+struct PathListing {
+    path: String,
+    parent: Option<String>,
+    entries: Vec<PathEntry>,
+    truncated: bool,
+}
+
+fn path_text(path: &FilePath) -> String {
+    let text = path.to_string_lossy().replace('\\', "/");
+    if text.is_empty() {
+        ".".into()
+    } else {
+        text
+    }
+}
+
+fn validate_relative_path(path: &FilePath, field: &str) -> Result<PathBuf, RunRequestError> {
+    if path.as_os_str().is_empty() {
+        return Err(RunRequestError::bad(
+            field,
+            "path_required",
+            "경로를 입력하십시오.",
+        ));
+    }
+    if path.is_absolute()
+        || path.components().any(|component| {
+            matches!(
+                component,
+                Component::ParentDir | Component::RootDir | Component::Prefix(_)
+            )
+        })
+    {
+        return Err(RunRequestError::forbidden(
+            field,
+            "path_outside_worker_root",
+            "worker_root 기준의 안전한 상대 경로만 사용할 수 있습니다.",
+        ));
+    }
+    let normalized = path
+        .components()
+        .filter_map(|component| match component {
+            Component::Normal(value) => Some(value),
+            Component::CurDir => None,
+            _ => None,
+        })
+        .collect::<PathBuf>();
+    Ok(normalized)
+}
+
+fn ensure_no_symlink(
+    root: &FilePath,
+    relative: &FilePath,
+    field: &str,
+) -> Result<(), RunRequestError> {
+    let mut candidate = root.to_path_buf();
+    for component in relative.components() {
+        if let Component::Normal(value) = component {
+            candidate.push(value);
+            match std::fs::symlink_metadata(&candidate) {
+                Ok(metadata) if metadata.file_type().is_symlink() => {
+                    return Err(RunRequestError::forbidden(
+                        field,
+                        "symlink_not_allowed",
+                        "심볼릭 링크가 포함된 경로는 사용할 수 없습니다.",
+                    ));
+                }
+                Ok(_) => {}
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => break,
+                Err(error) => {
+                    return Err(RunRequestError::bad(
+                        field,
+                        "path_unavailable",
+                        format!("경로를 확인할 수 없습니다: {error}"),
+                    ));
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
+fn resolve_worker_path(
+    root: &FilePath,
+    raw: &str,
+    field: &str,
+    must_exist: bool,
+) -> Result<(PathBuf, PathBuf), RunRequestError> {
+    let relative = validate_relative_path(FilePath::new(raw.trim()), field)?;
+    ensure_no_symlink(root, &relative, field)?;
+    let candidate = root.join(&relative);
+    if must_exist {
+        let resolved = std::fs::canonicalize(&candidate).map_err(|_| {
+            RunRequestError::bad(field, "source_not_found", "원본 소스 디렉터리가 없습니다.")
+        })?;
+        if !resolved.starts_with(root) {
+            return Err(RunRequestError::forbidden(
+                field,
+                "path_outside_worker_root",
+                "허용된 실행 경계 밖의 경로입니다.",
+            ));
+        }
+        if !resolved.is_dir() {
+            return Err(RunRequestError::bad(
+                field,
+                "source_not_directory",
+                "원본 소스는 디렉터리여야 합니다.",
+            ));
+        }
+        std::fs::read_dir(&resolved).map_err(|_| {
+            RunRequestError::bad(
+                field,
+                "source_not_readable",
+                "원본 소스를 읽을 수 없습니다.",
+            )
+        })?;
+        return Ok((relative, resolved));
+    }
+
+    let mut ancestor = candidate.as_path();
+    while !ancestor.exists() {
+        ancestor = ancestor.parent().ok_or_else(|| {
+            RunRequestError::bad(
+                field,
+                "destination_not_creatable",
+                "결과 위치를 생성할 수 없습니다.",
+            )
+        })?;
+    }
+    let resolved_ancestor = std::fs::canonicalize(ancestor).map_err(|error| {
+        RunRequestError::bad(
+            field,
+            "destination_not_creatable",
+            format!("결과 위치의 상위 디렉터리를 확인할 수 없습니다: {error}"),
+        )
+    })?;
+    if !resolved_ancestor.starts_with(root) || !resolved_ancestor.is_dir() {
+        return Err(RunRequestError::forbidden(
+            field,
+            "path_outside_worker_root",
+            "허용된 실행 경계 밖의 경로입니다.",
+        ));
+    }
+    Ok((relative, candidate))
+}
+
+fn worker_relative_path(root: &FilePath, path: &FilePath) -> Option<PathBuf> {
+    let candidate = if path.exists() {
+        std::fs::canonicalize(path).ok()?
+    } else {
+        path.to_path_buf()
+    };
+    let relative = candidate.strip_prefix(root).ok()?;
+    validate_relative_path(relative, "path").ok()
+}
+
+fn count_source_files(root: &FilePath) -> usize {
+    let mut pending = vec![root.to_path_buf()];
+    let mut count = 0usize;
+    while let Some(directory) = pending.pop() {
+        let Ok(entries) = std::fs::read_dir(directory) else {
+            continue;
+        };
+        for entry in entries.flatten() {
+            let Ok(kind) = entry.file_type() else {
+                continue;
+            };
+            if kind.is_symlink() {
+                continue;
+            }
+            if kind.is_dir() {
+                pending.push(entry.path());
+            } else if entry
+                .path()
+                .extension()
+                .and_then(|value| value.to_str())
+                .map(|extension| {
+                    SOURCE_EXTENSIONS.contains(&extension.to_ascii_lowercase().as_str())
+                })
+                .unwrap_or(false)
+            {
+                count = count.saturating_add(1);
+            }
+            if count >= 100_000 {
+                return count;
+            }
+        }
+    }
+    count
+}
+
+fn validate_name(value: String) -> Result<String, RunRequestError> {
+    let value = value.trim().to_string();
+    if value.is_empty() || value.chars().count() > 80 || value.chars().any(char::is_control) {
+        return Err(RunRequestError::bad(
+            "name",
+            "invalid_name",
+            "작업 이름은 제어문자 없이 1~80자로 입력하십시오.",
+        ));
+    }
+    Ok(value)
+}
+
+fn resolve_spec_path(app: &App, raw: &FilePath) -> Result<PathBuf, RunRequestError> {
+    let requested = if raw.is_absolute() {
+        raw.to_path_buf()
+    } else {
+        app.spec_root.join(raw)
+    };
+    let requested = std::fs::canonicalize(&requested).map_err(|error| {
+        RunRequestError::bad(
+            "spec",
+            "invalid_spec",
+            format!("실행 명세가 올바르지 않습니다: {error}"),
+        )
+    })?;
+    if !requested.starts_with(&app.spec_root) {
+        return Err(RunRequestError::forbidden(
+            "spec",
+            "spec_outside_root",
+            "실행 명세가 허용된 spec_root 밖에 있습니다.",
+        ));
+    }
+    Ok(requested)
+}
+
+fn request_path_or_default(
+    requested: &Option<PathInput>,
+    default: &FilePath,
+    app: &App,
+    field: &str,
+    must_exist: bool,
+) -> Result<(PathBuf, PathBuf), RunRequestError> {
+    if let Some(input) = requested {
+        if input.kind != "local_path" {
+            return Err(RunRequestError::bad(
+                field,
+                "unsupported_path_type",
+                "현재는 local_path 입력만 지원합니다.",
+            ));
+        }
+        resolve_worker_path(&app.execution_root, &input.path, field, must_exist)
+    } else {
+        let relative = worker_relative_path(&app.execution_root, default).ok_or_else(|| {
+            RunRequestError::forbidden(
+                field,
+                "path_outside_worker_root",
+                "명세의 기본 경로가 worker_root 밖에 있습니다.",
+            )
+        })?;
+        resolve_worker_path(
+            &app.execution_root,
+            &path_text(&relative),
+            field,
+            must_exist,
+        )
+    }
+}
+
+fn validate_run_request(app: &App, req: &StartRun) -> Result<ValidatedRun, RunRequestError> {
+    if req.mock && !app.insecure_dev {
+        return Err(RunRequestError::forbidden(
+            "mock",
+            "mock_not_allowed",
+            "운영 환경에서는 요청별 모의 실행을 사용할 수 없습니다.",
+        ));
+    }
+    let spec_path = resolve_spec_path(app, FilePath::new(&req.spec))?;
+    let mut spec = RunSpec::load(&spec_path).map_err(|error| {
+        RunRequestError::bad(
+            "spec",
+            "invalid_spec",
+            format!("실행 명세를 읽을 수 없습니다: {error}"),
+        )
+    })?;
+    if spec.run.auto_approve_hitl && !app.insecure_dev {
+        return Err(RunRequestError::forbidden(
+            "spec",
+            "auto_approve_not_allowed",
+            "운영 환경에서는 HITL 자동 승인을 사용할 수 없습니다.",
+        ));
+    }
+
+    let default_name = format!(
+        "{} - {}",
+        spec.function.name,
+        chrono::Local::now().format("%Y-%m-%d")
+    );
+    let display_name = validate_name(req.name.clone().unwrap_or(default_name))?;
+    let (source_relative, source_path) =
+        request_path_or_default(&req.source, &spec.run.source_root, app, "source.path", true)?;
+    let (destination_relative, destination_path) = request_path_or_default(
+        &req.destination,
+        &spec.run.workspace,
+        app,
+        "destination.path",
+        false,
+    )?;
+    if source_path == destination_path
+        || source_path.starts_with(&destination_path)
+        || destination_path.starts_with(&source_path)
+    {
+        return Err(RunRequestError::conflict(
+            "destination.path",
+            "path_overlap",
+            "결과 위치는 원본 소스와 같거나 상호 포함될 수 없습니다.",
+        ));
+    }
+    let destination_state = if destination_path.exists() {
+        let mut entries = std::fs::read_dir(&destination_path).map_err(|error| {
+            RunRequestError::bad(
+                "destination.path",
+                "destination_not_creatable",
+                format!("결과 위치를 확인할 수 없습니다: {error}"),
+            )
+        })?;
+        if entries.next().is_some() {
+            return Err(RunRequestError::conflict(
+                "destination.path",
+                "destination_conflict",
+                "결과 위치가 비어 있지 않습니다. 새 디렉터리를 선택하십시오.",
+            ));
+        }
+        "empty".to_string()
+    } else {
+        "will_create".to_string()
+    };
+
+    spec.apply_execution_paths(source_path.clone(), destination_path.clone());
+    spec.run
+        .validate_execution_boundary(&app.execution_root, &app.allowed_executables)
+        .map_err(|error| RunRequestError::forbidden("spec", "execution_boundary", error))?;
+    let source_file_count = count_source_files(&source_path);
+    let mut warnings = Vec::new();
+    if source_file_count == 0 {
+        warnings.push(FieldIssue::new(
+            "source.path",
+            "no_supported_source_files",
+            "지원되는 확장자의 소스 파일을 찾지 못했습니다.",
+        ));
+    }
+    if !spec
+        .run
+        .next_command
+        .iter()
+        .any(|value| value.contains("{workspace}"))
+    {
+        warnings.push(FieldIssue::new(
+            "spec",
+            "command_may_ignore_override",
+            "신규 시스템 실행 명령이 {workspace} 자리표시자를 사용하지 않습니다.",
+        ));
+    }
+    if spec
+        .run
+        .legacy_command
+        .as_ref()
+        .is_some_and(|command| !command.iter().any(|value| value.contains("{source_root}")))
+    {
+        warnings.push(FieldIssue::new(
+            "spec",
+            "command_may_ignore_override",
+            "레거시 실행 명령이 {source_root} 자리표시자를 사용하지 않습니다.",
+        ));
+    }
+    Ok(ValidatedRun {
+        display_name,
+        spec_path,
+        spec,
+        inputs: RunInputs {
+            source: LocalPathInput::local(source_relative),
+            destination: LocalPathInput::local(destination_relative),
+        },
+        destination_path,
+        source_file_count,
+        destination_state,
+        warnings,
+        mock: req.mock,
+    })
+}
+
+fn validation_signature(app: &App, actor: &AuthActor, expires: i64, run: &ValidatedRun) -> String {
+    let mut digest = Sha256::new();
+    digest.update(app.preflight_secret.as_bytes());
+    digest.update([0]);
+    digest.update(actor.id.as_bytes());
+    digest.update([0]);
+    digest.update(expires.to_string().as_bytes());
+    digest.update([0]);
+    digest.update(run.display_name.as_bytes());
+    digest.update([0]);
+    digest.update(run.spec_path.as_os_str().as_encoded_bytes());
+    digest.update([0]);
+    digest.update(run.inputs.source.path.as_os_str().as_encoded_bytes());
+    digest.update([0]);
+    digest.update(run.inputs.destination.path.as_os_str().as_encoded_bytes());
+    digest.update([u8::from(run.mock)]);
+    hex::encode(digest.finalize())
+}
+
+fn issue_validation_token(
+    app: &App,
+    actor: &AuthActor,
+    run: &ValidatedRun,
+) -> (String, chrono::DateTime<chrono::Utc>) {
+    let expires_at = chrono::Utc::now() + chrono::Duration::minutes(5);
+    let expires = expires_at.timestamp();
+    (
+        format!(
+            "{expires}.{}",
+            validation_signature(app, actor, expires, run)
+        ),
+        expires_at,
+    )
+}
+
+fn verify_validation_token(
+    app: &App,
+    actor: &AuthActor,
+    run: &ValidatedRun,
+    token: &str,
+) -> Result<(), RunRequestError> {
+    let (expires, supplied) = token.split_once('.').ok_or_else(|| {
+        RunRequestError::bad(
+            "validation_token",
+            "invalid_preflight",
+            "사전 점검 결과가 올바르지 않습니다.",
+        )
+    })?;
+    let expires = expires.parse::<i64>().map_err(|_| {
+        RunRequestError::bad(
+            "validation_token",
+            "invalid_preflight",
+            "사전 점검 결과가 올바르지 않습니다.",
+        )
+    })?;
+    if expires < chrono::Utc::now().timestamp() {
+        return Err(RunRequestError::bad(
+            "validation_token",
+            "preflight_expired",
+            "사전 점검이 만료되었습니다. 다시 점검하십시오.",
+        ));
+    }
+    let expected = validation_signature(app, actor, expires, run);
+    if !constant_time_eq(&expected, supplied) {
+        return Err(RunRequestError::bad(
+            "validation_token",
+            "preflight_changed",
+            "입력값이 사전 점검 이후 변경되었습니다. 다시 점검하십시오.",
+        ));
+    }
+    Ok(())
+}
+
+async fn preflight_run(
+    State(app): State<App>,
+    Extension(actor): Extension<AuthActor>,
+    Json(req): Json<StartRun>,
+) -> Json<PreflightResponse> {
+    match validate_run_request(&app, &req) {
+        Ok(run) => {
+            let (validation_token, expires_at) = issue_validation_token(&app, &actor, &run);
+            let spec = path_text(
+                run.spec_path
+                    .strip_prefix(&app.spec_root)
+                    .unwrap_or(&run.spec_path),
+            );
+            Json(PreflightResponse {
+                valid: true,
+                validation_token: Some(validation_token),
+                expires_at: Some(expires_at),
+                effective: Some(PreflightEffective {
+                    name: run.display_name,
+                    function_id: run.spec.function.id,
+                    spec,
+                    source_path: path_text(&run.inputs.source.path),
+                    destination_path: path_text(&run.inputs.destination.path),
+                    source_file_count: run.source_file_count,
+                    destination_state: run.destination_state,
+                }),
+                errors: vec![],
+                warnings: run.warnings,
+            })
+        }
+        Err(error) => Json(PreflightResponse {
+            valid: false,
+            validation_token: None,
+            expires_at: None,
+            effective: None,
+            errors: vec![error.issue],
+            warnings: vec![],
+        }),
+    }
+}
+
+async fn list_paths(
+    State(app): State<App>,
+    Query(query): Query<PathQuery>,
+) -> Result<Json<PathListing>, (StatusCode, Json<ApiProblem>)> {
+    if query.purpose != "source" && query.purpose != "destination" {
+        return Err(RunRequestError::bad(
+            "purpose",
+            "invalid_purpose",
+            "purpose는 source 또는 destination이어야 합니다.",
+        )
+        .response());
+    }
+    let (relative, directory) = resolve_worker_path(
+        &app.execution_root,
+        if query.parent.trim().is_empty() {
+            "."
+        } else {
+            &query.parent
+        },
+        "parent",
+        true,
+    )
+    .map_err(RunRequestError::response)?;
+    let search = query.search.trim().to_lowercase();
+    let mut entries = std::fs::read_dir(&directory)
+        .map_err(|error| {
+            RunRequestError::bad("parent", "path_unavailable", error.to_string()).response()
+        })?
+        .flatten()
+        .filter_map(|entry| {
+            let kind = entry.file_type().ok()?;
+            if !kind.is_dir() || kind.is_symlink() {
+                return None;
+            }
+            let name = entry.file_name().to_string_lossy().to_string();
+            if name.starts_with('.')
+                || (!search.is_empty() && !name.to_lowercase().contains(&search))
+            {
+                return None;
+            }
+            let path = relative.join(&name);
+            let readable = std::fs::read_dir(entry.path()).is_ok();
+            let writable = !entry.metadata().ok()?.permissions().readonly();
+            Some(PathEntry {
+                name,
+                path: path_text(&path),
+                kind: "directory",
+                readable,
+                writable,
+            })
+        })
+        .collect::<Vec<_>>();
+    entries.sort_by_key(|entry| entry.name.to_lowercase());
+    let truncated = entries.len() > 200;
+    entries.truncate(200);
+    let parent = relative.parent().map(path_text);
+    Ok(Json(PathListing {
+        path: path_text(&relative),
+        parent,
+        entries,
+        truncated,
+    }))
 }
 
 async fn openapi() -> impl IntoResponse {
@@ -325,54 +1054,115 @@ fn launch_run(platform: Arc<Platform>, ctx: AgentContext) {
     });
 }
 
-async fn start_run(State(app): State<App>, Json(req): Json<StartRun>) -> ApiResult<WorkflowRun> {
-    if req.mock && !app.insecure_dev {
-        return Err((
-            StatusCode::FORBIDDEN,
-            "request-scoped mock execution is disabled outside insecure development mode".into(),
-        ));
+fn reserve_destination(path: &FilePath, run_id: &str, actor: &str) -> Result<(), RunRequestError> {
+    std::fs::create_dir_all(path).map_err(|error| {
+        RunRequestError::bad(
+            "destination.path",
+            "destination_not_creatable",
+            format!("결과 위치를 생성할 수 없습니다: {error}"),
+        )
+    })?;
+    let marker_path = path.join(RUN_MARKER);
+    if let Some(parent) = marker_path.parent() {
+        std::fs::create_dir_all(parent).map_err(|error| {
+            RunRequestError::bad(
+                "destination.path",
+                "destination_not_creatable",
+                format!("결과 위치 메타데이터 디렉터리를 만들 수 없습니다: {error}"),
+            )
+        })?;
     }
-    let requested = std::path::Path::new(&req.spec);
-    let requested = if requested.is_absolute() {
-        requested.to_path_buf()
-    } else {
-        app.spec_root.join(requested)
-    };
-    let requested = std::fs::canonicalize(&requested)
-        .map_err(|e| (StatusCode::BAD_REQUEST, format!("invalid spec path: {e}")))?;
-    if !requested.starts_with(&app.spec_root) {
-        return Err((
-            StatusCode::FORBIDDEN,
-            "run specification is outside the configured spec root".into(),
-        ));
+    let mut marker = OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&marker_path)
+        .map_err(|_| {
+            RunRequestError::conflict(
+                "destination.path",
+                "destination_conflict",
+                "결과 위치가 다른 실행에 의해 사용 중입니다.",
+            )
+        })?;
+    let body = serde_json::to_vec_pretty(&json!({
+        "run_id": run_id,
+        "created_by": actor,
+        "created_at": chrono::Utc::now(),
+    }))
+    .map_err(|error| {
+        RunRequestError::bad(
+            "destination.path",
+            "destination_not_creatable",
+            format!("결과 위치 메타데이터를 만들 수 없습니다: {error}"),
+        )
+    })?;
+    marker.write_all(&body).map_err(|error| {
+        RunRequestError::bad(
+            "destination.path",
+            "destination_not_creatable",
+            format!("결과 위치 메타데이터를 기록할 수 없습니다: {error}"),
+        )
+    })
+}
+
+fn present_run(app: &App, mut run: WorkflowRun) -> WorkflowRun {
+    if run.display_name.trim().is_empty() {
+        run.display_name = run.function_id.as_str().to_string();
     }
-    let spec = RunSpec::load(&requested).map_err(|e| (StatusCode::BAD_REQUEST, e.to_string()))?;
-    if spec.run.auto_approve_hitl && !app.insecure_dev {
-        return Err((
-            StatusCode::FORBIDDEN,
-            "auto_approve_hitl is disabled outside insecure development mode".into(),
-        ));
+    if let Ok(relative) = run.spec_path.strip_prefix(&app.spec_root) {
+        run.spec_path = relative.to_path_buf();
     }
-    spec.run
-        .validate_execution_boundary(&app.execution_root, &app.allowed_executables)
-        .map_err(|e| (StatusCode::FORBIDDEN, e))?;
+    run
+}
+
+fn internal_problem(error: impl std::fmt::Display) -> (StatusCode, Json<ApiProblem>) {
+    (
+        StatusCode::INTERNAL_SERVER_ERROR,
+        Json(ApiProblem {
+            code: "internal_error".into(),
+            message: error.to_string(),
+            field: None,
+            request_id: format!("REQ-{}", uuid::Uuid::new_v4()),
+        }),
+    )
+}
+
+async fn start_run(
+    State(app): State<App>,
+    Extension(actor): Extension<AuthActor>,
+    Json(req): Json<StartRun>,
+) -> Result<Json<WorkflowRun>, (StatusCode, Json<ApiProblem>)> {
+    let validated = validate_run_request(&app, &req).map_err(RunRequestError::response)?;
+    if let Some(token) = &req.validation_token {
+        verify_validation_token(&app, &actor, &validated, token)
+            .map_err(RunRequestError::response)?;
+    }
+
     // Mock runs share the platform's stores but answer LLM calls from the spec's fixtures.
     let platform = if req.mock || app.platform.mock {
         Arc::new(
             app.platform
-                .with_mock_fixtures(spec.mock.fixtures.as_deref()),
+                .with_mock_fixtures(validated.spec.mock.fixtures.as_deref()),
         )
     } else {
         app.platform.clone()
     };
-    let ctx = platform.context_for(&spec, None).await.map_err(internal)?;
+    let run_id = platform.ids.next("RUN");
+    reserve_destination(&validated.destination_path, &run_id, &actor.id)
+        .map_err(RunRequestError::response)?;
+    let ctx = platform
+        .context_for(&validated.spec, Some(run_id))
+        .await
+        .map_err(internal_problem)?;
     let now = platform.clock.now();
     let state = WorkflowRun {
         id: ctx.run_id.0.clone(),
+        display_name: validated.display_name,
         function_id: ctx.function_id.clone(),
         status: "running".into(),
-        spec_path: requested,
+        spec_path: validated.spec_path,
+        inputs: Some(validated.inputs),
         mock: platform.mock,
+        started_by: actor.id,
         started_at: now,
         updated_at: now,
         outcome: None,
@@ -382,18 +1172,38 @@ async fn start_run(State(app): State<App>, Json(req): Json<StartRun>) -> ApiResu
         .knowledge
         .upsert_workflow_run(state.clone())
         .await
-        .map_err(internal)?;
+        .map_err(internal_problem)?;
+    platform
+        .bus
+        .publish(amap_orchestrator::Event {
+            subject: "run.created".into(),
+            run_id: state.id.clone(),
+            function_id: state.function_id.as_str().to_string(),
+            payload: json!({
+                "display_name": state.display_name,
+                "spec": path_text(state.spec_path.strip_prefix(&app.spec_root).unwrap_or(&state.spec_path)),
+                "source_path": state.inputs.as_ref().map(|inputs| path_text(&inputs.source.path)),
+                "destination_path": state.inputs.as_ref().map(|inputs| path_text(&inputs.destination.path)),
+                "mock": state.mock,
+                "started_by": state.started_by,
+            }),
+            at: now,
+        })
+        .await;
     launch_run(platform, ctx);
-    Ok(Json(state))
+    Ok(Json(present_run(&app, state)))
 }
 
 async fn list_runs(State(app): State<App>) -> ApiResult<Vec<WorkflowRun>> {
-    app.platform
+    let runs = app
+        .platform
         .knowledge
         .list_workflow_runs()
         .await
-        .map(Json)
-        .map_err(internal)
+        .map_err(internal)?;
+    Ok(Json(
+        runs.into_iter().map(|run| present_run(&app, run)).collect(),
+    ))
 }
 
 async fn get_run(State(app): State<App>, Path(id): Path<String>) -> ApiResult<WorkflowRun> {
@@ -402,53 +1212,128 @@ async fn get_run(State(app): State<App>, Path(id): Path<String>) -> ApiResult<Wo
         .get_workflow_run(&id)
         .await
         .map_err(internal)?
-        .map(Json)
+        .map(|run| Json(present_run(&app, run)))
         .ok_or((StatusCode::NOT_FOUND, "run not found".into()))
 }
 
-async fn resume_run(State(app): State<App>, Path(id): Path<String>) -> ApiResult<WorkflowRun> {
+async fn resume_run(
+    State(app): State<App>,
+    Path(id): Path<String>,
+) -> Result<Json<WorkflowRun>, (StatusCode, Json<ApiProblem>)> {
     let mut state = app
         .platform
         .knowledge
         .get_workflow_run(&id)
         .await
-        .map_err(internal)?
-        .ok_or((StatusCode::NOT_FOUND, "run not found".into()))?;
+        .map_err(internal_problem)?
+        .ok_or_else(|| {
+            (
+                StatusCode::NOT_FOUND,
+                Json(ApiProblem {
+                    code: "run_not_found".into(),
+                    message: "실행을 찾을 수 없습니다.".into(),
+                    field: None,
+                    request_id: format!("REQ-{}", uuid::Uuid::new_v4()),
+                }),
+            )
+        })?;
     if state.status != "halted" {
-        return Err((
-            StatusCode::CONFLICT,
+        return Err(RunRequestError::conflict(
+            "status",
+            "run_not_halted",
             format!(
-                "only a halted run can be resumed, current status: {}",
+                "중단된 실행만 재개할 수 있습니다. 현재 상태: {}",
                 state.status
             ),
-        ));
+        )
+        .response());
     }
     let reviews = app
         .platform
         .knowledge
         .list_reviews()
         .await
-        .map_err(internal)?;
+        .map_err(internal_problem)?;
     if reviews.iter().any(|review| {
         review.run_id.as_ref().map(|run| run.as_str()) == Some(id.as_str())
             && review.status == ReviewStatus::Rejected
     }) {
-        return Err((StatusCode::CONFLICT, "the HITL review was rejected".into()));
+        return Err(RunRequestError::conflict(
+            "review",
+            "review_rejected",
+            "HITL 검토가 거절되어 실행을 재개할 수 없습니다.",
+        )
+        .response());
     }
     if !reviews.iter().any(|review| {
         review.run_id.as_ref().map(|run| run.as_str()) == Some(id.as_str())
             && review.status == ReviewStatus::Approved
     }) {
-        return Err((
-            StatusCode::CONFLICT,
-            "an approved HITL review is required before resume".into(),
-        ));
+        return Err(RunRequestError::conflict(
+            "review",
+            "review_required",
+            "실행을 재개하려면 승인된 HITL 검토가 필요합니다.",
+        )
+        .response());
     }
-    let spec = RunSpec::load(&state.spec_path)
-        .map_err(|error| (StatusCode::BAD_REQUEST, error.to_string()))?;
+    let spec_path = resolve_spec_path(&app, &state.spec_path).map_err(RunRequestError::response)?;
+    let mut spec = RunSpec::load(&spec_path).map_err(|error| {
+        RunRequestError::bad("spec", "invalid_spec", error.to_string()).response()
+    })?;
+    if let Some(inputs) = &state.inputs {
+        if inputs.source.kind != "local_path" || inputs.destination.kind != "local_path" {
+            return Err(RunRequestError::conflict(
+                "inputs",
+                "run_inputs_changed",
+                "저장된 실행 입력 형식을 더 이상 사용할 수 없습니다.",
+            )
+            .response());
+        }
+        let (_, source) = resolve_worker_path(
+            &app.execution_root,
+            &path_text(&inputs.source.path),
+            "source.path",
+            true,
+        )
+        .map_err(RunRequestError::response)?;
+        let (_, destination) = resolve_worker_path(
+            &app.execution_root,
+            &path_text(&inputs.destination.path),
+            "destination.path",
+            false,
+        )
+        .map_err(RunRequestError::response)?;
+        let marker = std::fs::read_to_string(destination.join(RUN_MARKER)).map_err(|_| {
+            RunRequestError::conflict(
+                "destination.path",
+                "run_inputs_changed",
+                "결과 위치의 실행 소유권 정보를 확인할 수 없습니다.",
+            )
+            .response()
+        })?;
+        let marker: Value = serde_json::from_str(&marker).map_err(|_| {
+            RunRequestError::conflict(
+                "destination.path",
+                "run_inputs_changed",
+                "결과 위치의 실행 소유권 정보가 손상되었습니다.",
+            )
+            .response()
+        })?;
+        if marker.get("run_id").and_then(Value::as_str) != Some(state.id.as_str()) {
+            return Err(RunRequestError::conflict(
+                "destination.path",
+                "run_inputs_changed",
+                "결과 위치가 다른 실행에 속합니다.",
+            )
+            .response());
+        }
+        spec.apply_execution_paths(source, destination);
+    }
     spec.run
         .validate_execution_boundary(&app.execution_root, &app.allowed_executables)
-        .map_err(|error| (StatusCode::FORBIDDEN, error))?;
+        .map_err(|error| {
+            RunRequestError::forbidden("spec", "execution_boundary", error).response()
+        })?;
     let platform = if state.mock || app.platform.mock {
         Arc::new(
             app.platform
@@ -460,7 +1345,7 @@ async fn resume_run(State(app): State<App>, Path(id): Path<String>) -> ApiResult
     let mut ctx = platform
         .context_for(&spec, Some(state.id.clone()))
         .await
-        .map_err(internal)?;
+        .map_err(internal_problem)?;
     ctx.inputs = state.checkpoint.clone();
     state.status = "running".into();
     state.updated_at = platform.clock.now();
@@ -469,9 +1354,9 @@ async fn resume_run(State(app): State<App>, Path(id): Path<String>) -> ApiResult
         .knowledge
         .upsert_workflow_run(state.clone())
         .await
-        .map_err(internal)?;
+        .map_err(internal_problem)?;
     launch_run(platform, ctx);
-    Ok(Json(state))
+    Ok(Json(present_run(&app, state)))
 }
 
 async fn functions(State(app): State<App>) -> ApiResult<Vec<BusinessFunction>> {
@@ -728,6 +1613,7 @@ async fn main() -> anyhow::Result<()> {
             .map(str::to_owned)
             .collect(),
         insecure_dev: settings.insecure_dev,
+        preflight_secret: uuid::Uuid::new_v4().to_string(),
     };
     let router = build_router(app, &settings.web_dist);
     let listener = tokio::net::TcpListener::bind(&settings.control_plane_listen).await?;
@@ -740,6 +1626,8 @@ fn build_router(app: App, web_dist: &FilePath) -> Router {
     let protected = Router::new()
         .route("/metrics", get(metrics))
         .route("/v1/specs", get(list_specs))
+        .route("/v1/paths", get(list_paths))
+        .route("/v1/runs/preflight", post(preflight_run))
         .route("/v1/runs", post(start_run).get(list_runs))
         .route("/v1/runs/{id}", get(get_run))
         .route("/v1/runs/{id}/events", get(run_events))
@@ -782,7 +1670,7 @@ mod tests {
             .parent()
             .and_then(FilePath::parent)
             .unwrap();
-        let specs = discover_run_specs(root);
+        let specs = discover_run_specs(root, root);
         assert!(specs
             .iter()
             .any(|spec| spec.path == "examples/loan-demo/amap.toml"));
@@ -834,8 +1722,194 @@ mod tests {
             execution_root: std::env::temp_dir(),
             allowed_executables: HashSet::new(),
             insecure_dev: false,
+            preflight_secret: "test-preflight-secret".into(),
         };
         (app, platform)
+    }
+
+    fn write_test_spec(root: &FilePath) {
+        std::fs::create_dir_all(root.join("defaults/source")).unwrap();
+        std::fs::write(root.join("defaults/source/legacy.rs"), "fn legacy() {}\n").unwrap();
+        std::fs::write(
+            root.join("amap.toml"),
+            r#"
+[function]
+id = "FN-TEST-1"
+name = "Test modernization"
+domain = "Test"
+priority = "P1"
+
+[run]
+source_root = "defaults/source"
+workspace = "defaults/output"
+next_command = ["python3", "{workspace}/main.py"]
+"#,
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn run_path_validation_rejects_escape_and_symlink_free_source_is_resolved() {
+        let scratch = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(scratch.path().join("source")).unwrap();
+        let root = std::fs::canonicalize(scratch.path()).unwrap();
+
+        let (relative, resolved) =
+            resolve_worker_path(&root, "source", "source.path", true).unwrap();
+        assert_eq!(relative, PathBuf::from("source"));
+        assert_eq!(resolved, root.join("source"));
+
+        let error = resolve_worker_path(&root, "../outside", "source.path", true).unwrap_err();
+        assert_eq!(error.status, StatusCode::FORBIDDEN);
+        assert_eq!(error.issue.code, "path_outside_worker_root");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn run_path_validation_rejects_symlinks() {
+        use std::os::unix::fs::symlink;
+
+        let scratch = tempfile::tempdir().unwrap();
+        let outside = tempfile::tempdir().unwrap();
+        symlink(outside.path(), scratch.path().join("linked")).unwrap();
+        let root = std::fs::canonicalize(scratch.path()).unwrap();
+        let error = resolve_worker_path(&root, "linked", "source.path", true).unwrap_err();
+        assert_eq!(error.status, StatusCode::FORBIDDEN);
+        assert_eq!(error.issue.code, "symlink_not_allowed");
+    }
+
+    #[tokio::test]
+    async fn run_request_overrides_spec_paths_and_rejects_overlap() {
+        let scratch = tempfile::tempdir().unwrap();
+        write_test_spec(scratch.path());
+        std::fs::create_dir_all(scratch.path().join("selected/source")).unwrap();
+        std::fs::write(
+            scratch.path().join("selected/source/input.rs"),
+            "fn main() {}\n",
+        )
+        .unwrap();
+        let (mut app, _) = test_app(None).await;
+        app.spec_root = std::fs::canonicalize(scratch.path()).unwrap();
+        app.execution_root = app.spec_root.clone();
+        app.allowed_executables = HashSet::from(["python3".to_string()]);
+
+        let request = StartRun {
+            spec: "amap.toml".into(),
+            name: Some("첫 번째 현대화".into()),
+            source: Some(PathInput {
+                kind: "local_path".into(),
+                path: "selected/source".into(),
+            }),
+            destination: Some(PathInput {
+                kind: "local_path".into(),
+                path: "selected/output".into(),
+            }),
+            mock: false,
+            validation_token: None,
+        };
+        let validated = validate_run_request(&app, &request).unwrap();
+        assert_eq!(validated.display_name, "첫 번째 현대화");
+        assert_eq!(
+            validated.spec.run.source_root,
+            app.execution_root.join("selected/source")
+        );
+        assert_eq!(
+            validated.spec.run.workspace,
+            app.execution_root.join("selected/output")
+        );
+        assert_eq!(validated.source_file_count, 1);
+
+        let overlap = StartRun {
+            destination: Some(PathInput {
+                kind: "local_path".into(),
+                path: "selected/source/output".into(),
+            }),
+            ..request.clone()
+        };
+        let error = validate_run_request(&app, &overlap).unwrap_err();
+        assert_eq!(error.status, StatusCode::CONFLICT);
+        assert_eq!(error.issue.code, "path_overlap");
+
+        std::fs::create_dir_all(scratch.path().join("selected/occupied")).unwrap();
+        std::fs::write(
+            scratch.path().join("selected/occupied/existing.txt"),
+            "owned",
+        )
+        .unwrap();
+        let occupied = StartRun {
+            destination: Some(PathInput {
+                kind: "local_path".into(),
+                path: "selected/occupied".into(),
+            }),
+            ..request
+        };
+        let error = validate_run_request(&app, &occupied).unwrap_err();
+        assert_eq!(error.status, StatusCode::CONFLICT);
+        assert_eq!(error.issue.code, "destination_conflict");
+    }
+
+    #[test]
+    fn destination_reservation_records_run_ownership() {
+        let scratch = tempfile::tempdir().unwrap();
+        let destination = scratch.path().join("output");
+        reserve_destination(&destination, "RUN-1", "operator-1").unwrap();
+        let marker: Value =
+            serde_json::from_str(&std::fs::read_to_string(destination.join(RUN_MARKER)).unwrap())
+                .unwrap();
+        assert_eq!(marker["run_id"], "RUN-1");
+        assert_eq!(marker["created_by"], "operator-1");
+        let error = reserve_destination(&destination, "RUN-2", "operator-2").unwrap_err();
+        assert_eq!(error.issue.code, "destination_conflict");
+    }
+
+    #[tokio::test]
+    async fn preflight_token_is_bound_to_normalized_inputs() {
+        let scratch = tempfile::tempdir().unwrap();
+        write_test_spec(scratch.path());
+        let (mut app, _) = test_app(None).await;
+        app.spec_root = std::fs::canonicalize(scratch.path()).unwrap();
+        app.execution_root = app.spec_root.clone();
+        app.allowed_executables = HashSet::from(["python3".to_string()]);
+        let actor = AuthActor {
+            id: "operator-1".into(),
+            method: AuthMethod::Oidc,
+            roles: vec![],
+            issuer: Some("test".into()),
+        };
+        let request = StartRun {
+            spec: "amap.toml".into(),
+            name: Some("Token test".into()),
+            source: None,
+            destination: None,
+            mock: false,
+            validation_token: None,
+        };
+        let validated = validate_run_request(&app, &request).unwrap();
+        let (token, _) = issue_validation_token(&app, &actor, &validated);
+        verify_validation_token(&app, &actor, &validated, &token).unwrap();
+
+        let mut changed = validated;
+        changed.display_name = "Changed".into();
+        let error = verify_validation_token(&app, &actor, &changed, &token).unwrap_err();
+        assert_eq!(error.issue.code, "preflight_changed");
+    }
+
+    #[test]
+    fn legacy_workflow_run_deserializes_with_new_fields() {
+        let run: WorkflowRun = serde_json::from_value(json!({
+            "id": "RUN-OLD",
+            "function_id": "FN-OLD",
+            "status": "failed",
+            "spec_path": "amap.toml",
+            "mock": false,
+            "started_at": "2026-09-05T00:00:00Z",
+            "updated_at": "2026-09-05T00:00:00Z",
+            "checkpoint": {}
+        }))
+        .unwrap();
+        assert!(run.display_name.is_empty());
+        assert!(run.inputs.is_none());
+        assert!(run.started_by.is_empty());
     }
 
     async fn serve(app: App) -> String {
@@ -945,7 +2019,9 @@ mod tests {
         let contract = include_str!("../../../openapi/amap.yaml");
         for path in [
             "/v1/specs:",
+            "/v1/paths:",
             "/v1/runs:",
+            "/v1/runs/preflight:",
             "/v1/runs/{id}:",
             "/v1/runs/{id}/events:",
             "/v1/runs/{id}/resume:",

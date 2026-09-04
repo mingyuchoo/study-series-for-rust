@@ -72,16 +72,47 @@ pub struct ReviewRequest {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct WorkflowRun {
     pub id: String,
+    /// Operator-facing name. Empty only for records created before named runs were introduced.
+    #[serde(default)]
+    pub display_name: String,
     pub function_id: FunctionId,
     pub status: String,
     pub spec_path: PathBuf,
+    /// Immutable, worker-root-relative inputs selected when this run was created.
+    #[serde(default)]
+    pub inputs: Option<RunInputs>,
     pub mock: bool,
+    /// Authenticated subject, service principal, or development actor that created the run.
+    #[serde(default)]
+    pub started_by: String,
     pub started_at: chrono::DateTime<chrono::Utc>,
     pub updated_at: chrono::DateTime<chrono::Utc>,
     #[serde(default)]
     pub outcome: Option<Value>,
     #[serde(default)]
     pub checkpoint: Value,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RunInputs {
+    pub source: LocalPathInput,
+    pub destination: LocalPathInput,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct LocalPathInput {
+    #[serde(rename = "type")]
+    pub kind: String,
+    pub path: PathBuf,
+}
+
+impl LocalPathInput {
+    pub fn local(path: impl Into<PathBuf>) -> Self {
+        Self {
+            kind: "local_path".into(),
+            path: path.into(),
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]

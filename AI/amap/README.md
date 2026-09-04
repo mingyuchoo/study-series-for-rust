@@ -82,7 +82,11 @@ make demo
 
 ## 웹 운영 콘솔
 
-`web/`은 OpenAPI 계약에서 TypeScript 타입을 생성하는 React 운영 콘솔입니다. 실행 명세 선택, 실행 시작, 에이전트 단계의 SSE 실시간 추적, HITL 승인 및 거절, 중단 실행 재개, 품질 게이트 확인을 한 화면에서 제공합니다.
+`web/`은 OpenAPI 계약에서 TypeScript 타입을 생성하는 React 운영 콘솔입니다. 작업 이름과 원본 소스 및 결과 위치 선택, 실행 전 안전 점검, 에이전트 단계의 SSE 실시간 추적, HITL 승인 및 거절, 중단 실행 재개, 품질 게이트 확인을 한 화면에서 제공합니다.
+
+새 현대화 작업에서 선택하는 소스와 결과 위치는 `AMAP_WORKER_ROOT` 기준 상대 경로입니다. 브라우저는 Control Plane이 허용한 디렉터리만 탐색하며, 원본과 결과가 겹치거나 결과 디렉터리가 비어 있지 않으면 실행을 시작하지 않습니다. 선택한 입력은 실행 기록에 불변 스냅샷으로 저장되고 중단 실행을 재개할 때도 다시 적용됩니다. `amap.toml`의 `source_root`와 `workspace`는 웹 폼의 기본값이며 파일 자체는 변경되지 않습니다.
+
+자세한 계약과 검증 규칙은 [`docs/run-creation-feature-design.md`](docs/run-creation-feature-design.md)에 정리되어 있습니다.
 
 로컬에서는 두 터미널을 사용합니다.
 

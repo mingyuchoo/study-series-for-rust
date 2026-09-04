@@ -52,6 +52,38 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/paths": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listPaths"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/runs/preflight": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["preflightRun"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/runs": {
         parameters: {
             query?: never;
@@ -295,19 +327,87 @@ export interface components {
             priority: components["schemas"]["Priority"];
             description: string;
             mock_available: boolean;
+            runnable: boolean;
+            unavailable_reason?: string;
+            defaults?: components["schemas"]["SpecDefaults"];
+        };
+        SpecDefaults: {
+            source_path: string;
+            destination_path: string;
+        };
+        PathInput: {
+            /** @enum {string} */
+            type: "local_path";
+            path: string;
+        };
+        RunInputs: {
+            source: components["schemas"]["PathInput"];
+            destination: components["schemas"]["PathInput"];
         };
         StartRunRequest: {
+            name?: string;
             spec: string;
+            source?: components["schemas"]["PathInput"];
+            destination?: components["schemas"]["PathInput"];
             /** @default false */
             mock: boolean;
+            validation_token?: string;
+        };
+        FieldIssue: {
+            field: string;
+            code: string;
+            message: string;
+        };
+        PreflightEffective: {
+            name: string;
+            function_id: string;
+            spec: string;
+            source_path: string;
+            destination_path: string;
+            source_file_count: number;
+            /** @enum {string} */
+            destination_state: "empty" | "will_create";
+        };
+        PreflightResponse: {
+            valid: boolean;
+            validation_token?: string;
+            /** Format: date-time */
+            expires_at?: string;
+            effective?: components["schemas"]["PreflightEffective"];
+            errors: components["schemas"]["FieldIssue"][];
+            warnings: components["schemas"]["FieldIssue"][];
+        };
+        PathEntry: {
+            name: string;
+            path: string;
+            /** @enum {string} */
+            kind: "directory";
+            readable: boolean;
+            writable: boolean;
+        };
+        PathListing: {
+            path: string;
+            parent: string | null;
+            entries: components["schemas"]["PathEntry"][];
+            truncated: boolean;
+        };
+        ApiProblem: {
+            code: string;
+            message: string;
+            field?: string;
+            request_id: string;
         };
         WorkflowRun: {
             id: string;
+            display_name: string;
             function_id: string;
             /** @enum {string} */
             status: "running" | "halted" | "certified" | "failed" | "error";
+            /** @description Specification path relative to spec_root. */
             spec_path: string;
+            inputs?: components["schemas"]["RunInputs"] | null;
             mock: boolean;
+            started_by: string;
             /** Format: date-time */
             started_at: string;
             /** Format: date-time */
@@ -433,6 +533,15 @@ export interface components {
                 "text/plain": string;
             };
         };
+        /** @description Structured request failure. */
+        ProblemError: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["ApiProblem"];
+            };
+        };
     };
     parameters: {
         /** @description Self-declared actor name. Trusted only in insecure development mode. */
@@ -505,6 +614,59 @@ export interface operations {
             };
         };
     };
+    listPaths: {
+        parameters: {
+            query: {
+                purpose: "source" | "destination";
+                parent?: string;
+                search?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Direct child directories beneath the configured worker root. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PathListing"];
+                };
+            };
+            400: components["responses"]["ProblemError"];
+            403: components["responses"]["ProblemError"];
+        };
+    };
+    preflightRun: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Self-declared actor name. Trusted only in insecure development mode. */
+                "X-AMAP-Actor"?: components["parameters"]["Actor"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StartRunRequest"];
+            };
+        };
+        responses: {
+            /** @description Validation results. Field validation failures are represented by valid=false. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PreflightResponse"];
+                };
+            };
+        };
+    };
     listRuns: {
         parameters: {
             query?: never;
@@ -550,8 +712,9 @@ export interface operations {
                     "application/json": components["schemas"]["WorkflowRun"];
                 };
             };
-            400: components["responses"]["TextError"];
-            403: components["responses"]["TextError"];
+            400: components["responses"]["ProblemError"];
+            403: components["responses"]["ProblemError"];
+            409: components["responses"]["ProblemError"];
         };
     };
     getRun: {

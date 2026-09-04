@@ -100,6 +100,13 @@ impl RunSpec {
         }
     }
 
+    /// Apply paths that were independently resolved and validated by the control plane.
+    /// The loaded specification is cloned per request, so this never rewrites `amap.toml`.
+    pub fn apply_execution_paths(&mut self, source_root: PathBuf, workspace: PathBuf) {
+        self.run.source_root = source_root;
+        self.run.workspace = workspace;
+    }
+
     pub fn requirements(&self) -> Vec<Requirement> {
         self.requirements
             .iter()

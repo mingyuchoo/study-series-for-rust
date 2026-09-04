@@ -47,6 +47,56 @@ paths:
                 type: array
                 items:
                   $ref: "#/components/schemas/SpecSummary"
+  /v1/paths:
+    get:
+      operationId: listPaths
+      parameters:
+        - name: purpose
+          in: query
+          required: true
+          schema:
+            type: string
+            enum: [source, destination]
+        - name: parent
+          in: query
+          required: false
+          schema:
+            type: string
+            default: "."
+        - name: search
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Direct child directories beneath the configured worker root.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PathListing"
+        "400":
+          $ref: "#/components/responses/ProblemError"
+        "403":
+          $ref: "#/components/responses/ProblemError"
+  /v1/runs/preflight:
+    post:
+      operationId: preflightRun
+      parameters:
+        - $ref: "#/components/parameters/Actor"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/StartRunRequest"
+      responses:
+        "200":
+          description: Validation results. Field validation failures are represented by valid=false.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PreflightResponse"
   /v1/runs:
     get:
       operationId: listRuns
@@ -77,9 +127,11 @@ paths:
               schema:
                 $ref: "#/components/schemas/WorkflowRun"
         "400":
-          $ref: "#/components/responses/TextError"
+          $ref: "#/components/responses/ProblemError"
         "403":
-          $ref: "#/components/responses/TextError"
+          $ref: "#/components/responses/ProblemError"
+        "409":
+          $ref: "#/components/responses/ProblemError"
   /v1/runs/{id}:
     parameters:
       - $ref: "#/components/parameters/RunId"
@@ -323,13 +375,19 @@ components:
         text/plain:
           schema:
             type: string
+    ProblemError:
+      description: Structured request failure.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ApiProblem"
   schemas:
     Priority:
       type: string
       enum: [P0, P1, P2, P3]
     SpecSummary:
       type: object
-      required: [path, function_id, name, domain, priority, description, mock_available]
+      required: [path, function_id, name, domain, priority, description, mock_available, runnable]
       properties:
         path:
           type: string
@@ -345,20 +403,155 @@ components:
           type: string
         mock_available:
           type: boolean
+        runnable:
+          type: boolean
+        unavailable_reason:
+          type: string
+        defaults:
+          $ref: "#/components/schemas/SpecDefaults"
+    SpecDefaults:
+      type: object
+      required: [source_path, destination_path]
+      properties:
+        source_path:
+          type: string
+        destination_path:
+          type: string
+    PathInput:
+      type: object
+      required: [type, path]
+      properties:
+        type:
+          type: string
+          enum: [local_path]
+        path:
+          type: string
+    RunInputs:
+      type: object
+      required: [source, destination]
+      properties:
+        source:
+          $ref: "#/components/schemas/PathInput"
+        destination:
+          $ref: "#/components/schemas/PathInput"
     StartRunRequest:
       type: object
       required: [spec]
       properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 80
         spec:
           type: string
+        source:
+          $ref: "#/components/schemas/PathInput"
+        destination:
+          $ref: "#/components/schemas/PathInput"
         mock:
           type: boolean
           default: false
+        validation_token:
+          type: string
+    FieldIssue:
+      type: object
+      required: [field, code, message]
+      properties:
+        field:
+          type: string
+        code:
+          type: string
+        message:
+          type: string
+    PreflightEffective:
+      type: object
+      required: [name, function_id, spec, source_path, destination_path, source_file_count, destination_state]
+      properties:
+        name:
+          type: string
+        function_id:
+          type: string
+        spec:
+          type: string
+        source_path:
+          type: string
+        destination_path:
+          type: string
+        source_file_count:
+          type: integer
+          minimum: 0
+        destination_state:
+          type: string
+          enum: [empty, will_create]
+    PreflightResponse:
+      type: object
+      required: [valid, errors, warnings]
+      properties:
+        valid:
+          type: boolean
+        validation_token:
+          type: string
+        expires_at:
+          type: string
+          format: date-time
+        effective:
+          $ref: "#/components/schemas/PreflightEffective"
+        errors:
+          type: array
+          items:
+            $ref: "#/components/schemas/FieldIssue"
+        warnings:
+          type: array
+          items:
+            $ref: "#/components/schemas/FieldIssue"
+    PathEntry:
+      type: object
+      required: [name, path, kind, readable, writable]
+      properties:
+        name:
+          type: string
+        path:
+          type: string
+        kind:
+          type: string
+          enum: [directory]
+        readable:
+          type: boolean
+        writable:
+          type: boolean
+    PathListing:
+      type: object
+      required: [path, parent, entries, truncated]
+      properties:
+        path:
+          type: string
+        parent:
+          type: [string, "null"]
+        entries:
+          type: array
+          items:
+            $ref: "#/components/schemas/PathEntry"
+        truncated:
+          type: boolean
+    ApiProblem:
+      type: object
+      required: [code, message, request_id]
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+        field:
+          type: string
+        request_id:
+          type: string
     WorkflowRun:
       type: object
-      required: [id, function_id, status, spec_path, mock, started_at, updated_at, checkpoint]
+      required: [id, display_name, function_id, status, spec_path, mock, started_by, started_at, updated_at, checkpoint]
       properties:
         id:
+          type: string
+        display_name:
           type: string
         function_id:
           type: string
@@ -367,8 +560,15 @@ components:
           enum: [running, halted, certified, failed, error]
         spec_path:
           type: string
+          description: Specification path relative to spec_root.
+        inputs:
+          oneOf:
+            - $ref: "#/components/schemas/RunInputs"
+            - type: "null"
         mock:
           type: boolean
+        started_by:
+          type: string
         started_at:
           type: string
           format: date-time
