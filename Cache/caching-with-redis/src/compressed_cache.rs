@@ -125,11 +125,7 @@ impl CompressedEmbeddingCache {
                 sample_count += 1;
             }
         }
-        let avg_compressed_size = if sample_count > 0 {
-            total_compressed / sample_count
-        } else {
-            0
-        };
+        let avg_compressed_size = total_compressed.checked_div(sample_count).unwrap_or(0);
         let uncompressed_size = 1536 * 4; // OpenAI/Azure 기본 임베딩(예시) 1536차원
         let compression_ratio = if avg_compressed_size > 0 {
             uncompressed_size as f64 / avg_compressed_size as f64

@@ -71,7 +71,7 @@ async fn main() -> Result<()> {
     let cache = EmbeddingCache::new("redis://127.0.0.1:6379", 3600).await?;
 
     // 테스트 텍스트들
-    let texts = vec![
+    let texts = [
         "Rust는 시스템 프로그래밍 언어입니다",
         "Redis는 인메모리 데이터 저장소입니다",
         "임베딩은 텍스트를 벡터로 변환합니다",

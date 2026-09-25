@@ -54,7 +54,7 @@ async fn main() -> Result<()> {
             if let Err(_e) = test_redis_connection(&cfg.redis_url).await {
                 eprintln!(
                     "Redis가 실행되어 있지 않습니다. Redis를 먼저 실행하세요. (URL: {})",
-                    &cfg.redis_url
+                    cfg.redis_url
                 );
             }
         }

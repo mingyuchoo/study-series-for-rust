@@ -103,7 +103,7 @@ async fn benchmark_concurrent_access() -> Result<()> {
             }
         });
     }
-    while let Some(_) = tasks.join_next().await {}
+    while tasks.join_next().await.is_some() {}
     let concurrent_write_time = start.elapsed();
 
     // 동시 읽기 테스트(1000 ops)
@@ -118,7 +118,7 @@ async fn benchmark_concurrent_access() -> Result<()> {
             }
         });
     }
-    while let Some(_) = tasks.join_next().await {}
+    while tasks.join_next().await.is_some() {}
     let concurrent_read_time = start.elapsed();
 
     println!("  동시 쓰기 (1000 ops): {:?}", concurrent_write_time);

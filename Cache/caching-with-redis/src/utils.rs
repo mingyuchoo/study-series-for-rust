@@ -55,7 +55,7 @@ pub async fn test_redis_connection(redis_url: &str) -> Result<()> {
     use redis::AsyncCommands;
 
     let client = redis::Client::open(redis_url)?;
-    let mut conn = client.get_async_connection().await?;
+    let mut conn = client.get_multiplexed_async_connection().await?;
 
     // ping 테스트
     let pong: String = redis::cmd("PING").query_async(&mut conn).await?;
