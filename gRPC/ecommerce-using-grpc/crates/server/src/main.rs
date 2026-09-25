@@ -35,6 +35,10 @@ fn init_tracing() -> Result<()> {
 
 /// Start the gRPC server with the provided configuration
 async fn start_server(config: ServerConfig) -> Result<()> {
+    // Setup gRPC standard health checking service
+    let (health_reporter, health_service) = tonic_health::server::health_reporter();
+    health_reporter.set_serving::<ProductInfoServer<MyProductInfo>>().await;
+
     // Create the product service implementation
     let product_service = MyProductInfo::default();
 
@@ -43,6 +47,7 @@ async fn start_server(config: ServerConfig) -> Result<()> {
 
     // Build and start the server
     Server::builder()
+        .add_service(health_service)
         .add_service(ProductInfoServer::new(product_service))
         .serve(config.addr)
         .await

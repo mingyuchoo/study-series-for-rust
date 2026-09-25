@@ -1,6 +1,6 @@
 # ecommerce-using-grpc
 
-Rust 기반 gRPC 전자상거래 상품 관리 서비스입니다. Railway Oriented Programming, tracing을 사용한 구조화 로깅, 인메모리 저장소, Cargo 워크스페이스(모노레포) 아키텍처를 적용하였습니다.
+Rust 기반 gRPC 전자상거래 상품 관리 서비스 및 Web 대시보드 모니터링 시스템입니다. Railway Oriented Programming, tracing을 사용한 구조화 로깅, 인메모리 저장소, Cargo 워크스페이스(모노레포) 아키텍처, 그리고 Axum 기반 웹 게이트웨이와 실시간 모니터링 대시보드를 적용하였습니다.
 
 ## 사전 요구사항
 
@@ -34,25 +34,36 @@ ecommerce-using-grpc/
 │   │   │   └── ProductInfo.proto
 │   │   ├── build.rs
 │   │   └── src/lib.rs
-│   ├── server/         # gRPC 서버 구현
+│   ├── server/         # gRPC 서버 및 Health Check 구현
 │   │   └── src/
 │   │       ├── lib.rs  # 서비스 로직, 인메모리 저장소, 에러 처리
-│   │       └── main.rs # 서버 바이너리
-│   ├── client/         # gRPC 클라이언트 구현
+│   │       └── main.rs # 서버 바이너리 & tonic-health 등록
+│   ├── client/         # gRPC 클라이언트 CLI 구현
 │   │   └── src/
 │   │       └── main.rs # 클라이언트 바이너리
+│   ├── web/            # Axum 기반 Web 게이트웨이 & 대시보드
+│   │   └── src/
+│   │       ├── index.html # 반응형 실시간 대시보드 UI
+│   │       └── main.rs    # REST API & 모니터링 엔드포인트
 │   └── tests/          # 통합 테스트
 │       └── tests/
 │           └── product_service_test.rs
-└── proto/              # 원본 proto 파일 (참조용)
-    └── ProductInfo.proto
+├── proto/              # 원본 proto 파일 (참조용)
+│   └── ProductInfo.proto
+└── scripts/
+    └── run.sh          # 올인원 실행 및 관리 스크립트
 ```
 
 ## 주요 기능
 
-- **Cargo 워크스페이스(모노레포) 아키텍처** - 여러 크레이트로 조직화
-- **gRPC 기반 상품 관리 서비스** - 효율적인 클라이언트-서버 통신
-- **상품 추가 및 조회** - 핵심 CRUD 작업
+- **Cargo 워크스페이스(모노레포) 아키텍처** - 여러 크레이트로 체계적 구성
+- **gRPC 기반 상품 관리 서비스** - 고성능 클라이언트-서버 통신
+- **표준 gRPC Health Check** - `tonic-health` 표준 프로토콜 적용
+- **웹 대시보드 & 모니터링** - 브라우저 기반 실시간 상태 관측 및 상품 관리 (Axum & Tailwind CSS)
+  - gRPC 서버 상태 실시간 표시 (`SERVING` / `DISCONNECTED`)
+  - 실시간 Ping 지연시간 (Latency RTT ms) 측정
+  - 총 상품 등록 수 및 가동 시간 (Uptime) 표시
+  - 실시간 상품 등록 / 조회 / 목록 확인
 - **인메모리 저장소** - `Arc<Mutex<>>` 기반 스레드 안전 `HashMap`
 - **자동 증가 ID** - 서버가 atomic 카운터로 상품 ID 할당
 - **Railway Oriented Programming** - 깔끔한 에러 처리 패턴
@@ -64,6 +75,8 @@ ecommerce-using-grpc/
 | 패키지 | 버전 | 설명 |
 |--------|------|------|
 | `tonic` | 0.14.5 | gRPC 프레임워크 |
+| `tonic-health` | 0.14.5 | gRPC 표준 헬스체크 |
+| `axum` | 0.8.9 | 웹 서버 및 REST API 게이트웨이 |
 | `prost` | 0.14.3 | Protocol Buffers 구현 |
 | `tokio` | 1.50.0 | 비동기 런타임 |
 | `anyhow` | 1.0.102 | 에러 처리 |
@@ -71,31 +84,34 @@ ecommerce-using-grpc/
 | `tracing` | 0.1.44 | 구조화 로깅 |
 | `tracing-subscriber` | 0.3.22 | 로그 출력 |
 
-## 빌드
+## 실행 가이드
+
+### 1. 스크립트로 간편 실행 (추천)
 
 ```bash
-# 프로젝트 빌드
-cargo build
+# 전체 파이프라인 (검사 + 포맷 + 린트 + 빌드 + 테스트 + gRPC 및 Web 서버 지속 실행)
+./scripts/run.sh
 
-# 릴리스 빌드
-cargo build --release
+# gRPC 서버 백그라운드 기동 + Web 대시보드 바로 실행 (http://localhost:3000, 지속 실행)
+./scripts/run.sh web
+
+# 서버 백그라운드 기동 + CLI 클라이언트 1회 테스트 후 자동 종료
+./scripts/run.sh both
+
+# CI용 비대화형 파이프라인 검증 후 자동 종료
+./scripts/run.sh ci
 ```
 
-## 실행
-
-### 서버 시작
+### 2. 개별 서비스 수동 실행
 
 ```bash
+# 1) gRPC 서버 시작 (포트: [::1]:50051)
 cargo run -p server
-```
 
-서버는 `[::1]:50051` (IPv6 localhost)에서 시작됩니다.
+# 2) Web 대시보드 시작 (포트: 0.0.0.0:3000 -> 브라우저 접속 http://localhost:3000)
+cargo run -p web
 
-### 클라이언트 실행
-
-다른 터미널에서:
-
-```bash
+# 3) CLI 클라이언트 테스트 실행
 cargo run -p client
 ```
 
@@ -109,40 +125,30 @@ cargo test
 cargo test -p tests
 ```
 
-## API
+## gRPC RPC 정의
 
 ### AddProduct
-
-시스템에 새 상품을 추가합니다. 서버가 자동으로 고유 ID를 할당합니다.
-
-**요청:** `Product`
-- `id` (int32): 무시됨 -- 서버가 새 자동 증가 ID를 할당
-- `name` (string): 상품명 (필수, 비어있지 않아야 함)
-- `description` (string): 상품 설명
-- `price` (float): 상품 가격 (필수, 양수여야 함)
-
-**응답:** `ProductId`
-- `id` (int32): 서버가 할당한 상품 ID
+새 상품을 추가합니다. 서버가 자동으로 고유 ID를 할당합니다.
+- **요청:** `Product (name, description, price)`
+- **응답:** `ProductId (id)`
 
 ### GetProduct
-
 ID로 상품 정보를 조회합니다.
+- **요청:** `ProductId (id)`
+- **응답:** `Product (id, name, description, price)`
 
-**요청:** `ProductId`
-- `id` (int32): 상품 ID (양수, 해당 ID의 상품이 없으면 `NOT_FOUND` 반환)
+### ListProducts
+등록된 전체 상품 목록을 반환합니다.
+- **요청:** `Empty`
+- **응답:** `ProductList (repeated Product products)`
 
-**응답:** `Product`
-- 저장된 전체 상품 정보
+## Web REST API 엔드포인트
 
-## 에러 처리
-
-Railway Oriented Programming 패턴으로 커스텀 에러 타입을 사용합니다:
-
-| 에러 | gRPC 상태 | 조건 |
-|------|-----------|------|
-| `ServiceError::NotFound` | `NOT_FOUND` | 해당 ID의 상품이 없음 |
-| `ServiceError::InvalidData` | `INVALID_ARGUMENT` | 빈 이름 또는 양수가 아닌 가격 |
-| `ServiceError::Internal` | `INTERNAL` | 예기치 않은 서버 측 오류 |
+- `GET /` : 웹 대시보드 UI (HTML)
+- `GET /api/health` : gRPC 서버 헬스체크, RTT 지연시간, 가동시간 조회
+- `GET /api/products` : 전체 상품 목록 조회
+- `GET /api/products/:id` : 상품 단건 조회
+- `POST /api/products` : 상품 등록 (`{ "name": "...", "description": "...", "price": 100.0 }`)
 
 ## License
 

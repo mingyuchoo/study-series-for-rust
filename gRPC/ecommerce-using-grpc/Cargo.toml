@@ -3,6 +3,7 @@
     "crates/proto",
     "crates/server",
     "crates/client",
+    "crates/web",
     "crates/tests",
   ]
   resolver = "2"
@@ -14,14 +15,19 @@
 
   [workspace.dependencies]
     anyhow             = "1.0.102"
+    axum               = "0.8.9"
     prost              = "0.14.3"
-    prost-types        = "0.14.3"
+    serde              = {features = ["derive"], version = "1.0.229"}
+    serde_json         = "1.0.151"
     thiserror          = "2.0.18"
-    tokio              = {features = ["macros", "rt-multi-thread"], version = "1.50.0"}
+    tokio              = {features = ["macros", "rt-multi-thread", "time"], version = "1.50.0"}
     tonic              = "0.14.5"
     tonic-build        = "0.14.5"
+    tonic-health       = "0.14.5"
     tonic-prost        = "0.14.5"
     tonic-prost-build  = "0.14.5"
+    tower              = "0.5.2"
+    tower-http         = {features = ["cors", "trace"], version = "0.7.1"}
     tracing            = "0.1.44"
     tracing-subscriber = "0.3.22"
 

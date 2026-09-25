@@ -1,0 +1,706 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>e-Commerce gRPC Store — Apple Design</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    :root {
+      --color-primary: #0066cc;
+      --color-primary-focus: #0071e3;
+      --color-primary-on-dark: #2997ff;
+      --color-ink: #1d1d1f;
+      --color-body: #1d1d1f;
+      --color-body-muted: #cccccc;
+      --color-ink-muted-80: #333333;
+      --color-ink-muted-48: #7a7a7a;
+      --color-divider-soft: #f0f0f0;
+      --color-hairline: #e0e0e0;
+      --color-canvas: #ffffff;
+      --color-canvas-parchment: #f5f5f7;
+      --color-surface-pearl: #fafafc;
+      --color-surface-tile-1: #272729;
+      --color-surface-tile-2: #2a2a2c;
+      --color-surface-tile-3: #252527;
+      --color-surface-black: #000000;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "Helvetica Neue", Helvetica, Arial, sans-serif;
+      background-color: var(--color-canvas-parchment);
+      color: var(--color-ink);
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
+
+    /* Apple-tight display headlines */
+    .headline-tight {
+      letter-spacing: -0.28px;
+    }
+    .headline-tight-md {
+      letter-spacing: -0.374px;
+    }
+    .body-apple {
+      font-size: 17px;
+      line-height: 1.47;
+      letter-spacing: -0.374px;
+    }
+
+    /* Single signature drop shadow on product imagery */
+    .product-shadow {
+      box-shadow: rgba(0, 0, 0, 0.22) 3px 5px 30px 0px;
+    }
+
+    /* Apple button micro-interactions */
+    .apple-btn {
+      transition: transform 0.12s cubic-bezier(0.4, 0, 0.2, 1), background-color 0.12s ease, opacity 0.12s ease;
+    }
+    .apple-btn:active {
+      transform: scale(0.95);
+    }
+    .apple-btn:focus-visible {
+      outline: 2px solid var(--color-primary-focus);
+      outline-offset: 2px;
+    }
+
+    /* Frosted glass navigation */
+    .frosted-nav {
+      background-color: rgba(245, 245, 247, 0.82);
+      backdrop-filter: saturate(180%) blur(20px);
+      -webkit-backdrop-filter: saturate(180%) blur(20px);
+    }
+
+    /* Status dot pulse */
+    @keyframes apple-pulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.45; transform: scale(0.92); }
+    }
+    .animate-apple-pulse {
+      animation: apple-pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+    }
+
+    /* Footer relaxed leading */
+    .leading-dense-link {
+      line-height: 2.41;
+    }
+  </style>
+</head>
+<body class="bg-[#f5f5f7] text-[#1d1d1f] min-h-screen flex flex-col">
+
+  <!-- 1. Global Navigation Bar (44px, Pure Black #000000) -->
+  <nav class="bg-[#000000] text-[#ffffff] text-[12px] h-[44px] sticky top-0 z-50 select-none">
+    <div class="max-w-[1024px] mx-auto h-full px-4 sm:px-6 flex items-center justify-between tracking-[-0.12px]">
+      <div class="flex items-center gap-7">
+        <a href="/" class="hover:opacity-80 transition flex items-center gap-1.5 text-white">
+          <svg class="w-4 h-4 fill-current" viewBox="0 0 170 170">
+            <path d="M150.37 130.25c-2.45 5.66-5.35 10.87-8.71 15.66-4.58 6.53-8.33 11.05-11.22 13.56-4.48 4.12-9.28 6.23-14.42 6.35-3.69 0-8.14-1.05-13.32-3.18-5.19-2.12-9.97-3.17-14.34-3.17-4.58 0-9.49 1.05-14.75 3.17-5.26 2.13-9.5 3.24-12.74 3.35-4.35.13-9.16-1.9-14.42-6.08-3.7-3.04-7.7-7.85-12-14.42-6.09-9.35-10.9-19.86-14.42-31.54-3.52-11.68-5.28-22.95-5.28-33.82 0-14.28 3.59-26.08 10.77-35.39 7.18-9.31 16.23-14.07 27.15-14.28 4.8 0 10.11 1.25 15.93 3.75 5.82 2.5 9.73 3.8 11.73 3.91 1.63-.11 5.76-1.46 12.38-4.06 6.62-2.6 12.28-3.75 16.99-3.45 12.73.65 22.84 5.37 30.34 14.16-11.09 6.74-16.53 16.03-16.32 27.87.22 9.35 3.8 17.17 10.76 23.47 6.96 6.3 15.22 9.94 24.78 10.92-2.17 6.74-4.89 13.37-8.15 19.89zm-38.48-111.4c0-7.17 2.61-13.8 7.82-19.9 5.22-6.09 11.63-9.78 19.24-11.08.33 1.09.49 2.07.49 2.94 0 7.07-2.67 13.86-8.01 20.38-5.33 6.52-11.79 10.27-19.38 11.25-.11-1.09-.16-2.28-.16-3.59z"/>
+          </svg>
+          <span class="font-semibold text-xs tracking-tight">gRPC Store</span>
+        </a>
+        <div class="hidden md:flex items-center gap-7 text-[#cccccc]">
+          <a href="#catalog" class="hover:text-white transition">상품 카탈로그</a>
+          <a href="#addProductSection" class="hover:text-white transition">상품 등록</a>
+          <a href="#architecture" class="hover:text-white transition">아키텍처 스펙</a>
+          <a href="/api/health" target="_blank" class="hover:text-white transition">Health API</a>
+          <a href="/api/products" target="_blank" class="hover:text-white transition">REST API</a>
+        </div>
+      </div>
+      <div class="flex items-center gap-4 text-[#cccccc]">
+        <span class="text-[11px] text-[#7a7a7a] font-mono hidden sm:inline">[::1]:50051</span>
+        <button onclick="refreshAll()" class="hover:text-white transition p-1" title="새로고침">
+          <svg class="w-3.5 h-3.5 fill-none stroke-current" stroke-width="2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+          </svg>
+        </button>
+      </div>
+    </div>
+  </nav>
+
+  <!-- 2. Sub Navigation Bar (52px, Frosted Parchment #f5f5f7, Sticky) -->
+  <header class="frosted-nav border-b border-[#e0e0e0] sticky top-[44px] z-40 h-[52px]">
+    <div class="max-w-[1024px] mx-auto h-full px-4 sm:px-6 flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <h1 class="text-[21px] font-semibold text-[#1d1d1f] tracking-[0.231px]">e-Commerce</h1>
+        <span class="text-[11px] font-normal px-2.5 py-0.5 rounded-full bg-[#e0e0e0]/70 text-[#1d1d1f]">gRPC & Tonic</span>
+      </div>
+
+      <div class="flex items-center gap-3">
+        <!-- Live status indicator -->
+        <div class="flex items-center gap-2 bg-[#ffffff] border border-[#e0e0e0] rounded-full px-3 py-1 shadow-none">
+          <span id="healthIndicatorDot" class="w-2.5 h-2.5 rounded-full bg-[#7a7a7a] animate-apple-pulse"></span>
+          <span id="healthStatusText" class="text-[12px] font-medium text-[#1d1d1f]">확인 중...</span>
+          <span class="text-[#e0e0e0] text-[10px]">|</span>
+          <span id="latencyText" class="text-[12px] font-semibold text-[#0066cc]">-</span>
+          <span class="text-[10px] text-[#7a7a7a]">ms</span>
+        </div>
+
+        <!-- Auto refresh toggle -->
+        <label class="hidden lg:flex items-center cursor-pointer text-[12px] text-[#7a7a7a] bg-[#ffffff] border border-[#e0e0e0] px-3 py-1 rounded-full hover:border-[#1d1d1f] transition">
+          <input type="checkbox" id="autoRefreshToggle" checked class="mr-1.5 accent-[#0066cc] rounded">
+          자동 갱신 (3s)
+        </label>
+
+        <!-- Primary CTA pill -->
+        <a href="#addProductSection" class="apple-btn bg-[#0066cc] hover:bg-[#0071e3] text-white text-[14px] font-normal px-4 py-1.5 rounded-full tracking-tight">
+          상품 추가
+        </a>
+      </div>
+    </div>
+  </header>
+
+  <!-- 3. Product Hero Tile (Pure White #ffffff Canvas) -->
+  <section class="bg-[#ffffff] border-b border-[#e0e0e0] py-16 sm:py-20 text-center">
+    <div class="max-w-[980px] mx-auto px-4 sm:px-6">
+      <p class="text-[14px] font-semibold uppercase tracking-wider text-[#7a7a7a] mb-2">High Performance Microservices</p>
+      <h2 class="text-[40px] sm:text-[56px] font-semibold text-[#1d1d1f] headline-tight leading-[1.07] mb-3">
+        e-Commerce gRPC
+      </h2>
+      <p class="text-[21px] sm:text-[24px] font-normal text-[#7a7a7a] leading-[1.25] max-w-[680px] mx-auto mb-6">
+        Rust의 안전성과 Tonic gRPC의 초고속 성능으로 설계된 전자상거래 백엔드 및 실시간 대시보드.
+      </p>
+
+      <div class="flex items-center justify-center gap-4 mb-12">
+        <a href="#catalog" class="apple-btn bg-[#0066cc] hover:bg-[#0071e3] text-white text-[17px] font-normal px-6 py-2.5 rounded-full shadow-none">
+          상품 목록 보기
+        </a>
+        <a href="#addProductSection" class="apple-btn bg-transparent hover:bg-[#fafafc] text-[#0066cc] border border-[#0066cc] text-[17px] font-normal px-6 py-2.5 rounded-full">
+          신규 등록하기
+        </a>
+      </div>
+
+      <!-- Signature Apple product render with the ONE system drop shadow -->
+      <div class="max-w-[620px] mx-auto bg-[#fafafc] border border-[#e0e0e0] rounded-[18px] p-8 product-shadow relative overflow-hidden">
+        <div class="flex items-center justify-between pb-4 border-b border-[#e0e0e0] mb-6">
+          <div class="flex items-center gap-2">
+            <span class="w-3 h-3 rounded-full bg-[#ff5f56]"></span>
+            <span class="w-3 h-3 rounded-full bg-[#ffbd2e]"></span>
+            <span class="w-3 h-3 rounded-full bg-[#27c93f]"></span>
+            <span class="text-[12px] font-mono text-[#7a7a7a] ml-2">ecommerce.ProductInfo</span>
+          </div>
+          <span class="text-[12px] text-[#0066cc] font-medium">Protocol Buffers v3</span>
+        </div>
+
+        <div class="grid grid-cols-3 gap-4 text-left">
+          <div class="p-3 bg-[#ffffff] rounded-[11px] border border-[#e0e0e0]">
+            <span class="text-[11px] text-[#7a7a7a] uppercase tracking-tight block">RPC Method</span>
+            <span class="text-[14px] font-semibold text-[#1d1d1f]">AddProduct</span>
+          </div>
+          <div class="p-3 bg-[#ffffff] rounded-[11px] border border-[#e0e0e0]">
+            <span class="text-[11px] text-[#7a7a7a] uppercase tracking-tight block">RPC Method</span>
+            <span class="text-[14px] font-semibold text-[#1d1d1f]">GetProduct</span>
+          </div>
+          <div class="p-3 bg-[#ffffff] rounded-[11px] border border-[#e0e0e0]">
+            <span class="text-[11px] text-[#7a7a7a] uppercase tracking-tight block">RPC Method</span>
+            <span class="text-[14px] font-semibold text-[#1d1d1f]">ListProducts</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 4. Telemetry Metrics Section (Parchment #f5f5f7) -->
+  <section class="py-12 border-b border-[#e0e0e0]">
+    <div class="max-w-[1024px] mx-auto px-4 sm:px-6">
+      
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+        
+        <!-- Metric Card 1: gRPC Server Status -->
+        <div class="bg-[#ffffff] rounded-[18px] p-6 border border-[#e0e0e0] flex flex-col justify-between">
+          <div>
+            <div class="flex items-center justify-between">
+              <span class="text-[12px] font-semibold uppercase tracking-wider text-[#7a7a7a]">gRPC Server</span>
+              <span class="w-2.5 h-2.5 rounded-full bg-[#34c759]"></span>
+            </div>
+            <div class="mt-3">
+              <span id="grpcAddrText" class="text-[17px] font-semibold text-[#1d1d1f] block truncate">http://[::1]:50051</span>
+              <span class="text-[14px] text-[#7a7a7a] mt-0.5 block">IPv6 Tonic 백엔드</span>
+            </div>
+          </div>
+          <div class="mt-4 pt-3 border-t border-[#f0f0f0] flex items-center justify-between text-[12px]">
+            <span class="text-[#7a7a7a]">프로토콜</span>
+            <span class="font-medium text-[#1d1d1f]">HTTP/2 gRPC</span>
+          </div>
+        </div>
+
+        <!-- Metric Card 2: Ping Latency (RTT) -->
+        <div class="bg-[#ffffff] rounded-[18px] p-6 border border-[#e0e0e0] flex flex-col justify-between">
+          <div>
+            <div class="flex items-center justify-between">
+              <span class="text-[12px] font-semibold uppercase tracking-wider text-[#7a7a7a]">RTT Latency</span>
+              <span class="text-[13px] text-[#0066cc]">⚡</span>
+            </div>
+            <div class="mt-3 flex items-baseline gap-1">
+              <span id="latencyGradeText" class="text-[34px] font-semibold text-[#1d1d1f] headline-tight-md">-</span>
+              <span class="text-[14px] text-[#7a7a7a]">ms</span>
+            </div>
+          </div>
+          <div class="mt-4 pt-3 border-t border-[#f0f0f0] flex items-center justify-between text-[12px]">
+            <span class="text-[#7a7a7a]">표준 HealthCheck</span>
+            <span class="text-[#34c759] font-medium">SERVING</span>
+          </div>
+        </div>
+
+        <!-- Metric Card 3: Total Products -->
+        <div class="bg-[#ffffff] rounded-[18px] p-6 border border-[#e0e0e0] flex flex-col justify-between">
+          <div>
+            <div class="flex items-center justify-between">
+              <span class="text-[12px] font-semibold uppercase tracking-wider text-[#7a7a7a]">Total Products</span>
+              <span class="text-[13px] text-[#7a7a7a]">📦</span>
+            </div>
+            <div class="mt-3 flex items-baseline gap-1">
+              <span id="productCountText" class="text-[34px] font-semibold text-[#1d1d1f] headline-tight-md">0</span>
+              <span class="text-[14px] text-[#7a7a7a]">개 등록됨</span>
+            </div>
+          </div>
+          <div class="mt-4 pt-3 border-t border-[#f0f0f0] flex items-center justify-between text-[12px]">
+            <span class="text-[#7a7a7a]">저장소</span>
+            <span class="font-medium text-[#1d1d1f]">Arc&lt;Mutex&gt; In-Memory</span>
+          </div>
+        </div>
+
+        <!-- Metric Card 4: Web Uptime -->
+        <div class="bg-[#ffffff] rounded-[18px] p-6 border border-[#e0e0e0] flex flex-col justify-between">
+          <div>
+            <div class="flex items-center justify-between">
+              <span class="text-[12px] font-semibold uppercase tracking-wider text-[#7a7a7a]">Gateway Uptime</span>
+              <span class="text-[13px] text-[#7a7a7a]">⏱️</span>
+            </div>
+            <div class="mt-3">
+              <span id="uptimeText" class="text-[34px] font-semibold text-[#1d1d1f] headline-tight-md tracking-tight font-mono">00:00:00</span>
+            </div>
+          </div>
+          <div class="mt-4 pt-3 border-t border-[#f0f0f0] flex items-center justify-between text-[12px]">
+            <span class="text-[#7a7a7a]">웹 게이트웨이</span>
+            <span class="font-medium text-[#1d1d1f]">Axum 0.8 / Tokio</span>
+          </div>
+        </div>
+
+      </div>
+
+    </div>
+  </section>
+
+  <!-- 5. Main Content: Split Grid (Store Utility Cards, 18px Radius, Hairline Border) -->
+  <main class="py-12 flex-1">
+    <div class="max-w-[1024px] mx-auto px-4 sm:px-6">
+
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+        
+        <!-- Left: Search & Registration Forms (5 cols) -->
+        <div class="lg:col-span-5 space-y-6">
+          
+          <!-- Search Card (search-input pill matching DESIGN.md) -->
+          <div class="bg-[#ffffff] rounded-[18px] p-6 border border-[#e0e0e0]">
+            <div class="flex items-center justify-between mb-4">
+              <h3 class="text-[17px] font-semibold text-[#1d1d1f] tracking-tight">상품 단건 조회</h3>
+              <span class="text-[12px] text-[#7a7a7a]">GetProduct</span>
+            </div>
+
+            <!-- Apple Pill Search Input -->
+            <form onsubmit="handleGetProduct(event)" class="relative">
+              <div class="relative flex items-center">
+                <svg class="w-4 h-4 text-[#7a7a7a] absolute left-3.5 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+                </svg>
+                <input type="number" id="searchId" required min="1" placeholder="상품 ID 입력 (예: 1)" 
+                       class="w-full pl-10 pr-24 py-2.5 h-[44px] bg-[#ffffff] border border-[#e0e0e0] rounded-full text-[14px] text-[#1d1d1f] placeholder-[#7a7a7a] focus:outline-none focus:border-[#0066cc] focus:ring-2 focus:ring-[#0071e3] transition">
+                <button type="submit" 
+                        class="apple-btn absolute right-1.5 top-1.5 bottom-1.5 bg-[#1d1d1f] hover:bg-[#000000] text-white text-[12px] px-3.5 rounded-full font-medium transition">
+                  조회
+                </button>
+              </div>
+            </form>
+
+            <!-- Search Result Card -->
+            <div id="searchResultCard" class="hidden mt-4 p-4 bg-[#fafafc] border border-[#e0e0e0] rounded-[14px]">
+              <div class="flex items-center justify-between mb-1.5">
+                <span id="searchResBadge" class="text-[12px] font-semibold px-2 py-0.5 rounded-full bg-[#0066cc]/10 text-[#0066cc]">ID: #1</span>
+                <span id="searchResPrice" class="text-[17px] font-semibold text-[#1d1d1f]">$0.00</span>
+              </div>
+              <h4 id="searchResName" class="text-[17px] font-semibold text-[#1d1d1f] mb-1">상품명</h4>
+              <p id="searchResDesc" class="text-[14px] text-[#7a7a7a] leading-relaxed">설명</p>
+            </div>
+            
+            <div id="searchErrorAlert" class="hidden mt-4 p-3 bg-[#fafafc] border border-[#ff3b30]/30 text-[#ff3b30] text-[13px] rounded-[11px]"></div>
+          </div>
+
+          <!-- Add Product Form Card (store-utility-card matching DESIGN.md) -->
+          <div id="addProductSection" class="bg-[#ffffff] rounded-[18px] p-6 border border-[#e0e0e0]">
+            <div class="flex items-center justify-between mb-4 pb-2 border-b border-[#f0f0f0]">
+              <div>
+                <h3 class="text-[17px] font-semibold text-[#1d1d1f] tracking-tight">신규 상품 등록</h3>
+                <p class="text-[12px] text-[#7a7a7a]">gRPC AddProduct RPC 호출</p>
+              </div>
+              <span class="text-[12px] font-mono text-[#0066cc] bg-[#0066cc]/10 px-2.5 py-0.5 rounded-full">gRPC</span>
+            </div>
+
+            <form id="addProductForm" onsubmit="handleAddProduct(event)" class="space-y-4">
+              <div>
+                <label for="prodName" class="block text-[12px] font-semibold uppercase tracking-wider text-[#7a7a7a] mb-1">상품명 *</label>
+                <input type="text" id="prodName" required placeholder="예: iPhone 16 Pro, MacBook Pro M4" 
+                       class="w-full px-3.5 py-2.5 bg-[#ffffff] border border-[#e0e0e0] rounded-[11px] text-[14px] text-[#1d1d1f] placeholder-[#7a7a7a] focus:outline-none focus:border-[#0066cc] focus:ring-2 focus:ring-[#0071e3] transition">
+              </div>
+
+              <div>
+                <label for="prodPrice" class="block text-[12px] font-semibold uppercase tracking-wider text-[#7a7a7a] mb-1">가격 ($ USD) *</label>
+                <input type="number" id="prodPrice" required step="0.01" min="0.01" placeholder="예: 999.00" 
+                       class="w-full px-3.5 py-2.5 bg-[#ffffff] border border-[#e0e0e0] rounded-[11px] text-[14px] text-[#1d1d1f] placeholder-[#7a7a7a] focus:outline-none focus:border-[#0066cc] focus:ring-2 focus:ring-[#0071e3] transition">
+              </div>
+
+              <div>
+                <label for="prodDesc" class="block text-[12px] font-semibold uppercase tracking-wider text-[#7a7a7a] mb-1">상품 설명</label>
+                <textarea id="prodDesc" rows="3" placeholder="상품에 대한 상세 특징 및 스펙을 입력하세요"
+                          class="w-full px-3.5 py-2.5 bg-[#ffffff] border border-[#e0e0e0] rounded-[11px] text-[14px] text-[#1d1d1f] placeholder-[#7a7a7a] focus:outline-none focus:border-[#0066cc] focus:ring-2 focus:ring-[#0071e3] transition"></textarea>
+              </div>
+
+              <!-- Primary Action Blue button (full-pill, scale-95 active) -->
+              <button type="submit" id="addSubmitBtn"
+                      class="apple-btn w-full py-3 px-6 bg-[#0066cc] hover:bg-[#0071e3] text-white font-medium text-[14px] rounded-full transition flex items-center justify-center gap-2">
+                <span>상품 등록 전송</span>
+              </button>
+            </form>
+
+            <div id="addResultAlert" class="hidden mt-4 p-3 rounded-[11px] text-[13px]"></div>
+          </div>
+
+        </div>
+
+        <!-- Right: Catalog Table (7 cols) -->
+        <div id="catalog" class="lg:col-span-7">
+          <div class="bg-[#ffffff] rounded-[18px] p-6 border border-[#e0e0e0]">
+            
+            <div class="flex items-center justify-between mb-4 pb-2 border-b border-[#f0f0f0]">
+              <div class="flex items-center gap-2">
+                <h3 class="text-[17px] font-semibold text-[#1d1d1f] tracking-tight">등록된 상품 카탈로그</h3>
+                <span id="listBadge" class="text-[12px] font-semibold px-2 py-0.5 rounded-full bg-[#f5f5f7] text-[#1d1d1f] border border-[#e0e0e0]">0</span>
+              </div>
+              <button onclick="fetchProducts()" class="apple-btn text-[14px] text-[#0066cc] hover:text-[#0071e3] font-normal flex items-center gap-1">
+                <svg class="w-3.5 h-3.5 fill-none stroke-current" stroke-width="2" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+                </svg>
+                새로고침
+              </button>
+            </div>
+
+            <!-- Table of Products -->
+            <div class="overflow-x-auto">
+              <table class="w-full text-left text-[14px] text-[#1d1d1f]">
+                <thead class="text-[11px] uppercase tracking-wider text-[#7a7a7a] border-b border-[#e0e0e0]">
+                  <tr>
+                    <th scope="col" class="py-3 px-3 w-16">ID</th>
+                    <th scope="col" class="py-3 px-3">상품명</th>
+                    <th scope="col" class="py-3 px-3">설명</th>
+                    <th scope="col" class="py-3 px-3 text-right w-24">가격</th>
+                  </tr>
+                </thead>
+                <tbody id="productTableBody" class="divide-y divide-[#f0f0f0]">
+                  <tr>
+                    <td colspan="4" class="py-8 text-center text-[#7a7a7a] text-[13px]">
+                      데이터를 불러오는 중입니다...
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+          </div>
+        </div>
+
+      </div>
+
+    </div>
+  </main>
+
+  <!-- 6. Dark Tile Section (product-tile-dark #272729 matching DESIGN.md) -->
+  <section id="architecture" class="bg-[#272729] text-[#ffffff] py-16 border-t border-[#1d1d1f]">
+    <div class="max-w-[1024px] mx-auto px-4 sm:px-6">
+      <div class="text-center mb-10">
+        <p class="text-[12px] font-semibold uppercase tracking-wider text-[#cccccc] mb-1">Architecture & Implementation</p>
+        <h3 class="text-[34px] font-semibold text-white headline-tight-md">gRPC & Microservices</h3>
+        <p class="text-[17px] text-[#cccccc] mt-2 max-w-[620px] mx-auto">
+          Protocol Buffers 인터페이스 정의서와 Railway Oriented Programming 기반 에러 핸들링.
+        </p>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-5">
+        
+        <!-- Spec Card 1 -->
+        <div class="bg-[#1f1f21] rounded-[18px] p-6 border border-[#38383a]">
+          <span class="text-[12px] text-[#2997ff] font-medium block mb-1">Tonic 0.14 Framework</span>
+          <h4 class="text-[17px] font-semibold text-white mb-2">gRPC Server</h4>
+          <p class="text-[14px] text-[#cccccc] leading-relaxed mb-4">
+            Tokio 비동기 런타임 위에서 동작하며 <code class="text-xs bg-[#2a2a2c] text-[#ffffff] px-1.5 py-0.5 rounded">[::1]:50051</code> 에서 gRPC 프로토콜을 리스닝합니다.
+          </p>
+          <a href="/api/health" target="_blank" class="text-[14px] text-[#2997ff] hover:underline flex items-center gap-1">
+            Health Check API &rarr;
+          </a>
+        </div>
+
+        <!-- Spec Card 2 -->
+        <div class="bg-[#1f1f21] rounded-[18px] p-6 border border-[#38383a]">
+          <span class="text-[12px] text-[#2997ff] font-medium block mb-1">Axum 0.8 Gateway</span>
+          <h4 class="text-[17px] font-semibold text-white mb-2">Web BFF & REST</h4>
+          <p class="text-[14px] text-[#cccccc] leading-relaxed mb-4">
+            브라우저 클라이언트 요청을 수신하여 gRPC RPC 호출로 직렬화/역직렬화 변환하는 REST 게이트웨이입니다.
+          </p>
+          <a href="/api/products" target="_blank" class="text-[14px] text-[#2997ff] hover:underline flex items-center gap-1">
+            Products JSON API &rarr;
+          </a>
+        </div>
+
+        <!-- Spec Card 3 -->
+        <div class="bg-[#1f1f21] rounded-[18px] p-6 border border-[#38383a]">
+          <span class="text-[12px] text-[#2997ff] font-medium block mb-1">In-Memory Storage</span>
+          <h4 class="text-[17px] font-semibold text-white mb-2">Thread-safe Store</h4>
+          <p class="text-[14px] text-[#cccccc] leading-relaxed mb-4">
+            <code class="text-xs bg-[#2a2a2c] text-[#ffffff] px-1.5 py-0.5 rounded">Arc&lt;Mutex&lt;HashMap&gt;&gt;</code> 기반과 <code class="text-xs bg-[#2a2a2c] text-[#ffffff] px-1.5 py-0.5 rounded">AtomicI32</code> 카운터를 사용하여 안전한 동시성을 보장합니다.
+          </p>
+          <span class="text-[14px] text-[#cccccc]">Auto-incremented IDs</span>
+        </div>
+
+      </div>
+    </div>
+  </section>
+
+  <!-- 7. Footer (Parchment #f5f5f7, Relaxed Leading 2.41 matching DESIGN.md) -->
+  <footer class="bg-[#f5f5f7] border-t border-[#e0e0e0] py-12 text-[#7a7a7a] text-[12px]">
+    <div class="max-w-[1024px] mx-auto px-4 sm:px-6">
+      
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-8 mb-8 text-[14px] leading-dense-link">
+        <div>
+          <h5 class="text-[12px] font-semibold uppercase tracking-wider text-[#1d1d1f] mb-1">Services</h5>
+          <ul>
+            <li><a href="#catalog" class="hover:text-[#1d1d1f] transition">상품 카탈로그</a></li>
+            <li><a href="#addProductSection" class="hover:text-[#1d1d1f] transition">신규 상품 등록</a></li>
+            <li><a href="#architecture" class="hover:text-[#1d1d1f] transition">아키텍처 정보</a></li>
+          </ul>
+        </div>
+        <div>
+          <h5 class="text-[12px] font-semibold uppercase tracking-wider text-[#1d1d1f] mb-1">Endpoints</h5>
+          <ul>
+            <li><a href="/api/health" target="_blank" class="hover:text-[#1d1d1f] transition">GET /api/health</a></li>
+            <li><a href="/api/products" target="_blank" class="hover:text-[#1d1d1f] transition">GET /api/products</a></li>
+            <li><a href="/api/products/1" target="_blank" class="hover:text-[#1d1d1f] transition">GET /api/products/:id</a></li>
+          </ul>
+        </div>
+        <div>
+          <h5 class="text-[12px] font-semibold uppercase tracking-wider text-[#1d1d1f] mb-1">Technology</h5>
+          <ul>
+            <li><span class="text-[#1d1d1f]">Rust 2024 Edition</span></li>
+            <li><span class="text-[#1d1d1f]">Tonic 0.14.5 gRPC</span></li>
+            <li><span class="text-[#1d1d1f]">Axum 0.8.9 HTTP</span></li>
+          </ul>
+        </div>
+        <div>
+          <h5 class="text-[12px] font-semibold uppercase tracking-wider text-[#1d1d1f] mb-1">Repository</h5>
+          <ul>
+            <li><span class="text-[#1d1d1f]">ecommerce-using-grpc</span></li>
+            <li><span class="text-[#7a7a7a]">Apple Design Language</span></li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="pt-6 border-t border-[#e0e0e0] flex flex-col sm:flex-row items-center justify-between gap-4 text-[11px] text-[#7a7a7a]">
+        <p>&copy; 2026 e-Commerce using gRPC. Built with Rust, Tonic & Axum. Inspired by Apple Design Analysis.</p>
+        <p class="font-mono">Backend: [::1]:50051 &bull; Web: localhost:3000</p>
+      </div>
+
+    </div>
+  </footer>
+
+  <script>
+    let refreshInterval = null;
+
+    async function fetchHealth() {
+      try {
+        const res = await fetch('/api/health');
+        if (!res.ok) throw new Error('Health check error');
+        const data = await res.json();
+
+        const dot = document.getElementById('healthIndicatorDot');
+        const text = document.getElementById('healthStatusText');
+        const addr = document.getElementById('grpcAddrText');
+        const latency = document.getElementById('latencyText');
+        const latencyGrade = document.getElementById('latencyGradeText');
+        const uptime = document.getElementById('uptimeText');
+
+        addr.textContent = data.grpc_address;
+        uptime.textContent = formatUptime(data.uptime_seconds);
+
+        if (data.status === 'SERVING' || data.connected === true) {
+          dot.className = 'w-2.5 h-2.5 rounded-full bg-[#34c759]';
+          text.textContent = 'SERVING';
+          text.className = 'text-[12px] font-semibold text-[#34c759]';
+
+          if (data.latency_ms !== null && data.latency_ms !== undefined) {
+            const lat = Number(data.latency_ms).toFixed(2);
+            latency.textContent = lat;
+            latencyGrade.textContent = lat;
+          }
+        } else {
+          dot.className = 'w-2.5 h-2.5 rounded-full bg-[#ff3b30] animate-apple-pulse';
+          text.textContent = 'DISCONNECTED';
+          text.className = 'text-[12px] font-semibold text-[#ff3b30]';
+          latency.textContent = '-';
+          latencyGrade.textContent = '-';
+        }
+      } catch (err) {
+        document.getElementById('healthIndicatorDot').className = 'w-2.5 h-2.5 rounded-full bg-[#ff3b30]';
+        document.getElementById('healthStatusText').textContent = 'OFFLINE';
+        document.getElementById('healthStatusText').className = 'text-[12px] font-semibold text-[#ff3b30]';
+      }
+    }
+
+    async function fetchProducts() {
+      try {
+        const res = await fetch('/api/products');
+        const tbody = document.getElementById('productTableBody');
+        const badge = document.getElementById('listBadge');
+        const countText = document.getElementById('productCountText');
+
+        if (!res.ok) {
+          tbody.innerHTML = `<tr><td colspan="4" class="py-8 text-center text-[#ff3b30] text-[13px]">서버에 연결할 수 없습니다. gRPC 백엔드가 구동 중인지 확인하세요.</td></tr>`;
+          countText.textContent = '-';
+          badge.textContent = '0';
+          return;
+        }
+
+        const products = await res.json();
+        badge.textContent = products.length;
+        countText.textContent = products.length;
+
+        if (products.length === 0) {
+          tbody.innerHTML = `<tr><td colspan="4" class="py-8 text-center text-[#7a7a7a] text-[13px]">등록된 상품이 없습니다. 신규 상품을 등록해보세요.</td></tr>`;
+          return;
+        }
+
+        tbody.innerHTML = products.map(p => `
+          <tr class="hover:bg-[#fafafc] transition group">
+            <td class="py-3 px-3 font-mono text-[12px] font-semibold text-[#0066cc]">#${p.id}</td>
+            <td class="py-3 px-3 font-semibold text-[#1d1d1f]">${escapeHtml(p.name)}</td>
+            <td class="py-3 px-3 text-[13px] text-[#7a7a7a] truncate max-w-xs" title="${escapeHtml(p.description)}">${escapeHtml(p.description || '-')}</td>
+            <td class="py-3 px-3 text-right font-semibold text-[#1d1d1f]">$${Number(p.price).toFixed(2)}</td>
+          </tr>
+        `).join('');
+      } catch (err) {
+        document.getElementById('productTableBody').innerHTML = `<tr><td colspan="4" class="py-8 text-center text-[#ff3b30] text-[13px]">상품 목록을 불러오지 못했습니다.</td></tr>`;
+      }
+    }
+
+    async function handleAddProduct(e) {
+      e.preventDefault();
+      const btn = document.getElementById('addSubmitBtn');
+      const alertBox = document.getElementById('addResultAlert');
+      const name = document.getElementById('prodName').value.trim();
+      const price = parseFloat(document.getElementById('prodPrice').value);
+      const description = document.getElementById('prodDesc').value.trim();
+
+      btn.disabled = true;
+      btn.innerText = '등록 중...';
+
+      try {
+        const res = await fetch('/api/products', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name, price, description })
+        });
+        const data = await res.json();
+
+        if (res.ok) {
+          alertBox.className = 'mt-4 p-3 bg-[#f5f5f7] border border-[#34c759]/40 text-[#1d1d1f] text-[13px] rounded-[11px] block';
+          alertBox.innerHTML = `✅ <strong>등록 완료:</strong> 상품이 성공적으로 등록되었습니다 (할당된 ID: <strong>#${data.id}</strong>)`;
+          document.getElementById('addProductForm').reset();
+          fetchProducts();
+          fetchHealth();
+        } else {
+          alertBox.className = 'mt-4 p-3 bg-[#fafafc] border border-[#ff3b30]/40 text-[#ff3b30] text-[13px] rounded-[11px] block';
+          alertBox.innerHTML = `❌ <strong>오류:</strong> ${data.error || '상품 등록에 실패했습니다.'}`;
+        }
+      } catch (err) {
+        alertBox.className = 'mt-4 p-3 bg-[#fafafc] border border-[#ff3b30]/40 text-[#ff3b30] text-[13px] rounded-[11px] block';
+        alertBox.innerHTML = `❌ <strong>실패:</strong> 서버 통신 오류가 발생했습니다.`;
+      } finally {
+        btn.disabled = false;
+        btn.innerText = '상품 등록 전송';
+      }
+    }
+
+    async function handleGetProduct(e) {
+      e.preventDefault();
+      const id = document.getElementById('searchId').value;
+      const card = document.getElementById('searchResultCard');
+      const errBox = document.getElementById('searchErrorAlert');
+
+      card.classList.add('hidden');
+      errBox.classList.add('hidden');
+
+      try {
+        const res = await fetch(`/api/products/${id}`);
+        if (res.ok) {
+          const product = await res.json();
+          document.getElementById('searchResBadge').textContent = `ID: #${product.id}`;
+          document.getElementById('searchResPrice').textContent = `$${Number(product.price).toFixed(2)}`;
+          document.getElementById('searchResName').textContent = product.name;
+          document.getElementById('searchResDesc').textContent = product.description || '(설명 없음)';
+          card.classList.remove('hidden');
+        } else {
+          const data = await res.json();
+          errBox.textContent = `❌ ${data.error || `상품 ID #${id}번을 찾을 수 없습니다.`}`;
+          errBox.classList.remove('hidden');
+        }
+      } catch (err) {
+        errBox.textContent = '❌ 통신 실패: 서버 상태를 확인하세요.';
+        errBox.classList.remove('hidden');
+      }
+    }
+
+    function formatUptime(seconds) {
+      if (!seconds && seconds !== 0) return '00:00:00';
+      const h = Math.floor(seconds / 3600).toString().padStart(2, '0');
+      const m = Math.floor((seconds % 3600) / 60).toString().padStart(2, '0');
+      const s = Math.floor(seconds % 60).toString().padStart(2, '0');
+      return `${h}:${m}:${s}`;
+    }
+
+    function escapeHtml(str) {
+      if (!str) return '';
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+    }
+
+    function refreshAll() {
+      fetchHealth();
+      fetchProducts();
+    }
+
+    function setupAutoRefresh() {
+      const toggle = document.getElementById('autoRefreshToggle');
+      function updateTimer() {
+        if (toggle && toggle.checked) {
+          if (!refreshInterval) {
+            refreshInterval = setInterval(refreshAll, 3000);
+          }
+        } else {
+          if (refreshInterval) {
+            clearInterval(refreshInterval);
+            refreshInterval = null;
+          }
+        }
+      }
+      if (toggle) {
+        toggle.addEventListener('change', updateTimer);
+        updateTimer();
+      }
+    }
+
+    // Initial load
+    refreshAll();
+    setupAutoRefresh();
+  </script>
+</body>
+</html>

@@ -1,6 +1,8 @@
 use proto::product_info_server::ProductInfo;
-use proto::{Product,
-            ProductId};
+use proto::{Empty,
+            Product,
+            ProductId,
+            ProductList};
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicI32,
                         Ordering};
@@ -97,6 +99,16 @@ impl MyProductInfo {
             .cloned()
             .ok_or(ServiceError::NotFound(product_id.id))
     }
+
+    // Internal method to list all products
+    async fn list_products_internal(&self) -> ServiceResult<ProductList> {
+        let store = self.store.lock().map_err(|e| ServiceError::Internal(e.to_string()))?;
+        let mut products: Vec<Product> = store.values().cloned().collect();
+        products.sort_by_key(|p| p.id);
+        Ok(ProductList {
+            products,
+        })
+    }
 }
 
 #[tonic::async_trait]
@@ -109,5 +121,9 @@ impl ProductInfo for MyProductInfo {
     async fn get_product(&self, request: Request<ProductId>) -> Result<Response<Product>, Status> {
         let product_id = request.into_inner();
         self.get_product_internal(product_id).await.map(Response::new).map_err(Into::into)
+    }
+
+    async fn list_products(&self, _request: Request<Empty>) -> Result<Response<ProductList>, Status> {
+        self.list_products_internal().await.map(Response::new).map_err(Into::into)
     }
 }

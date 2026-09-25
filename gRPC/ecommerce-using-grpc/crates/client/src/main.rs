@@ -54,7 +54,8 @@ async fn get_product(client: &mut ProductInfoClient<Channel>, id: i32) -> Result
         id,
     });
 
-    // Send the request and handle the response with Railway Oriented Programming
+    // Send the request and handle the response with Railway Oriented
+    // Programming
     let response = client.get_product(request).await.context("Failed to get product")?;
 
     // Extract the product from the response
@@ -66,7 +67,8 @@ async fn add_product(client: &mut ProductInfoClient<Channel>, product: Product) 
     // Create the request
     let request = Request::new(product);
 
-    // Send the request and handle the response with Railway Oriented Programming
+    // Send the request and handle the response with Railway Oriented
+    // Programming
     let response = client.add_product(request).await.context("Failed to add product")?;
 
     // Extract the product ID from the response
