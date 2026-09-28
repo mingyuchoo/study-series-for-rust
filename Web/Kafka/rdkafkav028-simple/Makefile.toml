@@ -33,12 +33,56 @@
 
 [tasks.watch-run]
   # `cargo install cargo-watch`로 설치
+  args          = ["watch", "-x", "run --bin producer"]
   command       = "cargo"
-  args          = ["watch", "-x", "run"]
-  install_crate = "cargo-watch"
   dependencies  = ["format"]
+  install_crate = "cargo-watch"
+
+[tasks.watch-producer]
+  # `cargo install cargo-watch`로 설치
+  args          = ["watch", "-x", "run --bin producer"]
+  command       = "cargo"
+  dependencies  = ["format"]
+  install_crate = "cargo-watch"
+
+[tasks.watch-consumer]
+  # `cargo install cargo-watch`로 설치
+  args          = ["watch", "-x", "run --bin consumer"]
+  command       = "cargo"
+  dependencies  = ["format"]
+  install_crate = "cargo-watch"
 
 [tasks.run]
-  args         = ["run"]
+  args         = ["run", "--bin", "producer"]
   command      = "cargo"
   dependencies = ["format"]
+
+[tasks.run-producer]
+  args         = ["run", "--bin", "producer"]
+  command      = "cargo"
+  dependencies = ["format"]
+
+[tasks.run-consumer]
+  args         = ["run", "--bin", "consumer"]
+  command      = "cargo"
+  dependencies = ["format"]
+
+[tasks.run-web]
+  args    = ["run", "--bin", "web"]
+  command = "cargo"
+
+[tasks.frontend-install]
+  args    = ["ci", "--prefix", "frontend"]
+  command = "npm"
+
+[tasks.frontend-dev]
+  args    = ["run", "dev", "--prefix", "frontend"]
+  command = "npm"
+
+[tasks.frontend-build]
+  args    = ["run", "build", "--prefix", "frontend"]
+  command = "npm"
+
+[tasks.kafka-up]
+  args    = ["compose", "up", "-d"]
+  command = "docker"

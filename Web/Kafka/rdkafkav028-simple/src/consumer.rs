@@ -1,5 +1,7 @@
-use rdkafka::consumer::{BaseConsumer, Consumer};
-use rdkafka::{ClientConfig, Message};
+use rdkafka::{ClientConfig,
+              Message,
+              consumer::{BaseConsumer,
+                         Consumer}};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let consumer: BaseConsumer = ClientConfig::new()
@@ -8,9 +10,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .create()
         .expect("invalid consumer config");
 
-    consumer
-        .subscribe(&["rust"])
-        .expect("topic subscribe failed");
+    consumer.subscribe(&["rust"]).expect("topic subscribe failed");
 
     loop {
         for msg_result in consumer.iter() {
@@ -27,6 +27,4 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             )
         }
     }
-
-    Ok(())
 }

@@ -1,7 +1,8 @@
-use rdkafka::producer::{BaseProducer, BaseRecord};
-use rdkafka::ClientConfig;
-use std::thread;
-use std::time::Duration;
+use rdkafka::{ClientConfig,
+              producer::{BaseProducer,
+                         BaseRecord}};
+use std::{thread,
+          time::Duration};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let producer: BaseProducer = ClientConfig::new()
@@ -13,11 +14,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("sending message");
 
         producer
-            .send(
-                BaseRecord::to("rust")
-                    .key(&format!("key-{}", i))
-                    .payload(&format!("value-{}", i)),
-            )
+            .send(BaseRecord::to("rust").key(&format!("key-{}", i)).payload(&format!("value-{}", i)))
             .expect("failed to send message");
 
         thread::sleep(Duration::from_secs(3));
