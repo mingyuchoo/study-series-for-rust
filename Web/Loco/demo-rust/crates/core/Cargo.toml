@@ -1,9 +1,0 @@
-# [REQ-R001] 공유 도메인 로직 크레이트 (2026-02-07)
-[package]
-name = "demo-core"
-version = "0.1.0"
-edition = "2021"
-publish = false
-
-[dependencies]
-serde = { workspace = true }
