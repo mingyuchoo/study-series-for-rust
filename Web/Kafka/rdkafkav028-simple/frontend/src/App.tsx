@@ -169,9 +169,14 @@ export default function App() {
 
   return (
     <div class="shell">
+      <a class="skip-link" href="#workspace">
+        메시지 작업 영역으로 이동
+      </a>
       <header class="topbar">
         <a class="brand" href="/" aria-label="Kafka Playground 홈">
-          <span class="brand-icon">K</span>
+          <span class="brand-icon" aria-hidden="true">
+            K
+          </span>
           <span>
             Kafka <b>Playground</b>
           </span>
@@ -193,7 +198,14 @@ export default function App() {
         </div>
         <section class="connection-panel" aria-label="연결 설정">
           <div class="broker">
-            <span classList={{ dot: true, green: healthy() }} />
+            <span
+              classList={{
+                dot: true,
+                green: healthy() && !checking(),
+                failed: !healthy() && !checking(),
+              }}
+              aria-hidden="true"
+            />
             <div>
               <span class="small-label">BOOTSTRAP SERVER</span>
               <strong>{brokers()}</strong>
@@ -209,6 +221,8 @@ export default function App() {
               maxLength={249}
               pattern={topicPattern}
               required
+              aria-describedby="topic-hint"
+              spellcheck={false}
             />
           </div>
           <button
@@ -218,21 +232,37 @@ export default function App() {
           >
             {checking() ? "확인 중…" : "연결 확인 ↗"}
           </button>
-          <p
-            classList={{ "health-message": true, "text-error": !healthy() }}
-            role="status"
-          >
-            {health()}
-          </p>
+          <div class="connection-detail">
+            <p
+              classList={{
+                "health-message": true,
+                "text-error": !healthy() && !checking(),
+                pending: checking(),
+              }}
+              role="status"
+            >
+              {checking() ? "브로커 연결 확인 중…" : health()}
+            </p>
+            <span id="topic-hint">
+              {active()
+                ? "토픽을 변경하려면 수신을 중지하세요."
+                : "토픽을 확인한 뒤 수신을 시작하세요."}
+            </span>
+          </div>
         </section>
-        <div class="workspace">
-          <section class="panel producer-panel">
+        <div class="workspace" id="workspace" tabindex="-1">
+          <section
+            class="panel producer-panel"
+            aria-labelledby="producer-title"
+          >
             <div class="panel-heading">
               <div>
                 <p class="eyebrow">01 / PRODUCE</p>
-                <h2>메시지 발행</h2>
+                <h2 id="producer-title">메시지 발행</h2>
               </div>
-              <span class="icon-tile">↗</span>
+              <span class="icon-tile" aria-hidden="true">
+                ↗
+              </span>
             </div>
             <form onSubmit={produce}>
               <label for="message-key">
@@ -243,8 +273,12 @@ export default function App() {
                 value={key()}
                 onInput={(e) => setKey(e.currentTarget.value)}
                 placeholder="키가 없으면 비워두세요"
+                aria-describedby="key-hint"
+                spellcheck={false}
               />
-              <p class="field-hint">같은 키는 같은 파티션으로 전달됩니다.</p>
+              <p class="field-hint" id="key-hint">
+                같은 키는 같은 파티션으로 전달됩니다.
+              </p>
               <div class="label-row">
                 <label for="payload">메시지 본문</label>
                 <span class="code-tag">TEXT / JSON</span>
@@ -254,8 +288,9 @@ export default function App() {
                 value={payload()}
                 onInput={(e) => setPayload(e.currentTarget.value)}
                 spellcheck={false}
+                aria-describedby="payload-hint"
               />
-              <div class="editor-footer">
+              <div class="editor-footer" id="payload-hint">
                 <span>UTF-8 · 최대 256 KiB</span>
                 <span>
                   {new TextEncoder().encode(payload()).length.toLocaleString()}{" "}
@@ -268,7 +303,7 @@ export default function App() {
                 disabled={sending()}
               >
                 {sending() ? "Kafka 응답 대기 중…" : "메시지 발행"}
-                <span>↗</span>
+                <span aria-hidden="true">↗</span>
               </button>
               <Show when={delivery()}>
                 {(result) => (
@@ -292,15 +327,30 @@ export default function App() {
               </p>
             </div>
           </section>
-          <section class="panel consumer-panel">
+          <section
+            class="panel consumer-panel"
+            aria-labelledby="consumer-title"
+          >
             <div class="panel-heading">
               <div>
                 <p class="eyebrow">02 / CONSUME</p>
-                <h2>실시간 메시지</h2>
+                <h2 id="consumer-title">실시간 메시지</h2>
               </div>
-              <span classList={{ badge: true, live: connection() === "live" }}>
+              <span
+                classList={{
+                  badge: true,
+                  live: connection() === "live",
+                  failed: connection() === "error",
+                }}
+                role="status"
+              >
                 <span
-                  classList={{ dot: true, green: connection() === "live" }}
+                  classList={{
+                    dot: true,
+                    green: connection() === "live",
+                    failed: connection() === "error",
+                  }}
+                  aria-hidden="true"
                 />
                 {connectionLabel()}
               </span>
@@ -342,21 +392,38 @@ export default function App() {
                 화면 비우기
               </button>
             </div>
-            <div class="message-list" aria-label="수신 메시지">
+            <div
+              class="message-list"
+              role="region"
+              tabindex="0"
+              aria-label="수신 메시지, 최신순"
+            >
               <Show
                 when={messages().length > 0}
                 fallback={
                   <div class="empty">
-                    <div class="empty-icon">⇄</div>
+                    <div class="empty-icon" aria-hidden="true">
+                      ⇄
+                    </div>
                     <h3>
-                      {active()
-                        ? "메시지를 기다리고 있어요"
-                        : "첫 번째 메시지를 기다립니다"}
+                      {connection() === "connecting"
+                        ? "수신 연결을 준비하고 있어요"
+                        : connection() === "live"
+                          ? "메시지를 기다리고 있어요"
+                          : connection() === "error"
+                            ? "연결을 다시 확인해 주세요"
+                            : "첫 번째 메시지를 기다립니다"}
                     </h3>
                     <p>
-                      수신을 시작하면 이곳에 메시지가 표시됩니다.
+                      {connection() === "live"
+                        ? "새 메시지가 도착하면 이곳에 표시됩니다."
+                        : connection() === "connecting"
+                          ? "Kafka가 준비되면 ‘수신 중’으로 바뀝니다."
+                          : connection() === "error"
+                            ? "서버와 브로커 상태를 확인한 뒤 다시 시작하세요."
+                            : "‘수신 시작’을 누르면 메시지를 받을 수 있어요."}
                       <br />
-                      왼쪽에서 새로운 메시지를 보내보세요.
+                      ‘수신 중’을 확인한 뒤 메시지를 발행해 보세요.
                     </p>
                     <span class="empty-route">
                       PRODUCER <i>→</i> KAFKA <i>→</i> YOU
@@ -397,7 +464,15 @@ export default function App() {
             </div>
             <div class="stream-footer">
               <span>
-                <span class="dot green" /> Server-Sent Events
+                <span
+                  classList={{
+                    dot: true,
+                    green: connection() === "live",
+                    failed: connection() === "error",
+                  }}
+                  aria-hidden="true"
+                />{" "}
+                Server-Sent Events
               </span>
               <span>최근 200개 표시 · 최신순</span>
             </div>

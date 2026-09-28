@@ -29,6 +29,7 @@ frontend/
 ├── vite.config.ts    # 개발용 /api 프록시
 └── package.json
 compose.yaml          # 로컬 Kafka(KRaft) + rust 토픽 초기화
+scripts/run.sh        # 포맷팅, 빌드, 테스트 및 전체 개발 환경 실행
 build.rs              # 기존 네이티브 라이브러리 링크 설정
 ```
 
@@ -53,6 +54,38 @@ brew install cmake pkg-config openssl@3 cyrus-sasl zstd
 ## 빠른 실행
 
 아래 명령은 이 프로젝트 디렉터리에서 실행합니다.
+
+### 한 번에 실행
+
+```bash
+./scripts/run.sh
+```
+
+`npm ci` → Rust/프론트엔드 코드 포맷팅 → Rust 전체 타깃 빌드 및 프론트엔드 타입 검사·빌드 →
+Rust 테스트 → Kafka 준비 대기 → `rust` 토픽 생성 → Axum 백엔드 → Vite 프론트엔드 순으로 실행합니다.
+프론트엔드에는 별도 테스트 스위트가 없으므로 TypeScript 타입 검사와 프로덕션 빌드로 검증합니다.
+포맷팅은 소스 파일을 직접 수정합니다. 어느 단계든 실패하면 이후 실행을 중단합니다.
+
+화면은 <http://127.0.0.1:5173>, 백엔드는 <http://127.0.0.1:3000>입니다.
+스크립트의 기본 `KAFKA_BROKERS`는 Compose의 IPv4 포트 바인딩에 맞춘 `127.0.0.1:9092`입니다.
+스크립트는 백엔드의 Kafka 연결과 Vite API 프록시까지 확인한 뒤 계속 실행됩니다.
+`Ctrl+C`로 종료하면 백엔드·프론트엔드와 이번 실행에서 시작한 Kafka를 중지합니다.
+이미 실행 중이던 Kafka와 메시지 볼륨은 보존합니다.
+로그는 `.run/backend.log`, `.run/frontend.log`에 저장하며 실행할 때 덮어씁니다.
+스크립트는 다른 디렉터리에서도 절대 경로로 실행할 수 있습니다.
+
+```bash
+# 포맷팅·빌드·검증만 실행 (Docker 불필요)
+./scripts/run.sh --check
+
+# 기존 Kafka 사용 (rust 토픽은 미리 생성)
+KAFKA_BROKERS=127.0.0.1:9092 ./scripts/run.sh --external-kafka
+
+# 기존 서버와 포트가 충돌할 때 (Vite API 프록시도 WEB_ADDR에 맞춰짐)
+WEB_ADDR=127.0.0.1:3001 FRONTEND_PORT=5174 ./scripts/run.sh
+```
+
+아래는 각 구성 요소를 개별적으로 실행하는 방법입니다.
 
 ### 1. Kafka 시작
 
@@ -98,7 +131,7 @@ npm run dev --prefix frontend
 ```
 
 <http://127.0.0.1:5173> 에 접속합니다. Vite가 `/api`를 Rust 서버의 `127.0.0.1:3000`으로 프록시합니다.
-`WEB_ADDR`를 바꾸면 `frontend/vite.config.ts`의 프록시 주소도 맞춰주세요.
+`WEB_ADDR`를 바꾸면 Vite를 실행하는 터미널에도 같은 환경변수를 전달하세요.
 
 ### 환경 설정
 
@@ -107,6 +140,7 @@ npm run dev --prefix frontend
 | `KAFKA_BROKERS` | `localhost:9092` | Kafka bootstrap 서버 목록 |
 | `WEB_ADDR` | `127.0.0.1:3000` | Rust HTTP 서버 주소 |
 | `FRONTEND_DIST` | `frontend/dist` | 실행 디렉터리 기준 정적 파일 경로 |
+| `FRONTEND_PORT` | `5173` | `scripts/run.sh`에서 사용하는 Vite 포트 |
 
 ```bash
 KAFKA_BROKERS=localhost:9092 WEB_ADDR=127.0.0.1:3000 cargo run --bin web
