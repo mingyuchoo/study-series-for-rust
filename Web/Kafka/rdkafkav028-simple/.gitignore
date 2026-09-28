@@ -1,7 +1,18 @@
-!Cargo.lock
-!frontend/package-lock.json
-frontend/node_modules/
-frontend/dist/
-frontend/test-results/
-frontend/playwright-report/
-.run/
+# Rust build output and rustfmt backups
+/target/
+*.rs.bk
+
+# Frontend dependencies, generated assets, and test output
+/frontend/node_modules/
+/frontend/dist/
+/frontend/.vite/
+/frontend/coverage/
+/frontend/test-results/
+/frontend/playwright-report/
+
+# Local run logs
+/.run/
+
+# Keep Cargo and npm lockfiles tracked despite repository-wide ignore rules.
+!/Cargo.lock
+!/frontend/package-lock.json
