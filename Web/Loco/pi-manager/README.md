@@ -23,12 +23,36 @@ PI Manager는 조직의 성과지표(Performance Indicators)를 체계적으로 
 
 - Rust 1.70 이상
 - SQLite (기본) 또는 PostgreSQL
-- [cargo-make](https://github.com/sagiegurari/cargo-make) (`cargo install cargo-make`)
+- [cargo-make](https://github.com/sagiegurari/cargo-make) (선택: 기존 태스크 사용 시 `cargo install cargo-make`)
 
 ### 설치 및 실행
 
+`scripts/run.sh`를 사용하면 Bash, Rust/Cargo, rustfmt만으로 기본 작업을 실행할 수 있습니다.
+`cargo-make`나 별도 Loco CLI 설치는 필요하지 않습니다.
+
 ```bash
-# cargo-make를 이용한 실행 (권장)
+./scripts/run.sh fmt             # 코드 포맷팅 (migration 포함)
+./scripts/run.sh fmt --check     # 코드 변경 없이 포맷 검사
+./scripts/run.sh build           # 워크스페이스 빌드
+./scripts/run.sh build --release # 최적화 빌드
+./scripts/run.sh test            # 전체 테스트 (임시 SQLite DB)
+./scripts/run.sh test can_find_by_email -- --nocapture # 특정 테스트
+./scripts/run.sh run             # 서버 시작, Ctrl+C로 종료
+./scripts/run.sh all             # 포맷팅 → 빌드 → 테스트 → 서버 실행
+./scripts/run.sh all --release   # 최적화 빌드로 전체 과정 실행
+./scripts/run.sh help            # 도움말 (인자 없이 실행해도 표시)
+```
+
+스크립트는 호출 위치와 관계없이 프로젝트 루트에서 동작하고, 실패한 단계에서 중단합니다.
+서버는 기존 `.env`와 Loco 환경 설정을 사용하며 기본 주소는 `http://localhost:5150`입니다.
+테스트는 DB 초기화 설정으로부터 기존 데이터를 보호하기 위해 `LOCO_ENV=test`와
+실행마다 생성하는 임시 SQLite DB를 사용합니다. 테스트 종료 시 임시 DB는 삭제됩니다.
+`rustfmt`가 없다면 `rustup component add rustfmt`로 설치하세요.
+
+기존 cargo-make 태스크도 사용할 수 있습니다:
+
+```bash
+# cargo-make를 이용한 실행
 cargo make install          # 프로젝트 의존성 다운로드
 cargo make dev              # 개발 서버 시작
 

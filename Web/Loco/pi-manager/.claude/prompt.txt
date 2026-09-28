@@ -1,1 +1,0 @@
-현재 프로젝트를  Workspace(Mono repo.) 형태로된 성과지표(Performance Indicator) 관리 앱으로 만들고자 한다. 성과지표에는 입력지표(Input Index), 과정지표(Process Index), 산출지표(Output Index), 결과지표(Outcome Index)를 수립하여 최종 성과지표를 도출하도록 하고 싶다.  이키텍처는 Rust 프로그래밍 언어로 만들어진 Loco 프레임워크를 이용하여 Database, Backend, Frontend 를 한꺼번에 만들수 있도록 하라. Database는 SQLite를 사용하라,
