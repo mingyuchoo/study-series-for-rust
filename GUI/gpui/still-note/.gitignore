@@ -1,0 +1,8 @@
+# Cargo build output. Keep Cargo.lock tracked for this application.
+/target/
+
+# Verification evidence and the README's local test journal directory.
+/.artifacts/
+
+# JournalStore's temporary save files, including interrupted saves.
+.stillnote-*.tmp
