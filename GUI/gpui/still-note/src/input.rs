@@ -548,7 +548,6 @@ impl Render for TextInput {
                     .w_full()
                     .px(px(14.))
                     .py(px(10.))
-                    .bg(rgb(FIELD))
                     .child(TextElement { input: cx.entity() }),
             )
     }
