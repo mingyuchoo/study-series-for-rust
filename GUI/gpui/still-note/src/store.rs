@@ -32,52 +32,36 @@ impl JournalStore {
     pub fn load(&mut self) -> Result<Journal> {
         self.loaded = false;
         match fs::read(&self.path) {
-            Ok(bytes) => {
-                let journal: Journal = serde_json::from_slice(&bytes)
-                    .context("저널 파일을 읽을 수 없습니다. 원본을 보존했습니다")?;
-                journal
-                    .validate()
-                    .context("저널 데이터 검증 실패. 원본을 보존했습니다")?;
+            | Ok(bytes) => {
+                let journal: Journal = serde_json::from_slice(&bytes).context("저널 파일을 읽을 수 없습니다. 원본을 보존했습니다")?;
+                journal.validate().context("저널 데이터 검증 실패. 원본을 보존했습니다")?;
                 self.baseline = Some(bytes);
                 self.loaded = true;
                 Ok(journal)
-            }
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+            },
+            | Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
                 self.baseline = None;
                 self.loaded = true;
                 Ok(Journal::default())
-            }
-            Err(e) => Err(e).context("저널 파일 접근 실패. 원본을 보존했습니다"),
+            },
+            | Err(e) => Err(e).context("저널 파일 접근 실패. 원본을 보존했습니다"),
         }
     }
     pub fn save(&mut self, journal: &Journal) -> Result<()> {
-        ensure!(
-            self.loaded,
-            "손상된 파일 보호: 정상 로드 전에는 저장할 수 없습니다"
-        );
+        ensure!(self.loaded, "손상된 파일 보호: 정상 로드 전에는 저장할 수 없습니다");
         journal.validate()?;
         let current = match fs::read(&self.path) {
-            Ok(bytes) => Some(bytes),
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => None,
-            Err(e) => return Err(e).context("기존 파일 확인 실패"),
+            | Ok(bytes) => Some(bytes),
+            | Err(e) if e.kind() == std::io::ErrorKind::NotFound => None,
+            | Err(e) => return Err(e).context("기존 파일 확인 실패"),
         };
-        ensure!(
-            current == self.baseline,
-            "다른 프로그램이 파일을 변경했습니다. 앱을 재시작해 주세요"
-        );
-        let parent = self
-            .path
-            .parent()
-            .filter(|p| !p.as_os_str().is_empty())
-            .unwrap_or(Path::new("."));
+        ensure!(current == self.baseline, "다른 프로그램이 파일을 변경했습니다. 앱을 재시작해 주세요");
+        let parent = self.path.parent().filter(|p| !p.as_os_str().is_empty()).unwrap_or(Path::new("."));
         fs::create_dir_all(parent).context("데이터 폴더 생성 실패")?;
         let bytes = serde_json::to_vec_pretty(journal)?;
         let temp = parent.join(format!(".stillnote-{}.tmp", Uuid::new_v4()));
         let result = (|| -> Result<()> {
-            let mut file = OpenOptions::new()
-                .write(true)
-                .create_new(true)
-                .open(&temp)?;
+            let mut file = OpenOptions::new().write(true).create_new(true).open(&temp)?;
             file.write_all(&bytes)?;
             file.sync_all()?;
             drop(file);

@@ -1,11 +1,6 @@
-use gpui::{
-    ClipboardItem, Entity, EntityInputHandler, Modifiers, ScrollDelta, ScrollWheelEvent,
-    TestAppContext, VisualTestContext, point, px, size,
-};
+use gpui::{ClipboardItem, Entity, EntityInputHandler, Modifiers, ScrollDelta, ScrollWheelEvent, TestAppContext, VisualTestContext, point, px, size};
 use std::fs;
-use stillnote::{
-    Entry, Filter, Journal, Kind, Log, Status, input::bind_input_keys, parse_date, ui::JournalView,
-};
+use stillnote::{Entry, Filter, Journal, Kind, Log, Status, input::bind_input_keys, parse_date, ui::JournalView};
 use tempfile::tempdir;
 
 // Snapshot reads cross the test context's App boundary; no mutation or UI
@@ -55,13 +50,8 @@ fn render(cx: &mut VisualTestContext) {
 fn click(cx: &mut VisualTestContext, selector: impl Into<String>) {
     render(cx);
     let selector: &'static str = Box::leak(selector.into().into_boxed_str());
-    let bounds = cx
-        .debug_bounds(selector)
-        .unwrap_or_else(|| panic!("rendered control missing: {selector}"));
-    assert!(
-        bounds.size.width > px(0.) && bounds.size.height > px(0.),
-        "zero-area control: {selector}"
-    );
+    let bounds = cx.debug_bounds(selector).unwrap_or_else(|| panic!("rendered control missing: {selector}"));
+    assert!(bounds.size.width > px(0.) && bounds.size.height > px(0.), "zero-area control: {selector}");
     cx.simulate_click(bounds.center(), Modifiers::none());
     render(cx);
 }
@@ -89,13 +79,7 @@ fn set_date(cx: &mut VisualTestContext, value: &str) {
 fn ac01_ac02_ac03_real_view_quick_capture_and_row_actions(cx: &mut TestAppContext) {
     let dir = tempdir().unwrap();
     cx.update(bind_input_keys);
-    let (view, cx) = cx.add_window_view(|_, cx| {
-        JournalView::new(
-            dir.path().join("journal.json"),
-            parse_date("2026-10-02").unwrap(),
-            cx,
-        )
-    });
+    let (view, cx) = cx.add_window_view(|_, cx| JournalView::new(dir.path().join("journal.json"), parse_date("2026-10-02").unwrap(), cx));
     render(cx);
     for selector in [
         "nav-daily",
@@ -106,10 +90,7 @@ fn ac01_ac02_ac03_real_view_quick_capture_and_row_actions(cx: &mut TestAppContex
         "empty-state",
         "journal-scroll",
     ] {
-        assert!(
-            cx.debug_bounds(selector).is_some(),
-            "missing initial control {selector}"
-        );
+        assert!(cx.debug_bounds(selector).is_some(), "missing initial control {selector}");
     }
     assert!(snapshot(&view, cx).journal().entries.is_empty());
     add(cx, " ");
@@ -122,45 +103,22 @@ fn ac01_ac02_ac03_real_view_quick_capture_and_row_actions(cx: &mut TestAppContex
     click(cx, "kind-note");
     add(cx, "오늘의 생각 café");
     assert_eq!(
-        snapshot(&view, cx)
-            .journal()
-            .entries
-            .iter()
-            .map(|e| e.kind)
-            .collect::<Vec<_>>(),
+        snapshot(&view, cx).journal().entries.iter().map(|e| e.kind).collect::<Vec<_>>(),
         [Kind::Task, Kind::Event, Kind::Note]
     );
-    assert_eq!(
-        snapshot(&view, cx).journal().entry(task).unwrap().text,
-        "한글 할 일 📚"
-    );
+    assert_eq!(snapshot(&view, cx).journal().entry(task).unwrap().text, "한글 할 일 📚");
     click(cx, format!("complete-{task}"));
-    assert_eq!(
-        snapshot(&view, cx).journal().entry(task).unwrap().symbol(),
-        "×"
-    );
+    assert_eq!(snapshot(&view, cx).journal().entry(task).unwrap().symbol(), "×");
     click(cx, format!("complete-{task}"));
-    assert!(
-        snapshot(&view, cx)
-            .journal()
-            .entry(task)
-            .unwrap()
-            .is_open_task()
-    );
+    assert!(snapshot(&view, cx).journal().entry(task).unwrap().is_open_task());
     click(cx, format!("important-{task}"));
     assert!(snapshot(&view, cx).journal().entry(task).unwrap().important);
     click(cx, format!("edit-{task}"));
     type_in(cx, "entry-input", "고친 할 일 📝");
     click(cx, "save-entry");
-    assert_eq!(
-        snapshot(&view, cx).journal().entry(task).unwrap().text,
-        "고친 할 일 📝"
-    );
+    assert_eq!(snapshot(&view, cx).journal().entry(task).unwrap().text, "고친 할 일 📝");
     click(cx, format!("cancel-{task}"));
-    assert_eq!(
-        snapshot(&view, cx).journal().entry(task).unwrap().status,
-        Status::Cancelled
-    );
+    assert_eq!(snapshot(&view, cx).journal().entry(task).unwrap().status, Status::Cancelled);
     assert!(snapshot(&view, cx).error.is_none());
 }
 
@@ -168,13 +126,7 @@ fn ac01_ac02_ac03_real_view_quick_capture_and_row_actions(cx: &mut TestAppContex
 fn ac04_real_view_date_calendar_month_future_navigation(cx: &mut TestAppContext) {
     let dir = tempdir().unwrap();
     cx.update(bind_input_keys);
-    let (view, cx) = cx.add_window_view(|_, cx| {
-        JournalView::new(
-            dir.path().join("journal.json"),
-            parse_date("2026-12-31").unwrap(),
-            cx,
-        )
-    });
+    let (view, cx) = cx.add_window_view(|_, cx| JournalView::new(dir.path().join("journal.json"), parse_date("2026-12-31").unwrap(), cx));
     add(cx, "연말 일간");
     click(cx, "next-date");
     assert_eq!(snapshot(&view, cx).date, parse_date("2027-01-01").unwrap());
@@ -198,10 +150,7 @@ fn ac04_real_view_date_calendar_month_future_navigation(cx: &mut TestAppContext)
     click(cx, "nav-future");
     set_date(cx, "2026-12-01");
     add(cx, "미래 계획");
-    assert_eq!(
-        snapshot(&view, cx).journal().entries.last().unwrap().log,
-        Log::Future
-    );
+    assert_eq!(snapshot(&view, cx).journal().entries.last().unwrap().log, Log::Future);
     click(cx, "next-date");
     assert_eq!(snapshot(&view, cx).date, parse_date("2027-01-01").unwrap());
     assert!(snapshot(&view, cx).visible_entries().is_empty());
@@ -211,13 +160,7 @@ fn ac04_real_view_date_calendar_month_future_navigation(cx: &mut TestAppContext)
 fn ac05_ac09_real_view_collection_index_global_search_filter_and_jump(cx: &mut TestAppContext) {
     let dir = tempdir().unwrap();
     cx.update(bind_input_keys);
-    let (view, cx) = cx.add_window_view(|_, cx| {
-        JournalView::new(
-            dir.path().join("journal.json"),
-            parse_date("2026-10-02").unwrap(),
-            cx,
-        )
-    });
+    let (view, cx) = cx.add_window_view(|_, cx| JournalView::new(dir.path().join("journal.json"), parse_date("2026-10-02").unwrap(), cx));
     add(cx, "책 읽기");
     let task = snapshot(&view, cx).journal().entries[0].id;
     click(cx, format!("complete-{task}"));
@@ -237,14 +180,7 @@ fn ac05_ac09_real_view_collection_index_global_search_filter_and_jump(cx: &mut T
     click(cx, format!("index-collection-{collection}"));
     assert_eq!(snapshot(&view, cx).visible_entries()[0].id, note);
     type_in(cx, "search-input", "책");
-    assert_eq!(
-        snapshot(&view, cx)
-            .visible_entries()
-            .iter()
-            .map(|e| e.id)
-            .collect::<Vec<_>>(),
-        [task, note]
-    );
+    assert_eq!(snapshot(&view, cx).visible_entries().iter().map(|e| e.id).collect::<Vec<_>>(), [task, note]);
     click(cx, "status-filter");
     assert_eq!(snapshot(&view, cx).filter, Filter::Open);
     assert_eq!(snapshot(&view, cx).visible_entries()[0].id, note);
@@ -260,15 +196,11 @@ fn ac05_ac09_real_view_collection_index_global_search_filter_and_jump(cx: &mut T
 }
 
 #[gpui::test]
-fn ac03_ac09_search_result_edit_opens_visible_composer_at_original_location(
-    cx: &mut TestAppContext,
-) {
+fn ac03_ac09_search_result_edit_opens_visible_composer_at_original_location(cx: &mut TestAppContext) {
     let dir = tempdir().unwrap();
     let path = dir.path().join("journal.json");
     cx.update(bind_input_keys);
-    let (view, cx) = cx.add_window_view(|_, cx| {
-        JournalView::new(path.clone(), parse_date("2026-10-02").unwrap(), cx)
-    });
+    let (view, cx) = cx.add_window_view(|_, cx| JournalView::new(path.clone(), parse_date("2026-10-02").unwrap(), cx));
     add(cx, "일간 기록");
     click(cx, "nav-monthly");
     set_date(cx, "2026-11-15");
@@ -282,10 +214,7 @@ fn ac03_ac09_search_result_edit_opens_visible_composer_at_original_location(
     click(cx, format!("edit-{id}"));
     assert_eq!(snapshot(&view, cx).date, parse_date("2026-11-15").unwrap());
     assert_eq!(snapshot(&view, cx).log, Log::Monthly);
-    assert!(
-        cx.debug_bounds("entry-input").is_some(),
-        "search editing must expose the actual input"
-    );
+    assert!(cx.debug_bounds("entry-input").is_some(), "search editing must expose the actual input");
     assert!(cx.debug_bounds("save-entry").is_some());
     type_in(cx, "entry-input", "검색에서 수정한 한글 메모 📝");
     cx.simulate_keystrokes("enter");
@@ -297,14 +226,7 @@ fn ac03_ac09_search_result_edit_opens_visible_composer_at_original_location(
     assert_eq!(entry.kind, Kind::Note);
     assert_eq!(entry.log, Log::Monthly);
     assert_eq!(entry.date, parse_date("2026-11-15").unwrap());
-    assert_eq!(
-        stillnote::Session::open(path)
-            .unwrap()
-            .journal
-            .entry(id)
-            .unwrap(),
-        entry
-    );
+    assert_eq!(stillnote::Session::open(path).unwrap().journal.entry(id).unwrap(), entry);
 }
 
 #[gpui::test]
@@ -314,9 +236,7 @@ fn ac06_ac07_real_view_migration_and_restart_retains_user_data(cx: &mut TestAppC
     cx.update(bind_input_keys);
     let expected;
     {
-        let (view, cx) = cx.add_window_view(|_, cx| {
-            JournalView::new(path.clone(), parse_date("2026-10-02").unwrap(), cx)
-        });
+        let (view, cx) = cx.add_window_view(|_, cx| JournalView::new(path.clone(), parse_date("2026-10-02").unwrap(), cx));
         add(cx, "다음 달에 읽을 책 📚");
         let source = snapshot(&view, cx).journal().entries[0].id;
         click(cx, format!("important-{source}"));
@@ -327,14 +247,7 @@ fn ac06_ac07_real_view_migration_and_restart_retains_user_data(cx: &mut TestAppC
         let original = snapshot(&view, cx).journal().entry(source).unwrap().clone();
         assert_eq!(original.symbol(), "<");
         let target = original.migrated_to.unwrap();
-        assert_eq!(
-            snapshot(&view, cx)
-                .journal()
-                .entry(target)
-                .unwrap()
-                .migrated_from,
-            Some(source)
-        );
+        assert_eq!(snapshot(&view, cx).journal().entry(target).unwrap().migrated_from, Some(source));
         click(cx, format!("trace-{source}"));
         assert_eq!(snapshot(&view, cx).log, Log::Future);
         assert_eq!(snapshot(&view, cx).date, parse_date("2026-11-01").unwrap());
@@ -349,16 +262,11 @@ fn ac06_ac07_real_view_migration_and_restart_retains_user_data(cx: &mut TestAppC
         cx.run_until_parked();
         assert_eq!(cx.read(|app| app.windows().len()), 0);
     }
-    let (view, cx) = cx.add_window_view(|_, cx| {
-        JournalView::new(path.clone(), parse_date("2026-11-01").unwrap(), cx)
-    });
+    let (view, cx) = cx.add_window_view(|_, cx| JournalView::new(path.clone(), parse_date("2026-11-01").unwrap(), cx));
     render(cx);
     assert_eq!(snapshot(&view, cx).journal(), &expected);
     click(cx, "nav-future");
-    assert_eq!(
-        snapshot(&view, cx).visible_entries()[0].text,
-        "다음 달에 읽을 책 📚"
-    );
+    assert_eq!(snapshot(&view, cx).visible_entries()[0].text, "다음 달에 읽을 책 📚");
     assert!(snapshot(&view, cx).error.is_none());
 }
 
@@ -369,21 +277,13 @@ fn ac08_real_view_corrupt_load_error_preserves_file_and_blocks_mutation(cx: &mut
     let corrupt = b"{ broken personal journal";
     fs::write(&path, corrupt).unwrap();
     cx.update(bind_input_keys);
-    let (view, cx) = cx.add_window_view(|_, cx| {
-        JournalView::new(path.clone(), parse_date("2026-10-02").unwrap(), cx)
-    });
+    let (view, cx) = cx.add_window_view(|_, cx| JournalView::new(path.clone(), parse_date("2026-10-02").unwrap(), cx));
     render(cx);
     assert!(snapshot(&view, cx).error.is_some());
     assert!(cx.debug_bounds("error-message").is_some());
     add(cx, "덮어쓰면 안 되는 기록");
     assert!(snapshot(&view, cx).journal().entries.is_empty());
-    assert!(
-        snapshot(&view, cx)
-            .error
-            .as_ref()
-            .unwrap()
-            .contains("저장하지 못했습니다")
-    );
+    assert!(snapshot(&view, cx).error.as_ref().unwrap().contains("저장하지 못했습니다"));
     assert_eq!(fs::read(&path).unwrap(), corrupt);
 }
 
@@ -392,9 +292,7 @@ fn ac08_real_view_failed_save_error_retains_disk_model_and_input(cx: &mut TestAp
     let dir = tempdir().unwrap();
     let path = dir.path().join("journal.json");
     cx.update(bind_input_keys);
-    let (view, cx) = cx.add_window_view(|_, cx| {
-        JournalView::new(path.clone(), parse_date("2026-10-02").unwrap(), cx)
-    });
+    let (view, cx) = cx.add_window_view(|_, cx| JournalView::new(path.clone(), parse_date("2026-10-02").unwrap(), cx));
     add(cx, "기존 기록");
     let expected = snapshot(&view, cx).journal().clone();
     let bytes = fs::read(&path).unwrap();
@@ -402,13 +300,7 @@ fn ac08_real_view_failed_save_error_retains_disk_model_and_input(cx: &mut TestAp
     add(cx, "저장 실패 유지");
     assert_eq!(snapshot(&view, cx).journal(), &expected);
     assert_eq!(fs::read(&path).unwrap(), bytes);
-    assert!(
-        snapshot(&view, cx)
-            .error
-            .as_ref()
-            .unwrap()
-            .contains("저장하지 못했습니다")
-    );
+    assert!(snapshot(&view, cx).error.as_ref().unwrap().contains("저장하지 못했습니다"));
     assert!(cx.debug_bounds("error-message").is_some());
     assert_eq!(snapshot(&view, cx).entry_text.as_str(), "저장 실패 유지");
 }
@@ -417,39 +309,23 @@ fn ac08_real_view_failed_save_error_retains_disk_model_and_input(cx: &mut TestAp
 fn ac10_real_input_keyboard_clipboard_composition_utf16_and_resize(cx: &mut TestAppContext) {
     let dir = tempdir().unwrap();
     cx.update(bind_input_keys);
-    let (view, cx) = cx.add_window_view(|_, cx| {
-        JournalView::new(
-            dir.path().join("journal.json"),
-            parse_date("2026-10-02").unwrap(),
-            cx,
-        )
-    });
+    let (view, cx) = cx.add_window_view(|_, cx| JournalView::new(dir.path().join("journal.json"), parse_date("2026-10-02").unwrap(), cx));
     type_in(cx, "entry-input", "한글🙂");
     cx.simulate_keystrokes("end backspace");
     assert_eq!(snapshot(&view, cx).entry_text.as_str(), "한글");
     cx.update(|_, app| app.write_to_clipboard(ClipboardItem::new_string(" 붙여넣기 📚".into())));
     cx.simulate_keystrokes("ctrl-v enter");
     render(cx);
-    assert_eq!(
-        snapshot(&view, cx).journal().entries[0].text,
-        "한글 붙여넣기 📚"
-    );
+    assert_eq!(snapshot(&view, cx).journal().entries[0].text, "한글 붙여넣기 📚");
     // Exercise the production input entity's platform IME contract. Relative
     // composition selections must map within the newly composed substring.
     let input = snapshot(&view, cx).entry_input.clone();
-    for (prefix, composing, expected_text, expected_caret) in [
-        ("한", "a", "한a", 2),
-        ("a", "한", "a한", 2),
-        ("🙂", "한", "🙂한", 3),
-    ] {
+    for (prefix, composing, expected_text, expected_caret) in [("한", "a", "한a", 2), ("a", "한", "a한", 2), ("🙂", "한", "🙂한", 3)] {
         type_in(cx, "entry-input", prefix);
         cx.update(|window, app| {
             input.update(app, |input, cx| {
                 input.replace_and_mark_text_in_range(None, composing, Some(1..1), window, cx);
-                assert_eq!(
-                    input.selected_text_range(false, window, cx).unwrap().range,
-                    expected_caret..expected_caret
-                );
+                assert_eq!(input.selected_text_range(false, window, cx).unwrap().range, expected_caret..expected_caret);
                 assert_eq!(input.content.as_ref(), expected_text);
             })
         });
@@ -474,10 +350,7 @@ fn ac10_real_input_keyboard_clipboard_composition_utf16_and_resize(cx: &mut Test
         );
     }
     add(cx, "축소한 창에서 기록");
-    assert_eq!(
-        snapshot(&view, cx).journal().entries.last().unwrap().text,
-        "축소한 창에서 기록"
-    );
+    assert_eq!(snapshot(&view, cx).journal().entries.last().unwrap().text, "축소한 창에서 기록");
     for index in 1..=12 {
         add(cx, &format!("스크롤 기록 {index}"));
     }
@@ -485,10 +358,7 @@ fn ac10_real_input_keyboard_clipboard_composition_utf16_and_resize(cx: &mut Test
     let last_selector: &'static str = Box::leak(format!("complete-{last}").into_boxed_str());
     let area = cx.debug_bounds("journal-scroll").unwrap();
     let before = cx.debug_bounds(last_selector).unwrap();
-    assert!(
-        before.bottom() > area.bottom(),
-        "fixture must overflow its viewport"
-    );
+    assert!(before.bottom() > area.bottom(), "fixture must overflow its viewport");
     cx.simulate_mouse_move(area.center(), None, Modifiers::none());
     cx.simulate_event(ScrollWheelEvent {
         position: area.center(),
@@ -503,8 +373,5 @@ fn ac10_real_input_keyboard_clipboard_composition_utf16_and_resize(cx: &mut Test
         "last record remains inaccessible after scroll: {after:?} within {area:?}"
     );
     click(cx, last_selector);
-    assert_eq!(
-        snapshot(&view, cx).journal().entry(last).unwrap().status,
-        Status::Complete
-    );
+    assert_eq!(snapshot(&view, cx).journal().entry(last).unwrap().status, Status::Complete);
 }

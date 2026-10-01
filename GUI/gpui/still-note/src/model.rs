@@ -40,14 +40,14 @@ pub struct Entry {
 impl Entry {
     pub fn symbol(&self) -> &'static str {
         match self.status {
-            Status::Complete => "×",
-            Status::Cancelled => "⊘",
-            Status::Migrated => ">",
-            Status::Scheduled => "<",
-            Status::Open => match self.kind {
-                Kind::Task => "•",
-                Kind::Event => "○",
-                Kind::Note => "–",
+            | Status::Complete => "×",
+            | Status::Cancelled => "⊘",
+            | Status::Migrated => ">",
+            | Status::Scheduled => "<",
+            | Status::Open => match self.kind {
+                | Kind::Task => "•",
+                | Kind::Event => "○",
+                | Kind::Note => "–",
             },
         }
     }
@@ -83,10 +83,7 @@ pub enum Filter {
 }
 pub fn parse_date(value: &str) -> Result<NaiveDate> {
     let date = NaiveDate::parse_from_str(value, "%Y-%m-%d")?;
-    ensure!(
-        (1..=9999).contains(&date.year()),
-        "날짜는 0001~9999년 범위여야 합니다"
-    );
+    ensure!((1..=9999).contains(&date.year()), "날짜는 0001~9999년 범위여야 합니다");
     Ok(date)
 }
 pub fn shift_month(date: NaiveDate, delta: i32) -> Result<NaiveDate> {
@@ -97,11 +94,7 @@ pub fn shift_month(date: NaiveDate, delta: i32) -> Result<NaiveDate> {
 }
 impl Journal {
     pub fn validate(&self) -> Result<()> {
-        ensure!(
-            self.version == 1,
-            "지원하지 않는 저장 버전: {}",
-            self.version
-        );
+        ensure!(self.version == 1, "지원하지 않는 저장 버전: {}", self.version);
         let mut ids = HashSet::new();
         let mut names = HashSet::new();
         for c in &self.collections {
@@ -144,10 +137,7 @@ impl Journal {
             }
             if let Some(id) = e.migrated_from {
                 let source = self.entry(id)?;
-                ensure!(
-                    source.migrated_to == Some(e.id) && source.id != e.id,
-                    "잘못된 이월 원본 연결"
-                );
+                ensure!(source.migrated_to == Some(e.id) && source.id != e.id, "잘못된 이월 원본 연결");
             }
         }
         for e in &self.entries {
@@ -162,10 +152,7 @@ impl Journal {
     }
     fn validate_log(&self, log: &Log) -> Result<()> {
         if let Log::Collection(id) = log {
-            ensure!(
-                self.collections.iter().any(|c| c.id == *id),
-                "컬렉션을 찾을 수 없습니다"
-            );
+            ensure!(self.collections.iter().any(|c| c.id == *id), "컬렉션을 찾을 수 없습니다");
         }
         Ok(())
     }
@@ -184,15 +171,9 @@ impl Journal {
     pub fn add_collection(&mut self, name: &str) -> Result<Uuid> {
         let name = name.trim();
         ensure!(!name.is_empty(), "컬렉션 이름을 입력해 주세요");
-        ensure!(
-            !self.collections.iter().any(|c| c.name == name),
-            "이미 있는 컬렉션 이름입니다"
-        );
+        ensure!(!self.collections.iter().any(|c| c.name == name), "이미 있는 컬렉션 이름입니다");
         let id = Uuid::new_v4();
-        self.collections.push(Collection {
-            id,
-            name: name.to_owned(),
-        });
+        self.collections.push(Collection { id, name: name.to_owned() });
         Ok(id)
     }
     pub fn add_entry(&mut self, date: NaiveDate, log: Log, kind: Kind, text: &str) -> Result<Uuid> {
@@ -215,10 +196,7 @@ impl Journal {
     }
     pub fn set_status(&mut self, id: Uuid, status: Status) -> Result<()> {
         let e = self.entry_mut(id)?;
-        ensure!(
-            !matches!(e.status, Status::Migrated | Status::Scheduled),
-            "이월한 원본은 변경할 수 없습니다"
-        );
+        ensure!(!matches!(e.status, Status::Migrated | Status::Scheduled), "이월한 원본은 변경할 수 없습니다");
         ensure!(
             matches!(status, Status::Open | Status::Complete | Status::Cancelled),
             "이월 기능을 사용해 주세요"
@@ -233,19 +211,13 @@ impl Journal {
     pub fn edit_entry(&mut self, id: Uuid, text: &str) -> Result<()> {
         ensure!(!text.trim().is_empty(), "빈 기록은 저장할 수 없습니다");
         let e = self.entry_mut(id)?;
-        ensure!(
-            !matches!(e.status, Status::Migrated | Status::Scheduled),
-            "이월 원본은 수정할 수 없습니다"
-        );
+        ensure!(!matches!(e.status, Status::Migrated | Status::Scheduled), "이월 원본은 수정할 수 없습니다");
         e.text = text.trim().to_owned();
         Ok(())
     }
     pub fn toggle_important(&mut self, id: Uuid) -> Result<()> {
         let e = self.entry_mut(id)?;
-        ensure!(
-            !matches!(e.status, Status::Migrated | Status::Scheduled),
-            "이월 원본은 수정할 수 없습니다"
-        );
+        ensure!(!matches!(e.status, Status::Migrated | Status::Scheduled), "이월 원본은 수정할 수 없습니다");
         e.important = !e.important;
         Ok(())
     }
@@ -253,10 +225,7 @@ impl Journal {
         self.validate_log(&log)?;
         let source = self.entry(id)?.clone();
         ensure!(source.is_open_task(), "미완료 할 일만 이월할 수 있습니다");
-        ensure!(
-            !same_location(source.date, &source.log, date, &log),
-            "다른 날짜 또는 로그를 선택해 주세요"
-        );
+        ensure!(!same_location(source.date, &source.log, date, &log), "다른 날짜 또는 로그를 선택해 주세요");
         if matches!(log, Log::Collection(_)) {
             bail!("이월 대상은 일간/월간/미래 로그입니다");
         }
@@ -265,11 +234,7 @@ impl Journal {
         dest.important = source.important;
         dest.migrated_from = Some(id);
         let original = self.entry_mut(id)?;
-        original.status = if log == Log::Future {
-            Status::Scheduled
-        } else {
-            Status::Migrated
-        };
+        original.status = if log == Log::Future { Status::Scheduled } else { Status::Migrated };
         original.migrated_to = Some(target);
         Ok(target)
     }
@@ -279,11 +244,9 @@ impl Journal {
             .filter(|e| {
                 &e.log == log
                     && match log {
-                        Log::Daily => e.date == date,
-                        Log::Monthly | Log::Future => {
-                            e.date.year() == date.year() && e.date.month() == date.month()
-                        }
-                        Log::Collection(_) => true,
+                        | Log::Daily => e.date == date,
+                        | Log::Monthly | Log::Future => e.date.year() == date.year() && e.date.month() == date.month(),
+                        | Log::Collection(_) => true,
                     }
             })
             .collect()
@@ -295,27 +258,20 @@ impl Journal {
             .filter(|e| {
                 e.text.to_lowercase().contains(&q)
                     && match filter {
-                        Filter::All => true,
-                        Filter::Open => e.status == Status::Open,
-                        Filter::Complete => e.status == Status::Complete,
+                        | Filter::All => true,
+                        | Filter::Open => e.status == Status::Open,
+                        | Filter::Complete => e.status == Status::Complete,
                     }
             })
             .collect()
     }
 }
 
-fn same_location(
-    left_date: NaiveDate,
-    left_log: &Log,
-    right_date: NaiveDate,
-    right_log: &Log,
-) -> bool {
+fn same_location(left_date: NaiveDate, left_log: &Log, right_date: NaiveDate, right_log: &Log) -> bool {
     left_log == right_log
         && match left_log {
-            Log::Monthly | Log::Future => {
-                left_date.year() == right_date.year() && left_date.month() == right_date.month()
-            }
-            Log::Daily => left_date == right_date,
-            Log::Collection(_) => true,
+            | Log::Monthly | Log::Future => left_date.year() == right_date.year() && left_date.month() == right_date.month(),
+            | Log::Daily => left_date == right_date,
+            | Log::Collection(_) => true,
         }
 }
