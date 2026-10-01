@@ -7,3 +7,6 @@
 
 # JournalStore's temporary save files, including interrupted saves.
 .stillnote-*.tmp
+
+# graft's local graph cache — regenerable, not committed (run `graft build`).
+/graft/
