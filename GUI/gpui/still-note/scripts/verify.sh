@@ -7,9 +7,12 @@ git rev-parse --verify HEAD >/dev/null 2>&1 || {
   printf 'FAIL: committed Git checkpoint required\n' >&2; exit 2;
 }
 git_root="$(cd -- "$(git rev-parse --show-toplevel)" && pwd)"
-[[ "$git_root" == "$REPO_ROOT" ]] || {
-  printf 'FAIL: place template at Git repository root\n' >&2; exit 2;
-}
+if [[ "$git_root" != "$REPO_ROOT" ]]; then
+  project_prefix="$(git rev-parse --show-prefix)"
+  git -C "$git_root" --literal-pathspecs ls-files --error-unmatch -- "${project_prefix}Cargo.toml" >/dev/null 2>&1 || {
+    printf 'FAIL: nested project requires a tracked Cargo.toml in this Git repository\n' >&2; exit 2;
+  }
+fi
 [[ -z "$(git status --porcelain --untracked-files=all)" ]] || {
   printf 'FAIL: commit changes before verification (clean tree required)\n' >&2; exit 2;
 }

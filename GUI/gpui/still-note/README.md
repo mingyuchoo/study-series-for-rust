@@ -18,6 +18,24 @@ cargo run --locked
 cargo run --locked -- --data-file .artifacts/my-test-journal.json
 ```
 
+전체 개발 파이프라인은 **포맷 수정 → lint → 모든 테스트 대상 → doctest → production build → GUI 실행** 순서로 진행합니다. 실패하면 즉시 멈추고 해당 종료 코드를 반환합니다. 포맷 단계는 소스 파일을 수정하며, GUI는 창을 닫을 때까지 실행됩니다. PowerShell **7.4 이상**에서 실행하세요:
+
+```powershell
+pwsh -File scripts/run.ps1
+pwsh -File scripts/run.ps1 --no-run
+pwsh -File scripts/run.ps1 -- --data-file '.artifacts/my test journal.json'
+```
+
+Windows의 **Git Bash**에서도 같은 파이프라인을 실행할 수 있습니다. 다른 디렉터리에서 호출할 때는 스크립트 경로를 지정하면 됩니다. Windows 네이티브 GPUI를 빌드하므로 WSL/Linux 환경용 실행 명령은 아닙니다.
+
+```bash
+bash scripts/run.sh
+bash scripts/run.sh --no-run
+bash scripts/run.sh -- --data-file '.artifacts/my test journal.json'
+```
+
+`--no-run`은 모든 검사와 빌드를 완료하고 GUI 실행만 생략합니다. `--help`는 명령을 실행하지 않고 도움말을 출력합니다. `--` 뒤의 인수는 앱으로 그대로 전달됩니다. 기본 실행은 위의 개인 저널 경로를 사용하며, 테스트는 임시 저장 경로를 사용합니다. 전체 테스트는 `--all-targets --features test-support` 및 별도 doctest를 포함하고, 의존성을 해석하는 Cargo 명령에는 `--locked`를 사용합니다.
+
 일반 실행은 `%LOCALAPPDATA%\Stillnote\Stillnote\data\journal.json`을 사용합니다. 앱은 네트워크/계정/클라우드를 사용하지 않습니다. 로컬 JSON은 암호화되어 있지 않습니다. Windows 계정과 디스크 보안을 통해 보호하세요.
 
 ## 사용
@@ -56,8 +74,7 @@ JSON 파싱, 버전, 날짜, ID, 컬렉션, 작업 상태 또는 이월 연결 �
 & 'C:/Program Files/Git/bin/bash.exe' -c 'bash scripts/verify.sh'
 ```
 
-format → clippy + production build → 단위 → 파일 통합 → GPUI UI E2E를 순차 실행합니다. UI E2E는 `--features test-support`를 사용해 실제 view를 렌더하고 클릭·키보드 입력을 보냅니다. 임시 저장 경로를 사용하며 개인 데이터에는 접근하지 않습니다. 실제 Windows GPU 창 확인은 별도로 수행합니다.
+format → clippy → 단위 → 파일 통합 → GPUI UI E2E를 순차 실행합니다. UI E2E는 `--features test-support`를 사용해 실제 view를 렌더하고 클릭·키보드 입력을 보냅니다. 임시 저장 경로를 사용하며 개인 데이터에는 접근하지 않습니다. 실제 Windows GPU 창 확인은 별도로 수행합니다.
 
 입력 컴포넌트는 Zed Industries의 GPUI 0.2.2 공식 `examples/input.rs`를 바탕으로 구성하고 UTF-16 IME 위치 처리와 Windows 단축키를 보완했습니다. 원본 Apache-2.0 라이선스는 `assets/GPUI-LICENSE-APACHE`에 있습니다.
-
 

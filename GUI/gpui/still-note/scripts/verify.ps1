@@ -21,7 +21,11 @@ try {
     $gitRoot = [IO.Path]::GetFullPath([string](Invoke-VerificationGit @('rev-parse', '--show-toplevel')))
     $comparison = if ($IsWindows) { [StringComparison]::OrdinalIgnoreCase } else { [StringComparison]::Ordinal }
     if (-not [string]::Equals($gitRoot, $RepositoryRoot, $comparison)) {
-        Stop-Verification 'FAIL: place template at Git repository root'
+        $projectPrefix = [string](Invoke-VerificationGit @('rev-parse', '--show-prefix'))
+        & $GitExecutable -C $gitRoot --literal-pathspecs ls-files --error-unmatch -- ($projectPrefix + 'Cargo.toml') 2>$null | Out-Null
+        if ($LASTEXITCODE -ne 0) {
+            Stop-Verification 'FAIL: nested project requires a tracked Cargo.toml in this Git repository'
+        }
     }
     if (@(Invoke-VerificationGit @('status', '--porcelain', '--untracked-files=all')).Count -ne 0) {
         Stop-Verification 'FAIL: commit changes before verification (clean tree required)'
