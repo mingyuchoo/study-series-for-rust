@@ -1,0 +1,2 @@
+# Keep the application's resolved dependencies reproducible.
+!/Cargo.lock

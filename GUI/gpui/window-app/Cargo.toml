@@ -4,8 +4,8 @@
   resolver        = "2"
 
   [workspace.dependencies]
-    anyhow         = "1.0.102"
-    gpui           = "0.2.2"
-    gpui-component = "0.5.1"
-    rust-embed     = {features = ["interpolate-folder-path"], version = "8.11.0"}
-    window-app     = {path = "crates/window-app"}
+    anyhow         = "1.0.104"
+    gpui           = {package = "gpui-pre", version = "=0.3.7"}
+    gpui-component = "0.7.0"
+    gpui-platform  = {package = "gpui-pre-platform", version = "=0.3.7", features = ["font-kit", "wayland", "x11"]}
+    rust-embed     = {features = ["include-exclude", "interpolate-folder-path"], version = "8.12.0"}

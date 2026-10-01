@@ -30,10 +30,10 @@ echo "==> Cleaning project"
 cargo clean
 
 echo "==> Building project"
-cargo build --workspace
+cargo build --workspace --locked
 
 echo "==> Testing project"
-cargo test --workspace
+cargo test --workspace --locked
 
 echo "==> Running hello-world"
-cargo run -p hello-world -- "$@"
+cargo run -p hello-world --locked -- "$@"

@@ -17,7 +17,7 @@ impl Render for HelloWorld {
 }
 
 fn main() {
-    let app = Application::new();
+    let app = gpui_platform::application();
 
     app.run(move |cx| {
         // This must be called before using any GPUI Component features.

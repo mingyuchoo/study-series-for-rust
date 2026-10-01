@@ -1,12 +1,21 @@
 use anyhow::anyhow;
 use gpui::*;
-use gpui_component::button::{Button, ButtonVariants};
-use gpui_component::{Root, TitleBar, h_flex, v_flex};
+use gpui_component::button::{Button,
+                             ButtonVariants};
+use gpui_component::{Root,
+                     TitleBar,
+                     h_flex,
+                     v_flex};
 use rust_embed::Embed;
 use std::borrow::Cow;
 
+#[cfg(target_os = "windows")]
+const FONT_FAMILY: &str = "Malgun Gothic";
+#[cfg(not(target_os = "windows"))]
+const FONT_FAMILY: &str = "NanumGothic";
+
 #[derive(Embed)]
-#[folder = "./assets"]
+#[folder = "$CARGO_MANIFEST_DIR/assets"]
 #[include = "icons/**/*.svg"]
 pub struct Assets;
 
@@ -20,7 +29,7 @@ impl AssetSource for Assets {
             .ok_or_else(|| anyhow!("could not find asset at path \"{path}\""))
     }
 
-    fn list(&self, path: &str) -> Result<Vec<SharedString>> { Ok(Self::iter().filter_map(|p| p.starts_with(path).then(|| p.into())).collect()) }
+    fn list(&self, path: &str) -> Result<Vec<SharedString>> { Ok(Self::iter().filter(|p| p.starts_with(path)).map(Into::into).collect()) }
 }
 
 pub struct WindowApp;
@@ -34,7 +43,7 @@ impl Render for WindowApp {
                         .w_full()
                         .pr_2()
                         .justify_between()
-                        .font_family("NanumGothic")
+                        .font_family(FONT_FAMILY)
                         .child("사용자 정의 타이틀바를 가진 앱")
                         .child("우측 아이템"),
                 ),
@@ -46,7 +55,7 @@ impl Render for WindowApp {
                     .size_full()
                     .items_center()
                     .justify_center()
-                    .font_family("NanumGothic")
+                    .font_family(FONT_FAMILY)
                     .child("안녕?")
                     .child(Button::new("ok").primary().label("클릭하세요!").on_click(|_, _, _| println!("클릭되었습니다."))),
             )
@@ -54,7 +63,7 @@ impl Render for WindowApp {
 }
 
 fn main() {
-    let app = Application::new().with_assets(Assets);
+    let app = gpui_platform::application().with_assets(Assets);
     app.run(|cx: &mut App| {
         // Load Korean fonts for proper rendering on Linux
         // Try common Korean fonts available on Fedora
@@ -67,11 +76,11 @@ fn main() {
 
         for font_path in font_paths {
             match (std::path::Path::new(font_path).exists(), std::fs::read(font_path)) {
-                (true, Ok(font_data)) => {
+                | (true, Ok(font_data)) => {
                     cx.text_system().add_fonts(vec![font_data.into()]).ok();
                     break;
-                }
-                _ => continue,
+                },
+                | _ => continue,
             }
         }
 
