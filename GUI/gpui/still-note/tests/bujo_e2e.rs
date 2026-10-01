@@ -1,4 +1,7 @@
-use gpui::{ClipboardItem, Entity, EntityInputHandler, Modifiers, ScrollDelta, ScrollWheelEvent, TestAppContext, VisualTestContext, point, px, size};
+use gpui::{
+    AppContext, ClipboardItem, Entity, EntityInputHandler, Focusable, Modifiers, ScrollDelta, ScrollWheelEvent, TestAppContext, VisualTestContext, point, px,
+    size,
+};
 use std::fs;
 use stillnote::{Entry, Filter, Journal, Kind, Log, Status, input::bind_input_keys, parse_date, ui::JournalView};
 use tempfile::tempdir;
@@ -73,6 +76,114 @@ fn set_date(cx: &mut VisualTestContext, value: &str) {
     type_in(cx, "date-input", value);
     cx.simulate_keystrokes("enter");
     render(cx);
+}
+
+fn assert_reachable(cx: &mut VisualTestContext, selector: &str, width: f32, height: f32) {
+    let selector: &'static str = Box::leak(selector.to_owned().into_boxed_str());
+    let bounds = cx.debug_bounds(selector).unwrap_or_else(|| panic!("missing {selector} at {width}px"));
+    assert!(
+        bounds.left() >= px(0.) && bounds.right() <= px(width),
+        "horizontal clipping: {selector} {bounds:?} at {width}"
+    );
+    assert!(
+        bounds.top() >= px(0.) && bounds.bottom() <= px(height),
+        "vertical clipping: {selector} {bounds:?} at {width}"
+    );
+    assert!(
+        bounds.size.width >= px(44.) && bounds.size.height >= px(44.),
+        "small target: {selector} {bounds:?}"
+    );
+}
+
+#[gpui::test]
+fn design_ac02_ac04_all_breakpoints_keep_controls_and_actions_reachable(cx: &mut TestAppContext) {
+    let dir = tempdir().unwrap();
+    cx.update(bind_input_keys);
+    for width in [600., 768., 1024., 1360.] {
+        let path = dir.path().join(format!("journal-{width}.json"));
+        // GPUI 0.2.2 retains removed debug selectors in Frame::clear. Start at
+        // each target width so absence assertions cannot read stale wide frames.
+        let window = cx.update(|app| {
+            app.open_window(
+                gpui::WindowOptions {
+                    window_bounds: Some(gpui::WindowBounds::Windowed(gpui::Bounds::new(
+                        point(px(0.), px(0.)),
+                        size(px(width), px(900.)),
+                    ))),
+                    ..Default::default()
+                },
+                |_, app| app.new(|cx| JournalView::new(path, parse_date("2026-10-02").unwrap(), cx)),
+            )
+            .unwrap()
+        });
+        let view = window.root(cx).unwrap();
+        let mut visual = VisualTestContext::from_window(window.into(), cx);
+        let cx = &mut visual;
+        cx.simulate_resize(size(px(width), px(900.)));
+        render(cx);
+        for selector in [
+            "nav-daily",
+            "nav-monthly",
+            "nav-future",
+            "nav-index",
+            "search-input",
+            "collection-input",
+            "create-collection",
+        ] {
+            assert_reachable(cx, selector, width, 900.);
+        }
+        let nav = cx.debug_bounds("design-nav").unwrap();
+        assert!(
+            nav.left() > px(0.) && nav.right() < px(width) && nav.top() > px(0.),
+            "nav must detach from canvas edges: {nav:?}"
+        );
+        assert!((nav.left() - (px(width) - nav.right())).abs() <= px(1.), "nav not centered: {nav:?}");
+        assert_eq!(cx.debug_bounds("design-sidebar").is_some(), width >= 1024.);
+        assert_eq!(cx.debug_bounds("design-aside").is_some(), width >= 1180.);
+        assert_reachable(cx, "entry-input", width, 900.);
+        assert_reachable(cx, "add-entry", width, 900.);
+        add(cx, &format!("폭 {width}에서 한글 작성 🙂"));
+        let id = snapshot(&view, cx).journal().entries.last().unwrap().id;
+        for action in ["complete", "important", "edit", "cancel", "migrate"] {
+            assert_reachable(cx, &format!("{action}-{id}"), width, 900.);
+        }
+        click(cx, format!("complete-{id}"));
+        assert_eq!(snapshot(&view, cx).journal().entry(id).unwrap().status, Status::Complete);
+        for log in ["nav-monthly", "nav-future"] {
+            click(cx, log);
+            for selector in ["date-input", "entry-input", "add-entry", "previous-date", "next-date"] {
+                assert_reachable(cx, selector, width, 900.);
+            }
+        }
+        click(cx, "nav-index");
+        assert!(snapshot(&view, cx).index);
+        type_in(cx, "search-input", &format!("폭 {width}"));
+        assert_eq!(snapshot(&view, cx).visible_entries().len(), 1);
+        assert_reachable(cx, &format!("jump-{id}"), width, 900.);
+        click(cx, format!("jump-{id}"));
+        assert_eq!(snapshot(&view, cx).log, Log::Daily);
+        cx.update(|window, _| window.remove_window());
+        cx.run_until_parked();
+    }
+}
+
+#[gpui::test]
+fn design_ac02_focus_moves_between_production_inputs_without_geometry_shift(cx: &mut TestAppContext) {
+    let dir = tempdir().unwrap();
+    cx.update(bind_input_keys);
+    let (view, cx) = cx.add_window_view(|_, cx| JournalView::new(dir.path().join("journal.json"), parse_date("2026-10-02").unwrap(), cx));
+    cx.simulate_resize(size(px(600.), px(900.)));
+    render(cx);
+    let resting = cx.debug_bounds("entry-input").unwrap();
+    click(cx, "entry-input");
+    let input = snapshot(&view, cx).entry_input;
+    assert!(cx.update(|window, app| input.read(app).focus_handle(app).is_focused(window)));
+    assert_eq!(cx.debug_bounds("entry-input").unwrap(), resting);
+    type_in(cx, "entry-input", "한글🙂");
+    click(cx, "search-input");
+    assert!(!cx.update(|window, app| input.read(app).focus_handle(app).is_focused(window)));
+    assert_eq!(cx.debug_bounds("entry-input").unwrap(), resting);
+    assert_eq!(snapshot(&view, cx).entry_text, "한글🙂");
 }
 
 #[gpui::test]

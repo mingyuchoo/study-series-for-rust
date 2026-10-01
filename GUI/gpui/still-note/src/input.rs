@@ -1,10 +1,11 @@
+use crate::theme::*;
 // Text input adapted from GPUI 0.2.2 examples/input.rs, © Zed Industries, Apache-2.0.
 use std::ops::Range;
 
 use gpui::{
     App, Bounds, ClipboardItem, Context, CursorStyle, ElementId, ElementInputHandler, Entity, EntityInputHandler, FocusHandle, Focusable, GlobalElementId,
     KeyBinding, LayoutId, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, PaintQuad, Pixels, Point, ShapedLine, SharedString, Style, TextRun,
-    UTF16Selection, UnderlineStyle, Window, actions, div, fill, hsla, point, prelude::*, px, relative, rgb, rgba, size, white,
+    UTF16Selection, UnderlineStyle, Window, actions, div, fill, point, prelude::*, px, relative, rgb, rgba, size,
 };
 use unicode_segmentation::*;
 
@@ -393,7 +394,7 @@ impl Element for TextElement {
         let style = window.text_style();
 
         let (display_text, text_color) = if content.is_empty() {
-            (input.placeholder.clone(), hsla(0., 0., 0., 0.5))
+            (input.placeholder.clone(), rgb(FAINT).into())
         } else {
             (content, style.color)
         };
@@ -444,7 +445,7 @@ impl Element for TextElement {
                 None,
                 Some(fill(
                     Bounds::new(point(bounds.left() + cursor_pos, bounds.top()), size(px(2.), bounds.bottom() - bounds.top())),
-                    gpui::blue(),
+                    rgb(INK),
                 )),
             )
         } else {
@@ -454,7 +455,7 @@ impl Element for TextElement {
                         point(bounds.left() + line.x_for_index(selected_range.start) - horizontal_offset, bounds.top()),
                         point(bounds.left() + line.x_for_index(selected_range.end) - horizontal_offset, bounds.bottom()),
                     ),
-                    rgba(0x3311ff30),
+                    rgba(0x14141430),
                 )),
                 None,
             )
@@ -513,9 +514,9 @@ impl Render for TextInput {
             .on_action(cx.listener(Self::submit))
             .track_focus(&self.focus_handle(cx))
             .cursor(CursorStyle::IBeam)
-            .border_1()
-            .rounded_md()
-            .border_color(rgb(if self.focus_handle.is_focused(window) { 0x216e64 } else { 0xfffdf8 }))
+            .border_2()
+            .rounded(px(INPUT_RADIUS))
+            .border_color(if self.focus_handle.is_focused(window) { rgb(INK) } else { rgba(0x00000000) })
             .on_action(cx.listener(Self::backspace))
             .on_action(cx.listener(Self::delete))
             .on_action(cx.listener(Self::left))
@@ -533,16 +534,21 @@ impl Render for TextInput {
             .on_mouse_up(MouseButton::Left, cx.listener(Self::on_mouse_up))
             .on_mouse_up_out(MouseButton::Left, cx.listener(Self::on_mouse_up))
             .on_mouse_move(cx.listener(Self::on_mouse_move))
-            .bg(rgb(0xfffdf8))
-            .line_height(px(28.))
-            .text_size(px(15.))
+            .w_full()
+            .bg(rgb(FIELD))
+            .text_color(rgb(INK))
+            .font_family(FONT_FAMILY)
+            .font_weight(gpui::FontWeight(BODY_WEIGHT))
+            .line_height(px(22.08))
+            .text_size(px(16.))
             .child(
                 div()
-                    .h(px(30. + 4. * 2.))
+                    .h(px(48.))
                     .overflow_hidden()
                     .w_full()
-                    .p(px(4.))
-                    .bg(white())
+                    .px(px(14.))
+                    .py(px(10.))
+                    .bg(rgb(FIELD))
                     .child(TextElement { input: cx.entity() }),
             )
     }

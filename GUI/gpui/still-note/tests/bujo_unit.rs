@@ -7,6 +7,20 @@ fn day(value: &str) -> NaiveDate {
 }
 
 #[test]
+fn design_ac01_ac02_ac03_exact_monochrome_and_type_contract() {
+    use stillnote::theme::*;
+    // Expectations come directly from DESIGN.md, independent of rendering code.
+    assert_eq!(
+        [CANVAS, INK, MUTED, FAINT, FIELD, SOFT, HAIRLINE, HAIRLINE_SOFT],
+        [0xffffff, 0x141414, 0x707070, 0xadadad, 0xf0f0f0, 0xf3f3f3, 0xe0e0e0, 0xf0f0f0]
+    );
+    assert_eq!(FONT_FAMILY, "Arial");
+    assert_eq!([HEADING_WEIGHT, BODY_WEIGHT, LEAD_WEIGHT], [652., 456., 300.]);
+    assert_eq!([CONTROL_HEIGHT, INPUT_RADIUS, CARD_RADIUS], [44., 16., 24.]);
+    assert_eq!(MIN_WINDOW_WIDTH, 600.);
+}
+
+#[test]
 fn ac02_unicode_three_kinds_stable_ids_and_blank_rejection() {
     let mut journal = Journal::default();
     let date = day("2024-02-29");
