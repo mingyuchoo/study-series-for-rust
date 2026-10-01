@@ -1,5 +1,6 @@
 # Cargo build output. Keep Cargo.lock tracked for this application.
 /target/
+!/Cargo.lock
 
 # Verification evidence and the README's local test journal directory.
 /.artifacts/

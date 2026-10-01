@@ -1,6 +1,6 @@
 # RUN-SCRIPTS: 전체 개발 실행 파이프라인
 
-- Version: 2
+- Version: 3
 - Status: READY
 - Spec owner: /root
 - Base revision: e58b72f5d5ea4406797717e6e4956b235be63d12
@@ -27,8 +27,8 @@ PowerShell 7.4 이상 및 Bash를 지원한다. Windows 네이티브 Rust/GPUI �
 
 ## 소유권과 산출물
 
-- Builder: scripts/run.ps1, scripts/run.sh, README.md, .agents/verification.env, .agents/verification.ps1, scripts/verify.sh, scripts/verify.ps1.
-- Test: tests/run-scripts/ 하위 fixture/tests 및 .artifacts/ 하위 증거.
+- Builder: scripts/run.ps1, scripts/run.sh, README.md, .agents/verification.env, .agents/verification.ps1, scripts/verify.sh, scripts/verify.ps1, Cargo.lock, .gitignore.
+- Test: tests/run-scripts/ 하위 fixture/tests, tests/powershell/run-tests.ps1 및 .artifacts/ 하위 증거.
 - Reviewer: .artifacts/ 하위 리뷰만 작성.
 - Orchestrator: 이 spec 및 판정 보고서. 공유 제품 파일 변경 없음.
 
@@ -39,3 +39,7 @@ PowerShell 7.4 이상 및 Bash를 지원한다. Windows 네이티브 Rust/GPUI �
 ## v2 조사 반영
 
 Git 루트가 상위 study-series-for-rust 저장소이므로 기존 verify의 프로젝트 루트 동일성 검사가 실제 환경에서 실패한다. 별도 Cargo.toml이 해당 저장소에 tracked된 하위 프로젝트는 검증을 허용하고, 저장소 전체 clean 상태와 SHA 안정성 검사는 유지한다. manifest 없는 복사된 nested template는 계속 거부한다. 독립 테스트로 두 셸의 허용/거부 경계를 확인한다. LINT_CMD의 기존 build를 별도 실행 단계로 이동하여 format → lint → tests → build → run 순서를 지킨다. verify 도구 단계에는 build가 포함되지 않으므로 verifier가 production build 로그를 별도로 남긴다.
+
+## v3 검증 조사 반영
+
+실제 clean checkpoint에는 Cargo.lock이 없어 --locked 명령이 실패했다. 앱 lockfile을 생성하고 추적하며 필요 시 상위 ignore 규칙의 예외를 앱 .gitignore에 명시한다. 기존 PowerShell 테스트의 Bash script 목록과 verify.sh 고정 hash는 의도한 신규 스크립트/검증 동작을 반영해 갱신한다. 기존 여섯 스크립트의 변경 없음 검사는 유지하고 모든 여덟 동등 PowerShell 파일의 존재/파싱/버전 검사를 유지한다. 새로운 검증 동작은 독립 fixture 회귀 테스트로 확인한다. AC 기대값은 동일하다.

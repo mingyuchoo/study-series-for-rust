@@ -163,7 +163,7 @@ if ($Mode -eq 'lint') {
 [void] (New-Item -ItemType Directory -Path $Evidence -Force)
 
 if ($Mode -eq 'unit') {
-    Invoke-Case 'seven equivalents parse and Bash originals retain baseline hashes' 'AC-01' {
+    Invoke-Case 'eight equivalents parse and Bash scripts retain reviewed baseline hashes' 'AC-01' {
         $expected = @{
             '_common.sh' = 'D5D55780E44967971A5DA0B3ED597925EFA0EFE03E8D2355B35A981E739A36FF'
             'e2e-test.sh' = 'CF3C4D17D63A85F447F593DCF16292F8F05E1D261869A50DE4DC6034F74F8F61'
@@ -171,12 +171,16 @@ if ($Mode -eq 'unit') {
             'integration-test.sh' = 'F735787D63E4B1DD767F77A7EF5B5C238F60718F9602779BEFE06F6A4D82CC3E'
             'lint.sh' = 'A36AAAC347F25A35FA4AEE73B9967C7D2CC2213202FC374A77DDFFC80D36B6B7'
             'unit-test.sh' = '3F19E2712BD67805E6C4DCA1F7FC7994845E47E5127611F520E5F57580C119CF'
-            'verify.sh' = 'F0402BCB4917913AE7B09C524EFE5CA60E37ECB38C49C20CCC2907B461DE350C'
+            # Intentional nested Cargo project support; behavior is independently
+            # exercised by tests/run-scripts/test_run_scripts.py.
+            'verify.sh' = 'BB8EAFDB977EF0D9DE74EBA32B6E2947E552B663CE956E94B9E6B1AFA589C385'
+            'run.sh' = '70745D20DD58B162F1914080A70FFEC957ABF6F89827568455AE7EB7175E154E'
         }
         $shellFiles = @(Get-ChildItem -LiteralPath (Join-Path $Root 'scripts') -Filter '*.sh')
-        Assert-True ($shellFiles.Count -eq 7) 'All seven original Bash scripts remain'
+        Assert-True ($shellFiles.Count -eq 8) 'All eight reviewed Bash scripts remain'
+        Assert-True ((@($shellFiles.Name | Sort-Object) -join ',') -eq (@($expected.Keys | Sort-Object) -join ',')) 'Exact reviewed script set remains'
         foreach ($shell in $shellFiles) {
-            Assert-True ((Get-FileHash -LiteralPath $shell.FullName).Hash -eq $expected[$shell.Name]) "Bash original unchanged: $($shell.Name)"
+            Assert-True ((Get-FileHash -LiteralPath $shell.FullName).Hash -eq $expected[$shell.Name]) "Reviewed Bash baseline unchanged: $($shell.Name)"
             $equivalent = [IO.Path]::ChangeExtension($shell.FullName, '.ps1')
             Assert-True (Test-Path -LiteralPath $equivalent) "Equivalent exists: $equivalent"
             $tokens = $null
