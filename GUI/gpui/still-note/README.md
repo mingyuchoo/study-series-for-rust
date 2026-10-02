@@ -4,7 +4,7 @@ Rust와 **GPUI 0.2.2**로 만든 Windows 네이티브 개인 불렛저널입니�
 
 ## 실행
 
-Windows 10/11 x64, 그래픽 드라이버, Rust stable, Visual Studio C++ Build Tools와 Windows SDK가 필요합니다. `rust-toolchain.toml`은 stable과 rustfmt/clippy를 지정합니다. 의존성은 Cargo.lock으로 고정되며 GPUI는 0.2.2입니다.
+Windows 10/11 x64 또는 ARM64, 그래픽 드라이버, Rust stable, Visual Studio C++ Build Tools와 Windows SDK가 필요합니다. `rust-toolchain.toml`은 stable과 rustfmt/clippy를 지정합니다. 의존성은 Cargo.lock으로 고정되며 GPUI는 0.2.2입니다.
 
 ```powershell
 cargo run --locked
@@ -59,7 +59,7 @@ bash scripts/release.sh --target aarch64-pc-windows-msvc
 
 산출물은 `.artifacts/releases/` 아래 매 실행마다 고유한 디렉터리에 생성됩니다. `stillnote-VERSION-ARCH.zip`, `stillnote-VERSION-ARCH-setup.exe`, `SHA256SUMS.txt`와 번들 원본을 포함합니다. Cargo metadata의 버전 및 실제 target 디렉터리를 사용하므로 `CARGO_TARGET_DIR`도 반영합니다. ZIP에는 실행 파일, 이 README, GPUI Apache 라이선스와 Pretendard SIL OFL 라이선스가 포함되며 폰트 데이터는 실행 파일에 내장됩니다. 개인 저널 파일은 포함하지 않습니다.
 
-설치 파일은 **서명되지 않습니다**. 사용자가 직접 실행하면 현재 Windows 사용자 계정의 `%LOCALAPPDATA%\Programs\Stillnote`에 설치하고 시작 메뉴 바로가기와 제거 기능을 제공합니다. 제거해도 별도 개인 저널 데이터는 삭제하지 않습니다. ZIP과 설치 파일은 해당 아키텍처의 Windows와 그래픽 드라이버를 요구합니다. 실행 환경에는 아키텍처에 맞는 Microsoft Visual C++ 2015–2022 Redistributable을 설치하세요. VC runtime은 번들에 동봉하거나 자동으로 다운로드하지 않습니다.
+설치 파일은 **서명되지 않습니다**. 사용자가 직접 실행하면 현재 Windows 사용자 계정의 `%LOCALAPPDATA%\Programs\Stillnote`에 설치하고 시작 메뉴 바로가기와 제거 기능을 제공합니다. 제거해도 별도 개인 저널 데이터는 삭제하지 않습니다. ZIP과 설치 파일은 해당 아키텍처의 Windows 10/11과 그래픽 드라이버를 요구하며 설치 파일은 Windows 10 이상에서만 실행됩니다. 실제 ARM64 release 실행 파일의 PE import에서 `VCRUNTIME140.dll` 및 Windows UCRT 의존성을 확인했습니다. 실행 환경에는 아키텍처에 맞는 Microsoft Visual C++ 2015–2022 Redistributable을 설치하세요. VC runtime은 번들에 동봉하거나 자동으로 다운로드하지 않습니다.
 
 ## 사용
 

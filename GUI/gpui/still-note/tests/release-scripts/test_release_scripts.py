@@ -74,6 +74,7 @@ class ReleaseScripts(unittest.TestCase):
     def test_order_paths_targets_and_artifacts(self):
         """AC01/02/04: both entrypoints, spaces/foreign cwd, metadata paths, unique ZIP/EXE/hash."""
         self.fixture()
+        self.assertIn('MinVersion=10.0', (self.root / 'packaging/stillnote.iss').read_text())
         for shell in ('pwsh', 'bash'):
             result, calls = self.release(shell, ['--target', 'x86_64-pc-windows-msvc'])
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)

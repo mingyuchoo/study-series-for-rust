@@ -3,6 +3,7 @@
 #endif
 
 [Setup]
+MinVersion=10.0
 AppId={{FC411E6E-89E0-4438-9D3E-2C7B2500742B}
 AppName=Stillnote
 AppVersion={#AppVersion}

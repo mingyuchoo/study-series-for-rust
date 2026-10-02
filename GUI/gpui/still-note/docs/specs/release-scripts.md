@@ -1,6 +1,6 @@
 # RELEASE-SCRIPTS: Windows 배포 산출물
 
-- Version: 1
+- Version: 2
 - Status: READY
 - Spec owner: /root
 - Base revision: 84bb0d8040768dd9ba46749c83354912a71bbae8
@@ -12,7 +12,7 @@ Windows GPUI 앱이다. 설치된 Inno Setup 6.3 이상을 사용한다. PowerSh
 
 format write → strict lint → Cargo all-targets test(test-support) → doctest → cargo build --release --locked --target TARGET → 번들 ZIP → Inno 설치 EXE → SHA256 checksum 순서로 실행한다. lint 및 테스트는 실행 가능한 rustc host target에서 수행하고 --target은 배포용 release binary의 target을 지정한다. cross build에는 별도 target 및 MSVC 도구가 필요하다. Cargo metadata --locked --no-deps로 앱 이름/버전/실제 target 디렉터리를 얻는다. Cargo dependency 명령에는 --locked를 사용한다. 단계 오류/종료코드를 보존하며 후속 단계/완료 메시지를 출력하지 않는다.
 
-산출물은 앱 루트 .artifacts/releases/의 고유한 실행 디렉터리에 생성하며 이전 산출물 또는 사용자 데이터 삭제/재사용은 하지 않는다. bundle에는 stillnote.exe, README, GPUI 및 Pretendard 라이선스를 포함한다. 폰트는 기존 include_bytes!로 실행 파일에 포함된다. exe 및 zip 이름에 버전/architecture를 명시한다. installer는 per-user 설치, 시작 메뉴 바로가기, 기본 uninstall 지원, architecture 제한을 갖고 개인 journal 데이터는 제거하지 않는다. 앱을 빌드/설치 검증 시 자동 실행하지 않는다. installer는 서명하지 않으며 문서에 명시한다. 필요한 Microsoft VC runtime 또는 동봉 여부는 실제 PE 의존성을 확인해 문서화한다.
+산출물은 앱 루트 .artifacts/releases/의 고유한 실행 디렉터리에 생성하며 이전 산출물 또는 사용자 데이터 삭제/재사용은 하지 않는다. bundle에는 stillnote.exe, README, GPUI 및 Pretendard 라이선스를 포함한다. 폰트는 기존 include_bytes!로 실행 파일에 포함된다. exe 및 zip 이름에 버전/architecture를 명시한다. installer는 per-user 설치, 시작 메뉴 바로가기, 기본 uninstall 지원, architecture 및 Windows 10 이상 제한(MinVersion=10.0)을 갖고 개인 journal 데이터는 제거하지 않는다. 앱을 빌드/설치 검증 시 자동 실행하지 않는다. installer는 서명하지 않으며 문서에 명시한다. 실제 ARM64 PE가 VCRUNTIME140.dll을 import하므로 Microsoft VC++ 2015–2022 matching architecture runtime을 문서화한다.
 
 ## Acceptance criteria
 
@@ -22,7 +22,7 @@ format write → strict lint → Cargo all-targets test(test-support) → doctes
 | AC-02 | cwd/경로 공백, --target, --help, invalid/missing tools | 인수/cwd 보존; help 무부수효과; 잘못된 입력/필수도구 누락 preflight 거부 | 독립 셸 테스트 |
 | AC-03 | 단계별 실패/없어진 binary/installer | 종료 코드 보존, 후속 단계 미실행, stale 산출물을 성공으로 취급하지 않음 | 실패 주입 및 내용 검사 |
 | AC-04 | 실제 번들/설치 생성 | ZIP+EXE+checksum 생성, exe 및 라이선스 포함, metadata/target_directory 반영 | 실제 빌드 산출물/ZIP/PE/hash 검사 |
-| AC-05 | 실제 installer | per-user install/uninstall, architecture 일치, 설치 파일 hash 일치, 개인 데이터 비접근/보존 | 임시 install dir에 silent install/uninstall, 라이선스/바로가기 검토, 앱 미실행 |
+| AC-05 | 실제 installer | per-user install/uninstall, architecture 및 Windows 최소버전 일치, 설치 파일 hash 일치, 개인 데이터 비접근/보존 | 임시 install dir에 silent install/uninstall, template MinVersion 검토 및 Inno compile, 라이선스/바로가기 검토, 앱 미실행 |
 | AC-06 | 고정 clean SHA | verify.sh 5단계 PASS; unit/integration/e2e 각1+ 실제실행, 전체 release pipeline PASS | 독립 도구 로그 및 동일 SHA 리뷰 |
 
 ## 소유권과 검증
