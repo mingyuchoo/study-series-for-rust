@@ -455,7 +455,7 @@ impl Element for TextElement {
                         point(bounds.left() + line.x_for_index(selected_range.start) - horizontal_offset, bounds.top()),
                         point(bounds.left() + line.x_for_index(selected_range.end) - horizontal_offset, bounds.bottom()),
                     ),
-                    rgba(0x14141430),
+                    rgba(0xfaff6940),
                 )),
                 None,
             )
@@ -516,7 +516,11 @@ impl Render for TextInput {
             .cursor(CursorStyle::IBeam)
             .border_2()
             .rounded(px(INPUT_RADIUS))
-            .border_color(if self.focus_handle.is_focused(window) { rgb(INK) } else { rgba(0x00000000) })
+            .border_color(if self.focus_handle.is_focused(window) {
+                rgb(PRIMARY)
+            } else {
+                rgb(HAIRLINE_STRONG)
+            })
             .on_action(cx.listener(Self::backspace))
             .on_action(cx.listener(Self::delete))
             .on_action(cx.listener(Self::left))
@@ -539,15 +543,15 @@ impl Render for TextInput {
             .text_color(rgb(INK))
             .font_family(FONT_FAMILY)
             .font_weight(gpui::FontWeight(BODY_WEIGHT))
-            .line_height(px(22.08))
+            .line_height(px(24.8))
             .text_size(px(16.))
             .child(
                 div()
-                    .h(px(48.))
+                    .h(px(CONTROL_HEIGHT - 4.))
                     .overflow_hidden()
                     .w_full()
                     .px(px(14.))
-                    .py(px(10.))
+                    .py(px(5.6))
                     .child(TextElement { input: cx.entity() }),
             )
     }

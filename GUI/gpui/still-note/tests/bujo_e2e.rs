@@ -16,6 +16,7 @@ struct Snapshot {
     error: Option<String>,
     filter: Filter,
     index: bool,
+    menu_open: bool,
     entry_input: Entity<stillnote::input::TextInput>,
     entry_text: String,
 }
@@ -38,6 +39,7 @@ fn snapshot(view: &Entity<JournalView>, cx: &VisualTestContext) -> Snapshot {
             error: view.error.clone(),
             filter: view.filter,
             index: view.index,
+            menu_open: view.menu_open,
             entry_input: view.entry_input.clone(),
             entry_text: view.entry_input.read(app).content.to_string(),
         }
@@ -90,7 +92,7 @@ fn assert_reachable(cx: &mut VisualTestContext, selector: &str, width: f32, heig
         "vertical clipping: {selector} {bounds:?} at {width}"
     );
     assert!(
-        bounds.size.width >= px(44.) && bounds.size.height >= px(44.),
+        bounds.size.width >= px(40.) && bounds.size.height >= px(40.),
         "small target: {selector} {bounds:?}"
     );
 }
@@ -99,7 +101,7 @@ fn assert_reachable(cx: &mut VisualTestContext, selector: &str, width: f32, heig
 fn design_ac02_ac04_all_breakpoints_keep_controls_and_actions_reachable(cx: &mut TestAppContext) {
     let dir = tempdir().unwrap();
     cx.update(bind_input_keys);
-    for width in [600., 768., 1024., 1360.] {
+    for width in [600., 767., 768., 1024., 1360., 1600.] {
         let path = dir.path().join(format!("journal-{width}.json"));
         // GPUI 0.2.2 retains removed debug selectors in Frame::clear. Start at
         // each target width so absence assertions cannot read stale wide frames.
@@ -121,6 +123,26 @@ fn design_ac02_ac04_all_breakpoints_keep_controls_and_actions_reachable(cx: &mut
         let cx = &mut visual;
         cx.simulate_resize(size(px(width), px(900.)));
         render(cx);
+        let nav = cx.debug_bounds("design-nav").unwrap();
+        assert_eq!(nav.top(), px(0.), "top navigation must be pinned to the top");
+        assert_eq!(nav.size.height, px(64.));
+        assert_eq!(nav.size.width, px(width));
+        let content = cx.debug_bounds("design-container").unwrap();
+        assert!(content.size.width <= px(1280.));
+        assert!(
+            (content.left() - (px(width) - content.right())).abs() <= px(1.),
+            "content not centered: {content:?}"
+        );
+        assert_eq!(cx.debug_bounds("nav-menu-toggle").is_some(), width < 768.);
+        if width < 768. {
+            assert!(!snapshot(&view, cx).menu_open);
+            assert!(cx.debug_bounds("design-mobile-menu").is_none());
+            assert!(cx.debug_bounds("nav-daily").is_none(), "closed mobile menu must collapse navigation");
+            assert_reachable(cx, "nav-menu-toggle", width, 900.);
+            click(cx, "nav-menu-toggle");
+            assert!(snapshot(&view, cx).menu_open);
+            assert!(cx.debug_bounds("design-mobile-menu").is_some());
+        }
         for selector in [
             "nav-daily",
             "nav-monthly",
@@ -132,16 +154,23 @@ fn design_ac02_ac04_all_breakpoints_keep_controls_and_actions_reachable(cx: &mut
         ] {
             assert_reachable(cx, selector, width, 900.);
         }
-        let nav = cx.debug_bounds("design-nav").unwrap();
-        assert!(
-            nav.left() > px(0.) && nav.right() < px(width) && nav.top() > px(0.),
-            "nav must detach from canvas edges: {nav:?}"
-        );
-        assert!((nav.left() - (px(width) - nav.right())).abs() <= px(1.), "nav not centered: {nav:?}");
+        if width < 768. {
+            click(cx, "nav-daily");
+            assert!(!snapshot(&view, cx).menu_open, "selecting a log must close the mobile menu");
+            assert_eq!(snapshot(&view, cx).log, Log::Daily);
+        }
         assert_eq!(cx.debug_bounds("design-sidebar").is_some(), width >= 1024.);
         assert_eq!(cx.debug_bounds("design-aside").is_some(), width >= 1180.);
         assert_reachable(cx, "entry-input", width, 900.);
         assert_reachable(cx, "add-entry", width, 900.);
+        for selector in ["entry-input", "add-entry", "search-input", "collection-input"] {
+            assert_eq!(cx.debug_bounds(selector).unwrap().size.height, px(40.), "control height: {selector}");
+        }
+        if width >= 1180. {
+            let stat = cx.debug_bounds("design-stat").unwrap();
+            assert!(stat.size.height >= px(56.), "stat number must retain display hierarchy");
+            assert!(stat.left() >= px(0.) && stat.right() <= px(width));
+        }
         add(cx, &format!("폭 {width}에서 한글 작성 🙂"));
         let id = snapshot(&view, cx).journal().entries.last().unwrap().id;
         for action in ["complete", "important", "edit", "cancel", "migrate"] {
@@ -150,12 +179,22 @@ fn design_ac02_ac04_all_breakpoints_keep_controls_and_actions_reachable(cx: &mut
         click(cx, format!("complete-{id}"));
         assert_eq!(snapshot(&view, cx).journal().entry(id).unwrap().status, Status::Complete);
         for log in ["nav-monthly", "nav-future"] {
+            if width < 768. {
+                click(cx, "nav-menu-toggle");
+                assert!(snapshot(&view, cx).menu_open);
+                assert_reachable(cx, log, width, 900.);
+            }
             click(cx, log);
+            assert!(!snapshot(&view, cx).menu_open);
             for selector in ["date-input", "entry-input", "add-entry", "previous-date", "next-date"] {
                 assert_reachable(cx, selector, width, 900.);
             }
         }
+        if width < 768. {
+            click(cx, "nav-menu-toggle");
+        }
         click(cx, "nav-index");
+        assert!(!snapshot(&view, cx).menu_open);
         assert!(snapshot(&view, cx).index);
         type_in(cx, "search-input", &format!("폭 {width}"));
         assert_eq!(snapshot(&view, cx).visible_entries().len(), 1);
@@ -175,6 +214,9 @@ fn design_ac02_focus_moves_between_production_inputs_without_geometry_shift(cx: 
     cx.simulate_resize(size(px(600.), px(900.)));
     render(cx);
     let resting = cx.debug_bounds("entry-input").unwrap();
+    let search_resting = cx.debug_bounds("search-input").unwrap();
+    assert_eq!(resting.size.height, px(40.));
+    assert_eq!(search_resting.size.height, px(40.));
     click(cx, "entry-input");
     let input = snapshot(&view, cx).entry_input;
     assert!(cx.update(|window, app| input.read(app).focus_handle(app).is_focused(window)));
@@ -182,6 +224,9 @@ fn design_ac02_focus_moves_between_production_inputs_without_geometry_shift(cx: 
     type_in(cx, "entry-input", "한글🙂");
     click(cx, "search-input");
     assert!(!cx.update(|window, app| input.read(app).focus_handle(app).is_focused(window)));
+    let search = cx.read(|app| view.read(app).search_input.clone());
+    assert!(cx.update(|window, app| search.read(app).focus_handle(app).is_focused(window)));
+    assert_eq!(cx.debug_bounds("search-input").unwrap(), search_resting);
     assert_eq!(cx.debug_bounds("entry-input").unwrap(), resting);
     assert_eq!(snapshot(&view, cx).entry_text, "한글🙂");
 }

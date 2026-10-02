@@ -7,16 +7,37 @@ fn day(value: &str) -> NaiveDate {
 }
 
 #[test]
-fn design_ac01_ac02_ac03_exact_monochrome_and_type_contract() {
+fn design_ac01_ac02_ac03_exact_black_yellow_and_type_contract() {
     use stillnote::theme::*;
     // Expectations come directly from DESIGN.md, independent of rendering code.
     assert_eq!(
-        [CANVAS, INK, MUTED, FAINT, FIELD, SOFT, HAIRLINE, HAIRLINE_SOFT],
-        [0xffffff, 0x141414, 0x707070, 0xadadad, 0xf0f0f0, 0xf3f3f3, 0xe0e0e0, 0xf0f0f0]
+        [
+            CANVAS,
+            INK,
+            BODY,
+            BODY_STRONG,
+            MUTED,
+            FAINT,
+            FIELD,
+            SOFT,
+            CARD,
+            ELEVATED,
+            HAIRLINE,
+            HAIRLINE_SOFT
+        ],
+        [
+            0x0a0a0a, 0xffffff, 0xcccccc, 0xe6e6e6, 0x888888, 0x5a5a5a, 0x1a1a1a, 0x121212, 0x1a1a1a, 0x242424, 0x2a2a2a, 0x3a3a3a
+        ]
     );
-    assert_eq!(FONT_FAMILY, "Arial");
-    assert_eq!([HEADING_WEIGHT, BODY_WEIGHT, LEAD_WEIGHT], [652., 456., 300.]);
-    assert_eq!([CONTROL_HEIGHT, INPUT_RADIUS, CARD_RADIUS], [44., 16., 24.]);
+    assert_eq!(
+        [PRIMARY, PRIMARY_ACTIVE, PRIMARY_DISABLED, ON_PRIMARY],
+        [0xfaff69, 0xe6eb52, 0x3a3a1f, 0x0a0a0a]
+    );
+    assert_eq!(FONT_FAMILY, "Inter");
+    assert_eq!([HEADING_WEIGHT, BODY_WEIGHT, CONTROL_WEIGHT, NAV_WEIGHT], [700., 400., 600., 500.]);
+    assert_eq!([STAT_SIZE, STAT_WEIGHT, HEADING_TRACKING, STAT_TRACKING], [56., 700., -1., -1.5]);
+    assert_eq!([CONTROL_HEIGHT, INPUT_RADIUS, CONTROL_RADIUS, CARD_RADIUS], [40., 8., 8., 12.]);
+    assert_eq!([NAV_HEIGHT, MAX_CONTENT_WIDTH, COMPACT_BREAKPOINT], [64., 1280., 768.]);
     assert_eq!(MIN_WINDOW_WIDTH, 600.);
 }
 

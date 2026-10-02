@@ -1,6 +1,6 @@
 # Stillnote · 나의 불렛저널
 
-Rust와 **GPUI 0.2.2**로 만든 Windows 네이티브 개인 불렛저널입니다. 브라우저나 웹뷰 없이 GPU로 그리는 데스크톱 창을 사용합니다. DESIGN.md의 흰색·흑백 기록지, 한국어 빠른 기록, 일간·월간·미래 로그, 컬렉션, 인덱스와 검색을 제공합니다. Ryder Carroll의 불렛저널 방법에서 영감을 받았으며 책 본문은 포함하지 않습니다.
+Rust와 **GPUI 0.2.2**로 만든 Windows 네이티브 개인 불렛저널입니다. 브라우저나 웹뷰 없이 GPU로 그리는 데스크톱 창을 사용합니다. DESIGN.md의 검정 canvas·노랑 CTA 디자인, 한국어 빠른 기록, 일간·월간·미래 로그, 컬렉션, 인덱스와 검색을 제공합니다. Ryder Carroll의 불렛저널 방법에서 영감을 받았으며 책 본문은 포함하지 않습니다.
 
 ## 실행
 
@@ -51,7 +51,7 @@ bash scripts/run.sh -- --data-file '.artifacts/my test journal.json'
 
 기호: `•` 할 일, `×` 완료, `○` 이벤트, `–` 메모, `>` 이월, `<` 미래 예약, `★` 중요, `⊘` 취소.
 
-입력은 한국어 IME와 Unicode를 지원합니다. Enter 등록/수정, Ctrl+A 전체 선택, Ctrl+C/X/V 복사·잘라내기·붙여넣기, 방향키·Home·End·Shift+방향키 선택, Backspace/Delete 삭제를 사용할 수 있습니다. 클릭하면 커서와 2px 잉크색 포커스 테두리가 표시됩니다. 창을 줄이면 보조 범례를 접고 기록 목록은 스크롤됩니다.
+입력은 한국어 IME와 Unicode를 지원합니다. Enter 등록/수정, Ctrl+A 전체 선택, Ctrl+C/X/V 복사·잘라내기·붙여넣기, 방향키·Home·End·Shift+방향키 선택, Backspace/Delete 삭제를 사용할 수 있습니다. 클릭하면 커서와 2px 노랑 포커스 테두리가 표시됩니다. 창을 줄이면 보조 범례를 접고 기록 목록은 스크롤됩니다.
 
 ## 저장과 복구
 
@@ -81,4 +81,8 @@ format → clippy → 단위 → 파일 통합 → GPUI UI E2E를 순차 실행�
 
 ## 디자인
 
-DESIGN.md의 흰 canvas, 중립 tint와 hairline, stadium pill 및 24px 카드 형태를 따릅니다. Saans는 포함되지 않아 명시된 system sans fallback인 Arial을 사용하며 한국어는 OS의 글리프 fallback으로 표시됩니다. heading 652, body 456, lead 300 weight를 GPUI에 전달하며 실제 글꼴은 OS의 사용 가능한 weight로 표시됩니다. 600px부터 compact navigation을 지원하고 1024px 미만에서는 컬렉션을 본문에 배치합니다. 보조 범례는 1180px부터 표시합니다.
+DESIGN.md의 검정 canvas (#0a0a0a), 흰 heading, 회색 본문, 노랑 primary CTA (#faff69), dark card (#1a1a1a)를 사용합니다. 버튼·입력은 40px 높이/8px 반경이고 카드는 12px 반경입니다. 포커스는 항상 확보된 2px 테두리의 색만 바뀌어 입력 크기를 유지합니다. 그림자나 추가 hover 장식은 없습니다.
+
+Inter와 JetBrains Mono의 공식 Google Fonts 배포 파일을 assets/fonts에 포함하고 GPUI에 등록합니다. 원본 SIL Open Font License도 같은 폴더에 있습니다. Heading 700, body 400, 버튼 600, nav 500 weight를 사용하며 한국어는 OS 글리프 fallback으로 표시됩니다. GPUI 0.2.2에 letter-spacing 속성이 없어 heading과 56px 노랑 stat은 Unicode grapheme 단위 음수 margin으로 실제 자간을 줄입니다. 이 방식은 한글/결합문자를 유지하고 줄바꿈을 지원하지만 글자 사이의 ligature와 kerning은 브라우저의 Inter 렌더링과 다를 수 있습니다. 일반 기록/입력은 전체 문자열을 native shaping합니다.
+
+64px top nav는 항상 창 위에 고정되고 본문은 최대 1280px로 가운데 정렬됩니다. 최소 창 너비는 600px이며 768px 미만에서 메뉴 버튼으로 일간·월간·미래·인덱스를 엽니다. 항목을 선택하면 메뉴가 닫힙니다. 1024px 미만에서는 컬렉션을 스크롤 가능한 본문에 배치하며 보조 범례와 열린 할 일 stat은 1180px부터 표시합니다. 마케팅 전용 SQL·가격표·96px 섹션 간격은 개인 저널 화면에 추가하지 않습니다.
