@@ -225,7 +225,7 @@ fn layout_ac01_ac02_ac03_ac04_long_text_short_windows_scroll_and_resize_preserve
         "한국어와 English 긴 기록을 끝까지 읽습니다. ".repeat(8),
         "UnbrokenToken".repeat(30)
     );
-    let collection_name = format!("{} END컬렉션", "긴 컬렉션 Collection ".repeat(8));
+    let collection_name = format!("{} END컬렉션", "긴 컬렉션 Collection ".repeat(16));
     for (width, height) in [(600., 400.), (767., 500.), (768., 650.), (1024., 400.), (1360., 500.), (1600., 900.)] {
         let path = dir.path().join(format!("layout-{width}-{height}.json"));
         let mut fixture = stillnote::Session::open(&path).unwrap();
