@@ -41,7 +41,8 @@ fn design_ac01_ac02_ac03_exact_black_yellow_and_type_contract() {
     assert_eq!([HEADING_WEIGHT, BODY_WEIGHT, CONTROL_WEIGHT, NAV_WEIGHT], [700., 400., 600., 500.]);
     assert_eq!([STAT_SIZE, STAT_WEIGHT, HEADING_TRACKING, STAT_TRACKING], [56., 700., -1., -1.5]);
     assert_eq!([CONTROL_HEIGHT, INPUT_RADIUS, CONTROL_RADIUS, CARD_RADIUS], [40., 8., 8., 12.]);
-    assert_eq!([NAV_HEIGHT, MAX_CONTENT_WIDTH, COMPACT_BREAKPOINT], [64., 1280., 768.]);
+    // WIDTH-01 user override removes the prior maximum-width contract.
+    assert_eq!([NAV_HEIGHT, COMPACT_BREAKPOINT], [64., 768.]);
     assert_eq!(MIN_WINDOW_WIDTH, 600.);
 }
 

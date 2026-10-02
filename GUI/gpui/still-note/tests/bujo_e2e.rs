@@ -360,7 +360,8 @@ fn layout_ac01_ac02_ac03_ac04_long_text_short_windows_scroll_and_resize_preserve
 fn design_ac02_ac04_all_breakpoints_keep_controls_and_actions_reachable(cx: &mut TestAppContext) {
     let dir = tempdir().unwrap();
     cx.update(bind_input_keys);
-    for width in [600., 767., 768., 1024., 1360., 1600.] {
+    let mut previous_wide = None;
+    for width in [600., 767., 768., 1024., 1360., 1600., 1920., 2560., 2880.] {
         let path = dir.path().join(format!("journal-{width}.json"));
         // GPUI 0.2.2 retains removed debug selectors in Frame::clear. Start at
         // each target width so absence assertions cannot read stale wide frames.
@@ -386,12 +387,36 @@ fn design_ac02_ac04_all_breakpoints_keep_controls_and_actions_reachable(cx: &mut
         assert_eq!(nav.top(), px(0.), "top navigation must be pinned to the top");
         assert_eq!(nav.size.height, px(64.));
         assert_eq!(nav.size.width, px(width));
+        let nav_content = cx.debug_bounds("design-nav-content").unwrap();
+        assert_eq!(nav_content.left(), px(0.));
+        assert_eq!(nav_content.right(), px(width));
+        assert_eq!(cx.debug_bounds("nav-wordmark").unwrap().left(), px(24.));
         let content = cx.debug_bounds("design-container").unwrap();
-        assert!(content.size.width <= px(1280.));
-        assert!(
-            (content.left() - (px(width) - content.right())).abs() <= px(1.),
-            "content not centered: {content:?}"
-        );
+        assert_eq!(content.left(), px(0.));
+        assert_eq!(content.right(), px(width));
+        let main = cx.debug_bounds("design-main").unwrap();
+        let first = cx.debug_bounds("design-sidebar").unwrap_or(main);
+        let last = cx.debug_bounds("design-aside").unwrap_or(main);
+        assert_eq!(first.left(), px(24.), "inner content must begin at24px");
+        assert_eq!(last.right(), px(width - 24.), "inner content must fill through right24px gutter");
+        let footer = cx.debug_bounds("design-footer").unwrap();
+        assert_eq!(footer.left(), px(24.));
+        assert_eq!(footer.right(), px(width - 24.));
+        for panel in ["design-sidebar", "design-aside"] {
+            if let Some(bounds) = cx.debug_bounds(panel) {
+                assert_eq!(bounds.size.width, px(208.), "side panels retain their width");
+            }
+        }
+        if width >= 1360. {
+            if let Some((previous_width, previous_main)) = previous_wide {
+                assert_eq!(
+                    main.size.width - previous_main,
+                    px(width - previous_width),
+                    "journal must absorb added viewport width"
+                );
+            }
+            previous_wide = Some((width, main.size.width));
+        }
         assert_eq!(cx.debug_bounds("nav-menu-toggle").is_some(), width < 768.);
         if width < 768. {
             assert!(!snapshot(&view, cx).menu_open);
@@ -460,6 +485,22 @@ fn design_ac02_ac04_all_breakpoints_keep_controls_and_actions_reachable(cx: &mut
         assert_reachable(cx, &format!("jump-{id}"), width, 900.);
         click(cx, format!("jump-{id}"));
         assert_eq!(snapshot(&view, cx).log, Log::Daily);
+        if width >= 1360. {
+            type_in(cx, "entry-input", "넓은 창에서 작성 중 café🙂");
+            let before_resize = snapshot(&view, cx).journal().clone();
+            cx.simulate_resize(size(px(600.), px(400.)));
+            render(cx);
+            assert_eq!(snapshot(&view, cx).journal(), &before_resize);
+            assert_eq!(snapshot(&view, cx).entry_text, "넓은 창에서 작성 중 café🙂");
+            assert_reachable(cx, "nav-menu-toggle", 600., 400.);
+            click(cx, "nav-menu-toggle");
+            assert!(snapshot(&view, cx).menu_open);
+            click(cx, "nav-menu-toggle");
+            assert!(!snapshot(&view, cx).menu_open);
+            reveal_in_journal(cx, "entry-input", 600., 400.);
+            reveal_in_journal(cx, "add-entry", 600., 400.);
+            reveal_in_journal(cx, "create-collection", 600., 400.);
+        }
         cx.update(|window, _| window.remove_window());
         cx.run_until_parked();
     }
