@@ -4,13 +4,13 @@
   version = "0.1.0"
 
 [dependencies]
-  anyhow      = "1.0.100"
-  async-trait = "0.1.83"
+  anyhow      = "1.0.104"
+  async-trait = "0.1.92"
   eframe      = "0.35.0"
   egui        = "0.35.0"
   faker_rand  = "0.1.1"
-  rand        = "0.8.5"
-  serde       = {version = "1.0.228", features = ["derive"]}
-  serde_json  = "1.0.145"
-  surrealdb   = "2.3.10"
-  tokio       = {version = "1.47.1", features = ["full"]}
+  rand        = "0.8.8"
+  serde       = {version = "1.0.229", features = ["derive"]}
+  serde_json  = "1.0.151"
+  surrealdb   = "2.7.0"
+  tokio       = {version = "1.53.1", features = ["full"]}

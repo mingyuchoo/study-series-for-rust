@@ -71,7 +71,7 @@ impl HistoryManager {
              LIMIT ?1",
         )?;
 
-        let entries = stmt.query_map([limit], |row| {
+        let entries = stmt.query_map([limit as i64], |row| {
             let timestamp_str: String = row.get(1)?;
             let timestamp = DateTime::parse_from_rfc3339(&timestamp_str)
                 .map(|dt| dt.with_timezone(&Utc))
@@ -93,5 +93,39 @@ impl HistoryManager {
         })?;
 
         entries.collect()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn history_round_trip_and_limits() {
+        let manager = HistoryManager::new(":memory:").unwrap();
+        let entry = ConversionHistoryEntry {
+            id: 0,
+            timestamp: Utc::now(),
+            input_file: "input.txt".into(),
+            output_file: Some("output.md".into()),
+            input_format: "txt".into(),
+            output_format: "md".into(),
+            plugin_name: "test".into(),
+            status: "success".into(),
+            error_message: None,
+            bytes_processed: 42,
+            duration_ms: 10,
+        };
+        let id = manager.add_entry(&entry).unwrap();
+        let entries = manager.get_recent_entries(usize::MAX).unwrap();
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].id, id);
+        assert_eq!(entries[0].input_file, entry.input_file);
+        assert_eq!(entries[0].bytes_processed, 42);
+        assert!(manager.get_recent_entries(0).unwrap().is_empty());
+        for _ in 0 .. 100 {
+            manager.add_entry(&entry).unwrap();
+        }
+        assert_eq!(manager.get_recent_entries(usize::MAX).unwrap().len(), 100);
     }
 }

@@ -6,7 +6,7 @@
 
 ### 필수 요구사항
 
-- Rust 1.70 이상
+- Rust nightly (`rust-toolchain.toml`에 지정된 툴체인)
 - Cargo
 - Git
 

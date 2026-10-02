@@ -2,7 +2,7 @@
 /target/
 **/*.rs.bk
 *.pdb
-Cargo.lock
+!Cargo.lock
 
 # IDE
 .vscode/
@@ -22,3 +22,6 @@ Thumbs.db
 
 # Logs
 *.log
+
+# graft's local graph cache — regenerable, not committed (run `graft build`).
+/graft/
