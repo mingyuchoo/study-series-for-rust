@@ -129,14 +129,12 @@ fn font_ac01_ac02_production_constructor_registers_pretendard_at_every_ui_weight
         heading_font.weight = gpui::FontWeight(700.);
         let native = app
             .open_window(
-                gpui::WindowOptions {
-                    show: false,
-                    focus: false,
-                    window_bounds: Some(gpui::WindowBounds::Windowed(gpui::Bounds::new(
-                        point(px(0.), px(0.)),
-                        size(px(1360.), px(900.)),
-                    ))),
-                    ..Default::default()
+                {
+                    let mut options = stillnote::ui::journal_window_options(gpui::Bounds::new(point(px(0.), px(0.)), size(px(1360.), px(900.))));
+                    assert!(options.titlebar.as_ref().unwrap().appears_transparent);
+                    options.show = false;
+                    options.focus = false;
+                    options
                 },
                 |_, app| app.new(|cx| JournalView::new(path, parse_date("2026-10-02").unwrap(), cx)),
             )
@@ -216,6 +214,36 @@ fn reveal_in_journal(cx: &mut VisualTestContext, selector: &str, width: f32, hei
     panic!("cannot reveal {selector} at {width}x{height}");
 }
 
+fn assert_chrome(cx: &mut VisualTestContext, width: f32, height: f32) {
+    let nav = cx.debug_bounds("design-nav").unwrap();
+    let drag = cx.debug_bounds("window-drag-region").unwrap();
+    assert_eq!(nav.size.height, px(64.));
+    assert!(drag.left() >= nav.left() && drag.right() <= nav.right() && drag.top() >= nav.top() && drag.bottom() <= nav.bottom());
+    let mut previous_right = None;
+    for selector in ["window-minimize", "window-maximize", "window-close"] {
+        assert_reachable(cx, selector, width, height);
+        let control = cx.debug_bounds(selector).unwrap();
+        assert_eq!(control.size, size(px(40.), px(40.)));
+        assert!(control.top() >= nav.top() && control.bottom() <= nav.bottom());
+        assert!(drag.right() <= control.left(), "drag blank must end before window controls");
+        if let Some(right) = previous_right {
+            assert!(control.left() >= right);
+        }
+        previous_right = Some(control.right());
+    }
+    assert_eq!(previous_right.unwrap(), px(width - 24.), "controls must align to right24px gutter");
+    assert!(cx.debug_bounds("window-maximize-glyph").is_some());
+    assert!(cx.debug_bounds("window-restore-glyph").is_none(), "fresh headless windows are not maximized");
+    for selector in ["nav-wordmark", if width < 768. { "nav-menu-toggle" } else { "nav-index" }] {
+        let interactive = cx.debug_bounds(selector).unwrap();
+        assert!(
+            interactive.right() <= drag.left(),
+            "title drag blank must exclude logo/navigation/menu: {selector}"
+        );
+        assert!(interactive.right() <= cx.debug_bounds("window-minimize").unwrap().left());
+    }
+}
+
 #[gpui::test]
 fn layout_ac01_ac02_ac03_ac04_long_text_short_windows_scroll_and_resize_preserve_state(cx: &mut TestAppContext) {
     let dir = tempdir().unwrap();
@@ -257,6 +285,7 @@ fn layout_ac01_ac02_ac03_ac04_long_text_short_windows_scroll_and_resize_preserve
         let cx = &mut visual;
         cx.simulate_resize(size(px(width), px(height)));
         render(cx);
+        assert_chrome(cx, width, height);
         let nav = cx.debug_bounds("design-nav").unwrap();
         let logo = cx.debug_bounds("nav-wordmark").unwrap();
         assert!(logo.size.width >= px(86.) && logo.size.height <= px(40.));
@@ -384,6 +413,7 @@ fn design_ac02_ac04_all_breakpoints_keep_controls_and_actions_reachable(cx: &mut
         cx.simulate_resize(size(px(width), px(900.)));
         render(cx);
         let nav = cx.debug_bounds("design-nav").unwrap();
+        assert_chrome(cx, width, 900.);
         assert_eq!(nav.top(), px(0.), "top navigation must be pinned to the top");
         assert_eq!(nav.size.height, px(64.));
         assert_eq!(nav.size.width, px(width));
@@ -490,6 +520,7 @@ fn design_ac02_ac04_all_breakpoints_keep_controls_and_actions_reachable(cx: &mut
             let before_resize = snapshot(&view, cx).journal().clone();
             cx.simulate_resize(size(px(600.), px(400.)));
             render(cx);
+            assert_chrome(cx, 600., 400.);
             assert_eq!(snapshot(&view, cx).journal(), &before_resize);
             assert_eq!(snapshot(&view, cx).entry_text, "넓은 창에서 작성 중 café🙂");
             assert_reachable(cx, "nav-menu-toggle", 600., 400.);

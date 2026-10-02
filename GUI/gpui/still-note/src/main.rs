@@ -1,7 +1,11 @@
 #![windows_subsystem = "windows"]
 use chrono::Local;
 use gpui::{prelude::*, *};
-use stillnote::{JournalStore, input::bind_input_keys, ui::JournalView};
+use stillnote::{
+    JournalStore,
+    input::bind_input_keys,
+    ui::{JournalView, journal_window_options},
+};
 fn main() {
     let args: Vec<_> = std::env::args().collect();
     let path = if let Some(index) = args.iter().position(|a| a == "--data-file") {
@@ -18,18 +22,9 @@ fn main() {
         })
         .detach();
         let bounds = Bounds::centered(None, size(px(1360.), px(900.)), cx);
-        cx.open_window(
-            WindowOptions {
-                window_bounds: Some(WindowBounds::Windowed(bounds)),
-                window_min_size: Some(size(px(stillnote::theme::MIN_WINDOW_WIDTH), px(stillnote::theme::MIN_WINDOW_HEIGHT))),
-                titlebar: Some(TitlebarOptions {
-                    title: Some("Stillnote · 나의 불렛저널".into()),
-                    ..Default::default()
-                }),
-                ..Default::default()
-            },
-            move |_, cx| cx.new(|cx| JournalView::new(path, Local::now().date_naive(), cx)),
-        )
+        cx.open_window(journal_window_options(bounds), move |_, cx| {
+            cx.new(|cx| JournalView::new(path, Local::now().date_naive(), cx))
+        })
         .expect("Unable to open GPUI window");
         cx.activate(true);
     });

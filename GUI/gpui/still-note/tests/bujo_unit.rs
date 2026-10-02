@@ -47,6 +47,17 @@ fn design_ac01_ac02_ac03_exact_black_yellow_and_type_contract() {
 }
 
 #[test]
+fn chrome_ac01_shared_production_options_integrate_titlebar_and_keep_native_capabilities() {
+    let bounds = gpui::Bounds::new(gpui::point(gpui::px(0.), gpui::px(0.)), gpui::size(gpui::px(1360.), gpui::px(900.)));
+    let options = stillnote::ui::journal_window_options(bounds);
+    let titlebar = options.titlebar.unwrap();
+    assert!(titlebar.appears_transparent, "GPUI must merge the native titlebar into the client navigation");
+    assert_eq!(options.window_bounds, Some(gpui::WindowBounds::Windowed(bounds)));
+    assert_eq!(options.window_min_size, Some(gpui::size(gpui::px(600.), gpui::px(400.))));
+    assert!(options.is_movable && options.is_resizable && options.is_minimizable);
+}
+
+#[test]
 fn ac02_unicode_three_kinds_stable_ids_and_blank_rejection() {
     let mut journal = Journal::default();
     let date = day("2024-02-29");

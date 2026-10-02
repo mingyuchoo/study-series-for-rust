@@ -9,6 +9,52 @@ use uuid::Uuid;
 
 use crate::theme::*;
 
+/// The production window policy, also used by isolated native render checks.
+pub fn journal_window_options(bounds: Bounds<Pixels>) -> WindowOptions {
+    WindowOptions {
+        window_bounds: Some(WindowBounds::Windowed(bounds)),
+        window_min_size: Some(size(px(MIN_WINDOW_WIDTH), px(MIN_WINDOW_HEIGHT))),
+        titlebar: Some(TitlebarOptions {
+            title: Some("Stillnote · 나의 불렛저널".into()),
+            appears_transparent: true,
+            ..Default::default()
+        }),
+        ..Default::default()
+    }
+}
+
+fn window_control(id: &'static str, glyph: &'static str, area: WindowControlArea) -> impl IntoElement {
+    let glyph_selector = if id == "window-maximize" && glyph == "❐" {
+        "window-restore-glyph"
+    } else if id == "window-maximize" {
+        "window-maximize-glyph"
+    } else {
+        id
+    };
+    div()
+        .id(id)
+        .debug_selector(move || id.into())
+        .w(px(CONTROL_HEIGHT))
+        .h(px(CONTROL_HEIGHT))
+        .flex_shrink_0()
+        .flex()
+        .items_center()
+        .justify_center()
+        .rounded(px(CONTROL_RADIUS))
+        .bg(rgb(CARD))
+        .text_color(rgb(INK))
+        .text_size(px(16.))
+        .line_height(px(16.))
+        .font_weight(FontWeight(CONTROL_WEIGHT))
+        .whitespace_nowrap()
+        .window_control_area(area)
+        .child(
+            div()
+                .when(id == "window-maximize", |d| d.debug_selector(move || glyph_selector.into()))
+                .child(glyph),
+        )
+}
+
 #[derive(Clone)]
 enum Command {
     Nav(Log),
@@ -541,6 +587,7 @@ impl Render for JournalView {
             .id(if compact { "design-mobile-menu" } else { "design-nav-links" })
             .debug_selector(move || if compact { "design-mobile-menu".into() } else { "design-nav-links".into() })
             .flex()
+            .flex_shrink_0()
             .flex_wrap()
             .items_center()
             .gap_2()
@@ -592,6 +639,33 @@ impl Render for JournalView {
         } else {
             (nav_content.child(nav_links), None)
         };
+        // Only this blank region has caption hit testing. Interactive navigation
+        // remains client content; native controls keep Windows NC event routing.
+        let nav_content = nav_content
+            .child(
+                div()
+                    .id("window-drag-region")
+                    .debug_selector(|| "window-drag-region".into())
+                    .flex_1()
+                    .min_w(px(0.))
+                    .h_full()
+                    .window_control_area(WindowControlArea::Drag),
+            )
+            .child(
+                div()
+                    .id("window-controls")
+                    .debug_selector(|| "window-controls".into())
+                    .flex()
+                    .flex_shrink_0()
+                    .gap_2()
+                    .child(window_control("window-minimize", "−", WindowControlArea::Min))
+                    .child(window_control(
+                        "window-maximize",
+                        if window.is_maximized() { "❐" } else { "□" },
+                        WindowControlArea::Max,
+                    ))
+                    .child(window_control("window-close", "×", WindowControlArea::Close)),
+            );
         let nav = div()
             .id("design-nav")
             .debug_selector(|| "design-nav".into())
