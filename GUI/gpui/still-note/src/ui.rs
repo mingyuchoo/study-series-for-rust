@@ -5,24 +5,10 @@ use crate::{
 use chrono::{Datelike, Days, Local, NaiveDate};
 use gpui::{prelude::*, *};
 use std::path::PathBuf;
-use unicode_segmentation::UnicodeSegmentation;
 use uuid::Uuid;
 
 use crate::theme::*;
 
-/// GPUI 0.2.2 has no letter-spacing property. Space whole graphemes with
-/// negative margins so Hangul and combining marks remain intact and headings
-/// can still wrap on narrow windows.
-fn tracked_text(text: impl AsRef<str>, tracking: f32) -> Div {
-    let graphemes: Vec<_> = text.as_ref().graphemes(true).map(str::to_owned).collect();
-    let count = graphemes.len();
-    div().flex().flex_wrap().children(
-        graphemes
-            .into_iter()
-            .enumerate()
-            .map(|(index, glyph)| div().when(index + 1 < count, |d| d.mr(px(tracking))).child(glyph)),
-    )
-}
 #[derive(Clone)]
 enum Command {
     Nav(Log),
@@ -339,6 +325,8 @@ impl JournalView {
         let segmented = id.starts_with("kind-") || id.starts_with("target-");
         let tab = segmented || id.starts_with("nav-") || id.starts_with("collection-");
         let primary = matches!(id.as_str(), "add-entry" | "save-entry" | "confirm-migrate" | "create-collection");
+        let wrapping = id.starts_with("collection-") || id.starts_with("index-") || id.starts_with("trace-") || id.starts_with("source-");
+        let label_id = format!("label-{id}");
         let label = label.into();
         let label = if segmented && active { format!("✓ {label}") } else { label };
         div()
@@ -347,7 +335,8 @@ impl JournalView {
             .px(px(if tab { 14. } else { 20. }))
             .min_w(px(CONTROL_HEIGHT))
             .max_w_full()
-            .h(px(CONTROL_HEIGHT))
+            .when(wrapping, |d| d.w_full().min_h(px(CONTROL_HEIGHT)).py_2())
+            .when(!wrapping, |d| d.h(px(CONTROL_HEIGHT)))
             .flex_shrink_0()
             .flex()
             .items_center()
@@ -376,7 +365,16 @@ impl JournalView {
                 rgb(if primary { PRIMARY } else { CARD })
             })
             .when(primary, |d| d.active(|s| s.bg(rgb(PRIMARY_ACTIVE)).border_color(rgb(PRIMARY_ACTIVE))))
-            .child(label)
+            .child(
+                div()
+                    .id(SharedString::from(label_id.clone()))
+                    .debug_selector(move || label_id)
+                    .min_w(px(0.))
+                    .max_w_full()
+                    .when(wrapping, |d| d.w_full())
+                    .whitespace_normal()
+                    .child(label),
+            )
             .on_click(cx.listener(move |this, _, _, cx| this.command(command.clone(), cx)))
     }
     fn input(&self, id: &'static str, input: &Entity<TextInput>) -> impl IntoElement + use<> {
@@ -470,8 +468,13 @@ impl JournalView {
         if search {
             actions = actions.child(self.button(format!("jump-{id}"), "로그 열기", Command::Jump(id), false, cx));
         }
-        let mut body = div().flex_1().min_w(px(100.)).flex().flex_col().gap_1().child(
+        let mut body = div().flex_1().min_w(px(0.)).flex().flex_col().gap_1().child(
             div()
+                .id(SharedString::from(format!("text-{id}")))
+                .debug_selector(move || format!("text-{id}"))
+                .w_full()
+                .min_w(px(0.))
+                .whitespace_normal()
                 .text_size(px(16.))
                 .text_color(rgb(if e.status == Status::Complete || e.status == Status::Cancelled {
                     MUTED
@@ -503,6 +506,7 @@ impl JournalView {
         }
         div()
             .id(SharedString::from(format!("row-{id}")))
+            .debug_selector(move || format!("row-{id}"))
             .flex_shrink_0()
             .flex()
             .gap_3()
@@ -519,7 +523,7 @@ impl JournalView {
                 div()
                     .flex()
                     .gap_3()
-                    .child(div().w(px(24.)).text_size(px(24.)).text_color(rgb(INK)).child(e.symbol()))
+                    .child(div().w(px(24.)).flex_shrink_0().text_size(px(24.)).text_color(rgb(INK)).child(e.symbol()))
                     .child(body),
             )
             .child(actions)
@@ -533,7 +537,8 @@ impl Render for JournalView {
         let open = records.iter().filter(|e| e.is_open_task()).count();
         let width = window.viewport_size().width;
         let compact = width < px(COMPACT_BREAKPOINT);
-        let show_sidebar = width >= px(SIDEBAR_BREAKPOINT);
+        let short = window.viewport_size().height < px(650.);
+        let show_sidebar = width >= px(SIDEBAR_BREAKPOINT) && !short;
         let mut nav_links = div()
             .id(if compact { "design-mobile-menu" } else { "design-nav-links" })
             .debug_selector(move || if compact { "design-mobile-menu".into() } else { "design-nav-links".into() })
@@ -569,9 +574,13 @@ impl Render for JournalView {
             .gap_6()
             .child(
                 div()
+                    .id("nav-wordmark")
+                    .debug_selector(|| "nav-wordmark".into())
+                    .flex_shrink_0()
+                    .whitespace_nowrap()
                     .font_weight(FontWeight(HEADING_WEIGHT))
                     .text_size(px(24.))
-                    .child(tracked_text("stillnote", -0.3)),
+                    .child("stillnote"),
             )
             .when(compact, |d| {
                 d.justify_between().child(self.button(
@@ -611,6 +620,7 @@ impl Render for JournalView {
             ));
         }
         let collection_form = div()
+            .flex_shrink_0()
             .flex()
             .when(show_sidebar, |d| d.flex_col())
             .gap_2()
@@ -642,29 +652,19 @@ impl Render for JournalView {
             .child(div().text_size(px(14.)).text_color(rgb(MUTED)).child("컬렉션"))
             .child(collections)
             .child(collection_form);
-        let mut main = div()
-            .id("journal-scroll")
-            .debug_selector(|| "journal-scroll".into())
-            .flex_1()
-            .min_w(px(0.))
-            .h_full()
-            .overflow_y_scroll()
-            .flex()
-            .flex_col()
-            .gap_4()
-            .child(
-                div()
-                    .flex()
-                    .justify_between()
-                    .items_center()
-                    .gap_4()
-                    .child(div().text_size(px(12.)).text_color(rgb(MUTED)).child("나의 기록"))
-                    .child(
-                        div()
-                            .w(px(if compact { 240. } else { 280. }))
-                            .child(self.input("search-input", &self.search_input)),
-                    ),
-            );
+        let mut main = div().w_full().min_w(px(0.)).flex().flex_col().gap_4().child(
+            div()
+                .flex()
+                .justify_between()
+                .items_center()
+                .gap_4()
+                .child(div().text_size(px(12.)).text_color(rgb(MUTED)).child("나의 기록"))
+                .child(
+                    div()
+                        .w(px(if compact { 240. } else { 280. }))
+                        .child(self.input("search-input", &self.search_input)),
+                ),
+        );
         main = main.child(
             div()
                 .flex()
@@ -680,13 +680,15 @@ impl Render for JournalView {
                         .gap_2()
                         .child(
                             div()
+                                .id("journal-heading")
+                                .debug_selector(|| "journal-heading".into())
+                                .w_full()
+                                .min_w(px(0.))
+                                .whitespace_normal()
                                 .text_size(px(32.))
                                 .line_height(px(38.4))
                                 .font_weight(FontWeight(HEADING_WEIGHT))
-                                .child(tracked_text(
-                                    if searching { "검색 결과.".into() } else { format!("{}.", self.title()) },
-                                    HEADING_TRACKING,
-                                )),
+                                .child(if searching { "검색 결과.".into() } else { format!("{}.", self.title()) }),
                         )
                         .child(
                             div()
@@ -969,14 +971,11 @@ impl Render for JournalView {
                                 .line_height(px(30.))
                                 .font_weight(FontWeight(HEADING_WEIGHT))
                                 .text_color(rgb(INK))
-                                .child(tracked_text(
-                                    if searching {
-                                        "찾은 기록이 없습니다."
-                                    } else {
-                                        "작은 기록으로 시작하세요."
-                                    },
-                                    -0.3,
-                                )),
+                                .child(if searching {
+                                    "찾은 기록이 없습니다."
+                                } else {
+                                    "작은 기록으로 시작하세요."
+                                }),
                         )
                         .child(div().text_size(px(14.)).line_height(px(21.7)).text_color(rgb(MUTED)).child(if searching {
                             "검색어 또는 상태 필터를 바꿔 보세요."
@@ -1000,6 +999,7 @@ impl Render for JournalView {
             .px_6()
             .py_4()
             .flex()
+            .flex_wrap()
             .items_center()
             .justify_between()
             .gap_4()
@@ -1011,10 +1011,18 @@ impl Render for JournalView {
                     .text_size(px(24.))
                     .font_weight(FontWeight(HEADING_WEIGHT))
                     .text_color(rgb(INK))
-                    .child(tracked_text("stillnote", -0.3)),
+                    .whitespace_nowrap()
+                    .flex_shrink_0()
+                    .child("stillnote"),
             )
             .child(self.notice.clone())
             .when(!compact, |d| d.child("Enter 기록 · Ctrl+A 선택 · Ctrl+V 붙여넣기"));
+        let footer = if short {
+            main = main.child(footer);
+            None
+        } else {
+            Some(footer)
+        };
         let mut body = div()
             .flex()
             .flex_1()
@@ -1028,9 +1036,16 @@ impl Render for JournalView {
                     .flex_1()
                     .min_w(px(0.))
                     .h_full()
-                    .child(main),
+                    .child(
+                        div()
+                            .id("journal-scroll")
+                            .debug_selector(|| "journal-scroll".into())
+                            .size_full()
+                            .overflow_y_scroll()
+                            .child(main),
+                    ),
             );
-        if width >= px(ASIDE_BREAKPOINT) {
+        if width >= px(ASIDE_BREAKPOINT) && !short {
             body = body.child(
                 div()
                     .id("design-aside")
@@ -1038,67 +1053,71 @@ impl Render for JournalView {
                     .w(px(208.))
                     .flex_shrink_0()
                     .h_full()
+                    .overflow_y_scroll()
                     .rounded(px(CARD_RADIUS))
                     .bg(rgb(CARD))
-                    .px_6()
-                    .py_8()
-                    .flex()
-                    .flex_col()
-                    .gap_5()
                     .child(
                         div()
+                            .px_6()
+                            .py_8()
                             .flex()
                             .flex_col()
-                            .gap_2()
+                            .gap_5()
                             .child(
                                 div()
-                                    .id("design-stat")
-                                    .debug_selector(|| "design-stat".into())
-                                    .text_size(px(STAT_SIZE))
-                                    .line_height(px(STAT_SIZE))
-                                    .font_weight(FontWeight(STAT_WEIGHT))
-                                    .text_color(rgb(PRIMARY))
-                                    .child(tracked_text(open.to_string(), STAT_TRACKING)),
+                                    .flex()
+                                    .flex_col()
+                                    .gap_2()
+                                    .child(
+                                        div()
+                                            .id("design-stat")
+                                            .debug_selector(|| "design-stat".into())
+                                            .text_size(px(STAT_SIZE))
+                                            .line_height(px(STAT_SIZE))
+                                            .font_weight(FontWeight(STAT_WEIGHT))
+                                            .text_color(rgb(PRIMARY))
+                                            .child(open.to_string()),
+                                    )
+                                    .child(div().text_size(px(13.)).text_color(rgb(MUTED)).child("열린 할 일")),
                             )
-                            .child(div().text_size(px(13.)).text_color(rgb(MUTED)).child("열린 할 일")),
-                    )
-                    .child(
-                        div()
-                            .text_size(px(24.))
-                            .line_height(px(30.))
-                            .font_weight(FontWeight(HEADING_WEIGHT))
-                            .child(tracked_text("천천히 돌아보기.", -0.3)),
-                    )
-                    .child(
-                        div()
-                            .text_size(px(14.))
-                            .line_height(px(21.7))
-                            .text_color(rgb(BODY))
-                            .child("오늘의 기록이 내일의 방향이 됩니다. 필요한 일만 다음으로 가져가세요."),
-                    )
-                    .child(div().h(px(1.)).bg(rgb(HAIRLINE)))
-                    .child("빠른 기록 범례")
-                    .children(
-                        [
-                            "•   해야 할 일",
-                            "×   완료한 일",
-                            "○   이벤트",
-                            "–   생각과 메모",
-                            ">   다른 로그로 이월",
-                            "<   미래 로그에 예약",
-                            "★   중요한 기록",
-                            "⊘   취소한 기록",
-                        ]
-                        .into_iter()
-                        .map(|label| div().text_size(px(14.)).line_height(px(21.7)).child(label)),
-                    )
-                    .child(
-                        div()
-                            .mt_6()
-                            .text_size(px(12.))
-                            .line_height(px(18.2))
-                            .text_color(rgb(MUTED))
-                            .child("Ryder Carroll의 불렛저널 방법에서 영감을 받았습니다."),
+                            .child(
+                                div()
+                                    .text_size(px(24.))
+                                    .line_height(px(30.))
+                                    .font_weight(FontWeight(HEADING_WEIGHT))
+                                    .child("천천히 돌아보기."),
+                            )
+                            .child(
+                                div()
+                                    .text_size(px(14.))
+                                    .line_height(px(21.7))
+                                    .text_color(rgb(BODY))
+                                    .child("오늘의 기록이 내일의 방향이 됩니다. 필요한 일만 다음으로 가져가세요."),
+                            )
+                            .child(div().h(px(1.)).bg(rgb(HAIRLINE)))
+                            .child("빠른 기록 범례")
+                            .children(
+                                [
+                                    "•   해야 할 일",
+                                    "×   완료한 일",
+                                    "○   이벤트",
+                                    "–   생각과 메모",
+                                    ">   다른 로그로 이월",
+                                    "<   미래 로그에 예약",
+                                    "★   중요한 기록",
+                                    "⊘   취소한 기록",
+                                ]
+                                .into_iter()
+                                .map(|label| div().text_size(px(14.)).line_height(px(21.7)).child(label)),
+                            )
+                            .child(
+                                div()
+                                    .mt_6()
+                                    .text_size(px(12.))
+                                    .line_height(px(18.2))
+                                    .text_color(rgb(MUTED))
+                                    .child("Ryder Carroll의 불렛저널 방법에서 영감을 받았습니다."),
+                            ),
                     ),
             );
         }
@@ -1128,7 +1147,7 @@ impl Render for JournalView {
                     .p_6()
                     .when_some(mobile_menu, |d, menu| d.child(menu))
                     .child(body)
-                    .child(footer),
+                    .when_some(footer, |d, footer| d.child(footer)),
             )
     }
 }

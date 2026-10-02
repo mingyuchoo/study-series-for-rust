@@ -21,7 +21,7 @@ fn main() {
         cx.open_window(
             WindowOptions {
                 window_bounds: Some(WindowBounds::Windowed(bounds)),
-                window_min_size: Some(size(px(stillnote::theme::MIN_WINDOW_WIDTH), px(650.))),
+                window_min_size: Some(size(px(stillnote::theme::MIN_WINDOW_WIDTH), px(stillnote::theme::MIN_WINDOW_HEIGHT))),
                 titlebar: Some(TitlebarOptions {
                     title: Some("Stillnote · 나의 불렛저널".into()),
                     ..Default::default()

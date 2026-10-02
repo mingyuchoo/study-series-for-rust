@@ -34,6 +34,7 @@ pub const CARD_RADIUS: f32 = 12.;
 pub const NAV_HEIGHT: f32 = 64.;
 pub const MAX_CONTENT_WIDTH: f32 = 1280.;
 pub const MIN_WINDOW_WIDTH: f32 = 600.;
+pub const MIN_WINDOW_HEIGHT: f32 = 400.;
 pub const COMPACT_BREAKPOINT: f32 = 768.;
 pub const SIDEBAR_BREAKPOINT: f32 = 1024.;
 pub const ASIDE_BREAKPOINT: f32 = 1180.;

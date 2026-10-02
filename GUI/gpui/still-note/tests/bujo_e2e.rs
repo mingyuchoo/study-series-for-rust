@@ -107,7 +107,7 @@ fn font_ac01_ac02_production_constructor_registers_pretendard_at_every_ui_weight
     // glyph advances. This no-window native app uses the production platform
     // text system so registration and glyph assertions below inspect real fonts.
     gpui::Application::new().run(move |app| {
-        let _view = app.new(|cx| JournalView::new(path, parse_date("2026-10-02").unwrap(), cx));
+        let _view = app.new(|cx| JournalView::new(path.clone(), parse_date("2026-10-02").unwrap(), cx));
         assert!(app.windows().is_empty(), "font verification must not open application windows");
         let text = app.text_system();
         assert!(
@@ -125,10 +125,180 @@ fn font_ac01_ac02_production_constructor_registers_pretendard_at_every_ui_weight
                 assert!(text.advance(id, px(16.), ch).is_ok(), "registered face missing {ch}, weight {weight}");
             }
         }
+        let mut heading_font = gpui::font("Pretendard");
+        heading_font.weight = gpui::FontWeight(700.);
+        let native = app
+            .open_window(
+                gpui::WindowOptions {
+                    show: false,
+                    focus: false,
+                    window_bounds: Some(gpui::WindowBounds::Windowed(gpui::Bounds::new(
+                        point(px(0.), px(0.)),
+                        size(px(1360.), px(900.)),
+                    ))),
+                    ..Default::default()
+                },
+                |_, app| app.new(|cx| JournalView::new(path, parse_date("2026-10-02").unwrap(), cx)),
+            )
+            .unwrap();
+        app.update_window(native.into(), |_, window, app| {
+            window.draw(app).clear();
+            let wordmark = window.text_system().shape_line(
+                "stillnote".into(),
+                px(24.),
+                &[gpui::TextRun {
+                    len: 9,
+                    font: heading_font,
+                    color: gpui::rgb(0xffffff).into(),
+                    background_color: None,
+                    underline: None,
+                    strikethrough: None,
+                }],
+                None,
+            );
+            assert_eq!(wordmark.len(), 9);
+            assert!(
+                wordmark.width > px(50.) && wordmark.width < px(120.),
+                "whole native wordmark must fit nav without per-character wrapping: {:?}",
+                wordmark.width
+            );
+            window.remove_window();
+        })
+        .unwrap();
         callback_observed.set(true);
         app.quit();
     });
     assert!(observed.get(), "native registration assertions must execute");
+}
+
+fn reveal_in_journal(cx: &mut VisualTestContext, selector: &str, width: f32, height: f32) {
+    let selector: &'static str = Box::leak(selector.to_owned().into_boxed_str());
+    for _ in 0..80 {
+        render(cx);
+        let area = cx.debug_bounds("journal-scroll").unwrap();
+        let target = cx.debug_bounds(selector).unwrap_or_else(|| panic!("missing {selector}"));
+        if target.top() >= area.top() && target.bottom() <= area.bottom() {
+            assert_reachable(cx, selector, width, height);
+            return;
+        }
+        let delta = if target.top() < area.top() { 120. } else { -120. };
+        cx.simulate_event(ScrollWheelEvent {
+            position: area.center(),
+            delta: ScrollDelta::Pixels(point(px(0.), px(delta))),
+            ..Default::default()
+        });
+    }
+    panic!("cannot reveal {selector} at {width}x{height}");
+}
+
+#[gpui::test]
+fn layout_ac01_ac02_ac03_ac04_long_text_short_windows_scroll_and_resize_preserve_state(cx: &mut TestAppContext) {
+    let dir = tempdir().unwrap();
+    cx.update(bind_input_keys);
+    let long_text = format!(
+        "{} {} END끝",
+        "한국어와 English 긴 기록을 끝까지 읽습니다. ".repeat(8),
+        "UnbrokenToken".repeat(30)
+    );
+    let collection_name = format!("{} END컬렉션", "긴 컬렉션 Collection ".repeat(8));
+    for (width, height) in [(600., 400.), (767., 500.), (768., 650.), (1024., 400.), (1360., 500.), (1600., 900.)] {
+        let path = dir.path().join(format!("layout-{width}-{height}.json"));
+        let mut fixture = stillnote::Session::open(&path).unwrap();
+        let collection = fixture.transact(|journal| journal.add_collection(&collection_name)).unwrap();
+        let entry = fixture
+            .transact(|journal| journal.add_entry(parse_date("2026-10-02")?, Log::Daily, Kind::Task, &long_text))
+            .unwrap();
+        for index in 0..8 {
+            fixture
+                .transact(|journal| journal.add_entry(parse_date("2026-10-02")?, Log::Daily, Kind::Note, &format!("스크롤 기록 {index}")))
+                .unwrap();
+        }
+        drop(fixture);
+        let window = cx.update(|app| {
+            app.open_window(
+                gpui::WindowOptions {
+                    window_bounds: Some(gpui::WindowBounds::Windowed(gpui::Bounds::new(
+                        point(px(0.), px(0.)),
+                        size(px(width), px(height)),
+                    ))),
+                    ..Default::default()
+                },
+                |_, app| app.new(|cx| JournalView::new(path.clone(), parse_date("2026-10-02").unwrap(), cx)),
+            )
+            .unwrap()
+        });
+        let view = window.root(cx).unwrap();
+        let mut visual = VisualTestContext::from_window(window.into(), cx);
+        let cx = &mut visual;
+        cx.simulate_resize(size(px(width), px(height)));
+        render(cx);
+        let nav = cx.debug_bounds("design-nav").unwrap();
+        let logo = cx.debug_bounds("nav-wordmark").unwrap();
+        assert!(logo.size.width >= px(86.) && logo.size.height <= px(40.));
+        assert!(logo.left() >= nav.left() && logo.right() <= nav.right() && logo.top() >= nav.top() && logo.bottom() <= nav.bottom());
+        assert_eq!(nav.size.height, px(64.));
+        let text = cx.debug_bounds(Box::leak(format!("text-{entry}").into_boxed_str())).unwrap();
+        assert!(
+            text.left() >= px(0.) && text.right() <= px(width),
+            "long token overflows horizontally: {text:?}"
+        );
+        assert!(text.size.height > px(50.), "long content must wrap rather than truncate");
+        let label = cx.debug_bounds(Box::leak(format!("label-collection-{collection}").into_boxed_str())).unwrap();
+        assert!(label.left() >= px(0.) && label.right() <= px(width));
+        // DESIGN nav labels use 14px * 1.4 line height; two lines may round
+        // down from 39.2 to 39px. The button target still has a 40px minimum.
+        assert!(
+            label.size.height >= px(2. * 19.6 - 1.),
+            "long collection name must have at least two lines at {width}x{height}: {label:?}"
+        );
+        let collection_button = cx.debug_bounds(Box::leak(format!("collection-{collection}").into_boxed_str())).unwrap();
+        assert!(collection_button.size.height >= px(40.));
+        assert!(label.left() >= collection_button.left() && label.right() <= collection_button.right());
+        assert!(label.top() >= collection_button.top() && label.bottom() <= collection_button.bottom());
+        assert_eq!(snapshot(&view, cx).journal().entry(entry).unwrap().text, long_text);
+        assert_eq!(snapshot(&view, cx).journal().collections[0].name, collection_name);
+        if height < 650. {
+            assert!(cx.debug_bounds("design-sidebar").is_none());
+            assert!(cx.debug_bounds("design-aside").is_none());
+            reveal_in_journal(cx, "collection-input", width, height);
+            reveal_in_journal(cx, "create-collection", width, height);
+        }
+        reveal_in_journal(cx, &format!("edit-{entry}"), width, height);
+        click(cx, format!("edit-{entry}"));
+        reveal_in_journal(cx, "entry-input", width, height);
+        type_in(cx, "entry-input", "수정 중 한글🙂 draft");
+        let before = snapshot(&view, cx).journal().clone();
+        cx.simulate_resize(size(px(600.), px(400.)));
+        render(cx);
+        assert_eq!(snapshot(&view, cx).journal(), &before);
+        assert_eq!(snapshot(&view, cx).entry_text, "수정 중 한글🙂 draft");
+        if !snapshot(&view, cx).menu_open {
+            click(cx, "nav-menu-toggle");
+        }
+        assert!(snapshot(&view, cx).menu_open);
+        click(cx, "nav-menu-toggle");
+        assert!(!snapshot(&view, cx).menu_open);
+        reveal_in_journal(cx, "save-entry", 600., 400.);
+        click(cx, "save-entry");
+        assert_eq!(snapshot(&view, cx).journal().entry(entry).unwrap().text, "수정 중 한글🙂 draft");
+        assert_eq!(stillnote::Session::open(&path).unwrap().journal, snapshot(&view, cx).journal);
+        // Render a long diagnostic fixture without mutating journal state.
+        let diagnostic = format!("{} END오류", "오류 설명 diagnostic ".repeat(18));
+        cx.update(|_, app| {
+            view.update(app, |view, cx| {
+                view.error = Some(diagnostic.clone());
+                cx.notify();
+            })
+        });
+        render(cx);
+        let error = cx.debug_bounds("error-message").unwrap();
+        assert!(error.left() >= px(0.) && error.right() <= px(600.));
+        assert!(error.size.height > px(40.), "diagnostic must wrap without losing its tail");
+        assert_eq!(snapshot(&view, cx).error.as_deref(), Some(diagnostic.as_str()));
+        reveal_in_journal(cx, "design-footer", 600., 400.);
+        cx.update(|window, _| window.remove_window());
+        cx.run_until_parked();
+    }
 }
 
 #[gpui::test]
