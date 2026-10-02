@@ -619,9 +619,18 @@ fn window_move_ac01_ac02_native_chrome_keeps_mouse_default_and_client_controls_w
 fn window_move_v2_ac01_ac02_whole_titlebar_background_and_logo_keep_native_default(cx: &mut TestAppContext) {
     let dir = tempdir().unwrap();
     cx.update(bind_input_keys);
-    let (view, cx) = cx.add_window_view(|_, cx| JournalView::new(dir.path().join("journal.json"), parse_date("2026-10-02").unwrap(), cx));
     for width in [600., 768., 1360., 1600.] {
-        cx.simulate_resize(size(px(width), px(900.)));
+        let path = dir.path().join(format!("wholebar-{width}/journal.json"));
+        let window = cx.update(|app| {
+            app.open_window(
+                stillnote::ui::journal_window_options(gpui::Bounds::new(point(px(0.), px(0.)), size(px(width), px(900.)))),
+                |_, app| app.new(|cx| JournalView::new(path, parse_date("2026-10-02").unwrap(), cx)),
+            )
+            .unwrap()
+        });
+        let view = cx.update(|app| window.entity(app).unwrap());
+        let mut visual = VisualTestContext::from_window(window.into(), cx);
+        let cx = &mut visual;
         render(cx);
         let nav = cx.debug_bounds("design-nav").unwrap();
         let logo = cx.debug_bounds("nav-wordmark").unwrap();
@@ -651,6 +660,7 @@ fn window_move_v2_ac01_ac02_whole_titlebar_background_and_logo_keep_native_defau
                 !cx.update(|window, _| window.default_prevented()),
                 "noninteractive upper bar at {position:?} ({width}px) must preserve native movement"
             );
+            cx.simulate_mouse_up(position, gpui::MouseButton::Left, Modifiers::none());
         }
         reveal_settings(cx);
         click(cx, "theme-light");
