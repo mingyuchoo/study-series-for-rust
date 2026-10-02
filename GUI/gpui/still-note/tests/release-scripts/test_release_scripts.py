@@ -10,6 +10,7 @@ import sys
 import unittest
 import zipfile
 
+sys.dont_write_bytecode = True
 SOURCE = Path(__file__).resolve().parents[2]
 spec = importlib.util.spec_from_file_location('run_checks', SOURCE / 'tests/run-scripts/test_run_scripts.py')
 run = importlib.util.module_from_spec(spec)
