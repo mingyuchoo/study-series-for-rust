@@ -163,7 +163,7 @@ if ($Mode -eq 'lint') {
 [void] (New-Item -ItemType Directory -Path $Evidence -Force)
 
 if ($Mode -eq 'unit') {
-    Invoke-Case 'eight equivalents parse and Bash scripts retain reviewed baseline hashes' 'AC-01' {
+    Invoke-Case 'nine equivalents parse and Bash scripts retain reviewed baseline hashes' 'AC-01' {
         $expected = @{
             '_common.sh' = 'D5D55780E44967971A5DA0B3ED597925EFA0EFE03E8D2355B35A981E739A36FF'
             'e2e-test.sh' = 'CF3C4D17D63A85F447F593DCF16292F8F05E1D261869A50DE4DC6034F74F8F61'
@@ -175,9 +175,10 @@ if ($Mode -eq 'unit') {
             # exercised by tests/run-scripts/test_run_scripts.py.
             'verify.sh' = 'BB8EAFDB977EF0D9DE74EBA32B6E2947E552B663CE956E94B9E6B1AFA589C385'
             'run.sh' = '70745D20DD58B162F1914080A70FFEC957ABF6F89827568455AE7EB7175E154E'
+            'release.sh' = 'B9309FABA92BF57039D33038B7DBC22A4BC4689536060EA1128229ED8D5F0CDA'
         }
         $shellFiles = @(Get-ChildItem -LiteralPath (Join-Path $Root 'scripts') -Filter '*.sh')
-        Assert-True ($shellFiles.Count -eq 8) 'All eight reviewed Bash scripts remain'
+        Assert-True ($shellFiles.Count -eq 9) 'All nine reviewed Bash scripts remain'
         Assert-True ((@($shellFiles.Name | Sort-Object) -join ',') -eq (@($expected.Keys | Sort-Object) -join ',')) 'Exact reviewed script set remains'
         foreach ($shell in $shellFiles) {
             Assert-True ((Get-FileHash -LiteralPath $shell.FullName).Hash -eq $expected[$shell.Name]) "Reviewed Bash baseline unchanged: $($shell.Name)"

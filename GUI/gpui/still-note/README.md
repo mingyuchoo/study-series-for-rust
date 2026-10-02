@@ -38,6 +38,29 @@ bash scripts/run.sh -- --data-file '.artifacts/my test journal.json'
 
 일반 실행은 `%LOCALAPPDATA%\Stillnote\Stillnote\data\journal.json`을 사용합니다. 앱은 네트워크/계정/클라우드를 사용하지 않습니다. 로컬 JSON은 암호화되어 있지 않습니다. Windows 계정과 디스크 보안을 통해 보호하세요.
 
+## 릴리스 번들 및 설치 파일
+
+Windows 네이티브 PowerShell **7.4 이상**, Rust stable의 rustfmt/clippy, Visual Studio C++ Build Tools와 Windows SDK, **Inno Setup 6.3 이상**이 필요합니다. Inno Setup은 PATH 또는 표준 설치 경로에서 찾으며, `ISCC_PATH` 환경변수로 `ISCC.exe` 경로를 지정할 수 있습니다.
+
+```powershell
+pwsh -File scripts/release.ps1
+pwsh -File scripts/release.ps1 --target x86_64-pc-windows-msvc
+pwsh -File scripts/release.ps1 --target aarch64-pc-windows-msvc
+```
+
+Git Bash는 같은 PowerShell 구현으로 인수를 전달합니다:
+
+```bash
+bash scripts/release.sh
+bash scripts/release.sh --target aarch64-pc-windows-msvc
+```
+
+`--help`로 도움말을 확인합니다. 기본 아키텍처는 `rustc` host이며 x64와 ARM64 Windows MSVC를 지원합니다. 다른 아키텍처를 빌드하려면 `rustup target add TARGET`와 해당 MSVC 라이브러리가 필요합니다. 린트 및 테스트는 실행 가능한 host target에서 수행합니다. 포맷 수정 → strict Clippy → 전체 테스트 → doctest → release 빌드 → ZIP → 설치 EXE → SHA256 checksum 순서이며, 실패하면 해당 종료 코드로 멈춥니다. 앱이나 설치 파일은 자동 실행하지 않습니다.
+
+산출물은 `.artifacts/releases/` 아래 매 실행마다 고유한 디렉터리에 생성됩니다. `stillnote-VERSION-ARCH.zip`, `stillnote-VERSION-ARCH-setup.exe`, `SHA256SUMS.txt`와 번들 원본을 포함합니다. Cargo metadata의 버전 및 실제 target 디렉터리를 사용하므로 `CARGO_TARGET_DIR`도 반영합니다. ZIP에는 실행 파일, 이 README, GPUI Apache 라이선스와 Pretendard SIL OFL 라이선스가 포함되며 폰트 데이터는 실행 파일에 내장됩니다. 개인 저널 파일은 포함하지 않습니다.
+
+설치 파일은 **서명되지 않습니다**. 사용자가 직접 실행하면 현재 Windows 사용자 계정의 `%LOCALAPPDATA%\Programs\Stillnote`에 설치하고 시작 메뉴 바로가기와 제거 기능을 제공합니다. 제거해도 별도 개인 저널 데이터는 삭제하지 않습니다. ZIP과 설치 파일은 해당 아키텍처의 Windows와 그래픽 드라이버를 요구합니다. 실행 환경에는 아키텍처에 맞는 Microsoft Visual C++ 2015–2022 Redistributable을 설치하세요. VC runtime은 번들에 동봉하거나 자동으로 다운로드하지 않습니다.
+
 ## 사용
 
 - **일간 로그**: 날짜를 입력하고 이동하거나 ‹ / › / 오늘을 누릅니다. 할 일, 이벤트, 메모를 선택하고 한 줄을 입력한 다음 Enter 또는 기록 +로 저장합니다.
