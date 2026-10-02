@@ -369,10 +369,8 @@ impl JournalView {
                 div()
                     .id(SharedString::from(label_id.clone()))
                     .debug_selector(move || label_id)
-                    .min_w(px(0.))
-                    .max_w_full()
-                    .when(wrapping, |d| d.w_full())
-                    .whitespace_normal()
+                    .when(wrapping, |d| d.min_w(px(0.)).max_w_full().w_full().whitespace_normal())
+                    .when(!wrapping, |d| d.flex_shrink_0().whitespace_nowrap())
                     .child(label),
             )
             .on_click(cx.listener(move |this, _, _, cx| this.command(command.clone(), cx)))

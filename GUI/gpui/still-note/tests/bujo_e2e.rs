@@ -162,6 +162,31 @@ fn font_ac01_ac02_production_constructor_registers_pretendard_at_every_ui_weight
                 "whole native wordmark must fit nav without per-character wrapping: {:?}",
                 wordmark.width
             );
+            let mut control_font = gpui::font("Pretendard");
+            control_font.weight = gpui::FontWeight(600.);
+            let creation_label = "+ 컬렉션 만들기";
+            let shaped = window.text_system().shape_line(
+                creation_label.into(),
+                px(14.),
+                &[gpui::TextRun {
+                    len: creation_label.len(),
+                    font: control_font,
+                    color: gpui::rgb(0x0a0a0a).into(),
+                    background_color: None,
+                    underline: None,
+                    strikethrough: None,
+                }],
+                None,
+            );
+            assert_eq!(shaped.len(), creation_label.len());
+            // 208px sidebar, 24px card padding each side, 20px button padding
+            // each side and two 1px borders leave 118px for the whole label.
+            assert!(
+                shaped.width > px(0.) && shaped.width <= px(118.),
+                "full native creation label exceeds sidebar inner width: {:?}",
+                shaped.width
+            );
+            eprintln!("Native Pretendard creation label14/600 width {:?}; available content118px", shaped.width);
             window.remove_window();
         })
         .unwrap();
@@ -263,6 +288,30 @@ fn layout_ac01_ac02_ac03_ac04_long_text_short_windows_scroll_and_resize_preserve
             reveal_in_journal(cx, "collection-input", width, height);
             reveal_in_journal(cx, "create-collection", width, height);
         }
+        reveal_in_journal(cx, "collection-input", width, height);
+        type_in(cx, "collection-input", &format!("생성 {width}x{height} café🙂"));
+        reveal_in_journal(cx, "create-collection", width, height);
+        let create = cx.debug_bounds("create-collection").unwrap();
+        let fixed_label = cx.debug_bounds("label-create-collection").unwrap();
+        assert_eq!(create.size.height, px(40.));
+        assert!(
+            fixed_label.size.height > px(0.) && fixed_label.size.height <= px(15.),
+            "fixed creation label must remain one14px line: {fixed_label:?}"
+        );
+        assert!(fixed_label.left() >= create.left() + px(21.) && fixed_label.right() <= create.right() - px(21.));
+        assert!(fixed_label.top() >= create.top() && fixed_label.bottom() <= create.bottom());
+        assert!((fixed_label.center().y - create.center().y).abs() <= px(1.), "creation label must be centered");
+        click(cx, "create-collection");
+        let state = snapshot(&view, cx);
+        assert_eq!(state.journal().collections.len(), 2);
+        let created = &state.journal().collections[1];
+        assert_eq!(created.name, format!("생성 {width}x{height} café🙂"));
+        assert_eq!(state.log, Log::Collection(created.id));
+        assert_eq!(stillnote::Session::open(&path).unwrap().journal, state.journal);
+        if width < 768. {
+            click(cx, "nav-menu-toggle");
+        }
+        click(cx, "nav-daily");
         reveal_in_journal(cx, &format!("edit-{entry}"), width, height);
         click(cx, format!("edit-{entry}"));
         reveal_in_journal(cx, "entry-input", width, height);
@@ -279,6 +328,12 @@ fn layout_ac01_ac02_ac03_ac04_long_text_short_windows_scroll_and_resize_preserve
         click(cx, "nav-menu-toggle");
         assert!(!snapshot(&view, cx).menu_open);
         reveal_in_journal(cx, "save-entry", 600., 400.);
+        let save = cx.debug_bounds("save-entry").unwrap();
+        let save_label = cx.debug_bounds("label-save-entry").unwrap();
+        assert!(save_label.size.height <= px(15.));
+        assert!(
+            save_label.left() >= save.left() && save_label.right() <= save.right() && save_label.top() >= save.top() && save_label.bottom() <= save.bottom()
+        );
         click(cx, "save-entry");
         assert_eq!(snapshot(&view, cx).journal().entry(entry).unwrap().text, "수정 중 한글🙂 draft");
         assert_eq!(stillnote::Session::open(&path).unwrap().journal, snapshot(&view, cx).journal);
