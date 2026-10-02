@@ -27,7 +27,7 @@ fn has_pretendard_family(font: &[u8]) -> bool {
         }
         let start = storage + usize::from(u16_at(names, record + 10));
         let end = start + usize::from(u16_at(names, record + 8));
-        let words: Vec<_> = names[start..end].chunks_exact(2).map(|word| u16_at(word, 0)).collect();
+        let words: Vec<_> = names[start..end].as_chunks::<2>().0.iter().map(|word| u16_at(word, 0)).collect();
         String::from_utf16(&words).unwrap().contains("Pretendard")
     })
 }
