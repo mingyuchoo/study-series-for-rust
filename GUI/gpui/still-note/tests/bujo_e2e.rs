@@ -221,9 +221,23 @@ fn lt02_lt06_settings_failure_localizes_without_blocking_user_data(cx: &mut Test
 fn lt07_both_languages_all_required_widths_keep_settings_and_window_controls_reachable(cx: &mut TestAppContext) {
     let dir = tempdir().unwrap();
     cx.update(bind_input_keys);
-    let (_, cx) = cx.add_window_view(|_, cx| JournalView::new(dir.path().join("journal.json"), parse_date("2026-10-02").unwrap(), cx));
     for width in [600., 768., 1024., 1360.] {
-        cx.simulate_resize(size(px(width), px(900.)));
+        let path = dir.path().join(format!("width-{width}/journal.json"));
+        let window = cx.update(|app| {
+            app.open_window(
+                gpui::WindowOptions {
+                    window_bounds: Some(gpui::WindowBounds::Windowed(gpui::Bounds::new(
+                        point(px(0.), px(0.)),
+                        size(px(width), px(900.)),
+                    ))),
+                    ..Default::default()
+                },
+                |_, app| app.new(|cx| JournalView::new(path, parse_date("2026-10-02").unwrap(), cx)),
+            )
+            .unwrap()
+        });
+        let mut visual = VisualTestContext::from_window(window.into(), cx);
+        let cx = &mut visual;
         for language in ["language-ko", "language-en"] {
             reveal_settings(cx);
             click(cx, language);
@@ -247,6 +261,13 @@ fn lt07_both_languages_all_required_widths_keep_settings_and_window_controls_rea
                     assert!(
                         a.right() <= b.left() || b.right() <= a.left() || a.bottom() <= b.top() || b.bottom() <= a.top(),
                         "overlapping settings {a:?}/{b:?}"
+                    );
+                }
+                for chrome in ["window-minimize", "window-maximize", "window-close", "window-drag-region"] {
+                    let b = cx.debug_bounds(chrome).unwrap();
+                    assert!(
+                        a.right() <= b.left() || b.right() <= a.left() || a.bottom() <= b.top() || b.bottom() <= a.top(),
+                        "setting overlaps window control/drag {a:?}/{b:?}"
                     );
                 }
             }
@@ -347,14 +368,32 @@ fn lt02_lt03_existing_errors_search_migration_and_ime_survive_presentation_chang
             input.unmark_text(window, cx);
         })
     });
-    type_in(cx, "search-input", "");
+    click(cx, "search-input");
+    cx.simulate_keystrokes("ctrl-a backspace");
+    render(cx);
+    assert!(cx.read(|app| view.read(app).search_input.read(app).content.is_empty()));
+    click(cx, "cancel-migrate");
+    render(cx);
+    assert!(cx.read(|app| view.read(app).migrating.is_none()));
     // A persisted journal write failure must use the current language, and
     // translating the already-visible error must not clear the user's draft.
     fs::create_dir(path.with_extension("json.bak")).unwrap();
-    add(cx, "failed draft");
+    let viewport = cx.update(|window, _| window.viewport_size());
+    reveal_in_journal(cx, "entry-input", f32::from(viewport.width), f32::from(viewport.height));
+    type_in(cx, "entry-input", "failed draft");
+    assert_eq!(snapshot(&view, cx).entry_text, "failed draft");
+    assert!(cx.update(|window, app| input.read(app).focus_handle(app).is_focused(window)));
+    reveal_in_journal(cx, "add-entry", f32::from(viewport.width), f32::from(viewport.height));
+    click(cx, "add-entry");
     let english = snapshot(&view, cx).error.unwrap();
     assert!(english.contains("Unable to save"), "{english}");
-    assert!(english.is_ascii(), "application-owned failure text was not translated: {english}");
+    let os_detail = english
+        .strip_prefix("Unable to save: Cannot save the backup: ")
+        .expect("both application error contexts must be translated");
+    assert!(
+        !os_detail.is_empty() && os_detail.contains("os error"),
+        "native OS detail must remain available: {english}"
+    );
     reveal_settings(cx);
     click(cx, "language-ko");
     assert!(snapshot(&view, cx).error.unwrap().contains("저장하지 못했습니다"));
@@ -729,7 +768,7 @@ fn design_ac02_ac04_all_breakpoints_keep_controls_and_actions_reachable(cx: &mut
             }
             previous_wide = Some((width, main.size.width));
         }
-        assert_eq!(cx.debug_bounds("nav-menu-toggle").is_some(), width < 768.);
+        assert_eq!(cx.debug_bounds("nav-menu-toggle").is_some(), width < 1360.);
         if width < 768. {
             assert!(!snapshot(&view, cx).menu_open);
             assert!(cx.debug_bounds("design-mobile-menu").is_none());

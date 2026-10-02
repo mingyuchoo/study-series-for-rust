@@ -99,6 +99,7 @@ pub struct JournalView {
     load_error_source: Option<anyhow::Error>,
     appearance: WindowAppearance,
     appearance_observed: bool,
+    root_focus: FocusHandle,
     pub session: Option<Session>,
     pub date: NaiveDate,
     pub log: Log,
@@ -169,9 +170,10 @@ impl JournalView {
             effective_theme: ThemeMode::Dark,
             palette: Palette::DARK,
             window_title: language.text("Stillnote · 나의 불렛저널").to_owned(),
-            setting_focus: std::array::from_fn(|_| cx.focus_handle()),
+            setting_focus: std::array::from_fn(|_| cx.focus_handle().tab_stop(true)),
             appearance: WindowAppearance::Dark,
             appearance_observed: false,
+            root_focus: cx.focus_handle().tab_stop(false),
             error_source: None,
             load_error_source: error,
             session,
@@ -787,6 +789,11 @@ impl JournalView {
 impl Render for JournalView {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         if !self.appearance_observed {
+            // A fresh window needs a dispatch target before its first Tab press.
+            // Focus only once; subsequent renders preserve the user's input focus.
+            if window.focused(cx).is_none() {
+                self.root_focus.focus(window);
+            }
             self.appearance_observed = true;
             self.appearance_changed(window.appearance(), cx);
             self._subscriptions
@@ -819,7 +826,7 @@ impl Render for JournalView {
         ] {
             nav_links = nav_links.child(self.button(
                 id,
-                if compact { short } else { label },
+                if width < px(SIDEBAR_BREAKPOINT) { short } else { label },
                 Command::Nav(log.clone()),
                 !self.index && self.log == log,
                 cx,
@@ -1545,6 +1552,7 @@ impl Render for JournalView {
         }
         div()
             .size_full()
+            .track_focus(&self.root_focus)
             .on_key_down(|event, window, cx| {
                 if event.keystroke.key == "tab" {
                     if event.keystroke.modifiers.shift {
