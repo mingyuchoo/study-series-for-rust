@@ -78,6 +78,13 @@ class ReleaseScripts(unittest.TestCase):
         for shell in ('pwsh', 'bash'):
             result, calls = self.release(shell, ['--target', 'x86_64-pc-windows-msvc'])
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            installer_lines = [line.removeprefix('Installer: ') for line in result.stdout.splitlines() if line.startswith('Installer: ')]
+            self.assertEqual(len(installer_lines), 1, result.stdout)
+            installer_path = Path(installer_lines[0])
+            self.assertTrue(installer_path.is_absolute(), installer_lines[0])
+            self.assertTrue(installer_path.is_file(), installer_lines[0])
+            self.assertEqual(installer_path.name, 'stillnote-0.1.0-x64-setup.exe')
+            self.assertIn('Release complete:', result.stdout)
             self.assertEqual(self.pipeline(calls), ['fmt', 'clippy', 'test', 'doc', 'build', 'installer'])
             for c in calls:
                 a = c['args']
@@ -131,16 +138,22 @@ class ReleaseScripts(unittest.TestCase):
             for i, stage in enumerate(stages):
                 result, calls = self.release(shell, failure=stage)
                 self.assertEqual(result.returncode, 37, result.stdout + result.stderr)
+                self.assertNotIn('Installer:', result.stdout)
+                self.assertNotIn('Release complete:', result.stdout)
                 self.assertEqual(self.pipeline(calls), stages[:i + 1])
             for stage in ('metadata', 'fmt-version', 'clippy-version'):
                 result, calls = self.release(shell, failure=stage)
                 self.assertEqual(result.returncode, 37, result.stdout + result.stderr)
+                self.assertNotIn('Installer:', result.stdout)
+                self.assertNotIn('Release complete:', result.stdout)
                 self.assertEqual(self.pipeline(calls), [])
             for missing in ('binary', 'installer'):
                 shutil.rmtree(self.root / 'custom target with spaces', ignore_errors=True)
                 os.environ['MISSING'] = missing
                 result, calls = self.release(shell)
                 self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
+                self.assertNotIn('Installer:', result.stdout)
+                self.assertNotIn('Release complete:', result.stdout)
                 if missing == 'binary': self.assertNotIn('installer', self.pipeline(calls))
             os.environ.pop('MISSING', None)
         self.assertEqual(list(self.root.glob('.artifacts/releases/*/SHA256SUMS.txt')), [])

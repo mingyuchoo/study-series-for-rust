@@ -126,6 +126,7 @@ try {
     @($zip, $installer) | ForEach-Object {
         "$((Get-FileHash -LiteralPath $_ -Algorithm SHA256).Hash.ToLowerInvariant())  $([IO.Path]::GetFileName($_))"
     } | Set-Content -LiteralPath (Join-Path $output 'SHA256SUMS.txt') -Encoding utf8NoBOM
+    Write-Output "Installer: $installer"
     Write-Output "Release complete: $output"
     exit 0
 }
