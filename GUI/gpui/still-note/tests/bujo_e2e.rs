@@ -97,12 +97,18 @@ fn assert_reachable(cx: &mut VisualTestContext, selector: &str, width: f32, heig
     );
 }
 
-#[gpui::test]
-fn font_ac01_ac02_production_constructor_registers_pretendard_at_every_ui_weight(cx: &mut TestAppContext) {
+#[test]
+fn font_ac01_ac02_production_constructor_registers_pretendard_at_every_ui_weight() {
     let dir = tempdir().unwrap();
-    let (_view, cx) = cx.add_window_view(|_, cx| JournalView::new(dir.path().join("journal.json"), parse_date("2026-10-02").unwrap(), cx));
-    render(cx);
-    cx.read(|app| {
+    let path = dir.path().join("journal.json");
+    let observed = std::rc::Rc::new(std::cell::Cell::new(false));
+    let callback_observed = observed.clone();
+    // TestAppContext uses NoopTextSystem: it discards font bytes and synthesizes
+    // glyph advances. This no-window native app uses the production platform
+    // text system so registration and glyph assertions below inspect real fonts.
+    gpui::Application::new().run(move |app| {
+        let _view = app.new(|cx| JournalView::new(path, parse_date("2026-10-02").unwrap(), cx));
+        assert!(app.windows().is_empty(), "font verification must not open application windows");
         let text = app.text_system();
         assert!(
             text.all_font_names().iter().any(|name| name == "Pretendard"),
@@ -119,7 +125,10 @@ fn font_ac01_ac02_production_constructor_registers_pretendard_at_every_ui_weight
                 assert!(text.advance(id, px(16.), ch).is_ok(), "registered face missing {ch}, weight {weight}");
             }
         }
+        callback_observed.set(true);
+        app.quit();
     });
+    assert!(observed.get(), "native registration assertions must execute");
 }
 
 #[gpui::test]
