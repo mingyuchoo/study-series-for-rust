@@ -51,6 +51,8 @@ fn window_control(id: &'static str, glyph: &'static str, area: WindowControlArea
         .line_height(px(16.))
         .font_weight(FontWeight(CONTROL_WEIGHT))
         .whitespace_nowrap()
+        // Keep the root focus listener from cancelling Windows non-client clicks.
+        .occlude()
         .window_control_area(area)
         .child(
             div()
@@ -894,6 +896,8 @@ impl Render for JournalView {
                     .flex_1()
                     .min_w(px(0.))
                     .h_full()
+                    // Caption clicks must reach the native move/maximize handler.
+                    .occlude()
                     .window_control_area(WindowControlArea::Drag),
             )
             .child(

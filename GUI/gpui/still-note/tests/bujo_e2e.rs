@@ -566,6 +566,56 @@ fn assert_chrome(cx: &mut VisualTestContext, width: f32, height: f32) {
 }
 
 #[gpui::test]
+fn window_move_ac01_ac02_native_chrome_keeps_mouse_default_and_client_controls_work(cx: &mut TestAppContext) {
+    let dir = tempdir().unwrap();
+    cx.update(bind_input_keys);
+    let (view, cx) = cx.add_window_view(|_, cx| JournalView::new(dir.path().join("journal.json"), parse_date("2026-10-02").unwrap(), cx));
+    for width in [600., 768., 1360.] {
+        cx.simulate_resize(size(px(width), px(900.)));
+        render(cx);
+        for selector in ["window-drag-region", "window-minimize", "window-maximize", "window-close"] {
+            let bounds = cx.debug_bounds(selector).unwrap();
+            assert!(bounds.size.width > px(0.), "native chrome must be reachable: {selector}");
+            // Interior edges catch an accidental non-occluding gutter within
+            // the caption/control itself, not just its center.
+            for position in [
+                bounds.center(),
+                point(bounds.left() + px(1.), bounds.top() + px(1.)),
+                point(bounds.right() - px(1.), bounds.bottom() - px(1.)),
+            ] {
+                cx.simulate_mouse_move(position, None, Modifiers::none());
+                cx.simulate_mouse_down(position, gpui::MouseButton::Left, Modifiers::none());
+                assert!(
+                    !cx.update(|window, _| window.default_prevented()),
+                    "{selector} at {position:?} must let Windows perform its native caption/control action"
+                );
+                // No mouse-up: native minimize/close handlers belong to the
+                // Windows backend, and this assertion targets mouse-down.
+            }
+        }
+        let entry = cx.debug_bounds("entry-input").unwrap();
+        cx.simulate_mouse_move(entry.center(), None, Modifiers::none());
+        cx.simulate_mouse_down(entry.center(), gpui::MouseButton::Left, Modifiers::none());
+        assert!(
+            cx.update(|window, _| window.default_prevented()),
+            "client input must retain its focus/selection behavior"
+        );
+        type_in(cx, "entry-input", "caption drag does not consume input");
+        assert_eq!(snapshot(&view, cx).entry_text, "caption drag does not consume input");
+        if width < 768. {
+            let before = snapshot(&view, cx).menu_open;
+            click(cx, "nav-menu-toggle");
+            assert_ne!(snapshot(&view, cx).menu_open, before, "compact navigation remains interactive");
+        } else {
+            click(cx, "nav-index");
+            assert!(snapshot(&view, cx).index, "navigation remains a client action");
+            click(cx, "nav-daily");
+            assert!(!snapshot(&view, cx).index);
+        }
+    }
+}
+
+#[gpui::test]
 fn layout_ac01_ac02_ac03_ac04_long_text_short_windows_scroll_and_resize_preserve_state(cx: &mut TestAppContext) {
     let dir = tempdir().unwrap();
     cx.update(bind_input_keys);
