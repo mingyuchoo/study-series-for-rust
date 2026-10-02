@@ -216,7 +216,7 @@ impl JournalView {
         self.settings_error_source = self
             .settings_store
             .save(&self.settings)
-            .map_err(|e| e.context(Message::new("설정을 저장하지 못했습니다. 선택은 현재 세션에 적용됩니다")))
+            .map_err(|e| Message::new("설정을 저장하지 못했습니다. 선택은 현재 세션에 적용됩니다").wrap(e))
             .err();
         self.present_errors();
     }
@@ -282,7 +282,7 @@ impl JournalView {
                 Some(v)
             },
             | Err(e) => {
-                self.set_error(e.context(Message::new("저장하지 못했습니다")));
+                self.set_error(Message::new("저장하지 못했습니다").wrap(e));
                 cx.notify();
                 None
             },

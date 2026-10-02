@@ -84,6 +84,18 @@ fn lt02_catalog_and_error_context_translate_application_text_only() {
     assert!(error_text(&error, Language::English).contains("Unable to save"));
     assert!(error_text(&error, Language::English).contains("OS detail"));
     assert!(error_text(&error, Language::Korean).contains("저장하지 못했습니다"));
+    let external = anyhow::Error::new(std::io::Error::other("external detail 한글 사용자"));
+    let nested = Message::new("저장하지 못했습니다").wrap(Message::new("설정 파일 접근 실패. 원본을 보존했습니다").wrap(external));
+    assert_eq!(
+        error_text(&nested, Language::English),
+        "Unable to save: Cannot access settings. The original is preserved: external detail 한글 사용자"
+    );
+    assert_eq!(
+        error_text(&nested, Language::Korean),
+        "저장하지 못했습니다: 설정 파일 접근 실패. 원본을 보존했습니다: external detail 한글 사용자"
+    );
+    let detail = Message::detail("저장하지 못했습니다", "개인 파일 이름").wrap(anyhow::anyhow!("OS detail"));
+    assert_eq!(error_text(&detail, Language::English), "Unable to save: 개인 파일 이름: OS detail");
 }
 
 fn day(value: &str) -> NaiveDate {

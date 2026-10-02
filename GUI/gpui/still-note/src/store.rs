@@ -1,6 +1,6 @@
 use crate::Journal;
 use crate::i18n::Message;
-use anyhow::{Context, Result, ensure};
+use anyhow::{Result, ensure};
 use std::{
     fs::{self, OpenOptions},
     io::Write,
@@ -25,7 +25,7 @@ impl JournalStore {
     pub fn default_path() -> Result<PathBuf> {
         directories::ProjectDirs::from("app", "Stillnote", "Stillnote")
             .map(|d| d.data_local_dir().join("journal.json"))
-            .context(Message::new("사용자 데이터 경로를 찾을 수 없습니다"))
+            .ok_or_else(|| Message::new("사용자 데이터 경로를 찾을 수 없습니다").into())
     }
     pub fn backup_path(&self) -> PathBuf {
         self.path.with_extension("json.bak")
@@ -34,8 +34,11 @@ impl JournalStore {
         self.loaded = false;
         match fs::read(&self.path) {
             | Ok(bytes) => {
-                let journal: Journal = serde_json::from_slice(&bytes).context(Message::new("저널 파일을 읽을 수 없습니다. 원본을 보존했습니다"))?;
-                journal.validate().context(Message::new("저널 데이터 검증 실패. 원본을 보존했습니다"))?;
+                let journal: Journal =
+                    serde_json::from_slice(&bytes).map_err(|e| Message::new("저널 파일을 읽을 수 없습니다. 원본을 보존했습니다").wrap(e.into()))?;
+                journal
+                    .validate()
+                    .map_err(|e| Message::new("저널 데이터 검증 실패. 원본을 보존했습니다").wrap(e))?;
                 self.baseline = Some(bytes);
                 self.loaded = true;
                 Ok(journal)
@@ -45,7 +48,7 @@ impl JournalStore {
                 self.loaded = true;
                 Ok(Journal::default())
             },
-            | Err(e) => Err(e).context(Message::new("저널 파일 접근 실패. 원본을 보존했습니다")),
+            | Err(e) => Err(Message::new("저널 파일 접근 실패. 원본을 보존했습니다").wrap(e.into())),
         }
     }
     pub fn save(&mut self, journal: &Journal) -> Result<()> {
@@ -54,14 +57,14 @@ impl JournalStore {
         let current = match fs::read(&self.path) {
             | Ok(bytes) => Some(bytes),
             | Err(e) if e.kind() == std::io::ErrorKind::NotFound => None,
-            | Err(e) => return Err(e).context(Message::new("기존 파일 확인 실패")),
+            | Err(e) => return Err(Message::new("기존 파일 확인 실패").wrap(e.into())),
         };
         ensure!(
             current == self.baseline,
             Message::new("다른 프로그램이 파일을 변경했습니다. 앱을 재시작해 주세요")
         );
         let parent = self.path.parent().filter(|p| !p.as_os_str().is_empty()).unwrap_or(Path::new("."));
-        fs::create_dir_all(parent).context(Message::new("데이터 폴더 생성 실패"))?;
+        fs::create_dir_all(parent).map_err(|e| Message::new("데이터 폴더 생성 실패").wrap(e.into()))?;
         let bytes = serde_json::to_vec_pretty(journal)?;
         let temp = parent.join(format!(".stillnote-{}.tmp", Uuid::new_v4()));
         let result = (|| -> Result<()> {
@@ -71,9 +74,9 @@ impl JournalStore {
             drop(file);
             // Copy backup before replacing. A failed backup aborts without changing the original.
             if self.path.exists() {
-                fs::copy(&self.path, self.backup_path()).context(Message::new("백업 저장 실패"))?;
+                fs::copy(&self.path, self.backup_path()).map_err(|e| Message::new("백업 저장 실패").wrap(e.into()))?;
             }
-            fs::rename(&temp, &self.path).context(Message::new("저널 파일 교체 실패"))?;
+            fs::rename(&temp, &self.path).map_err(|e| Message::new("저널 파일 교체 실패").wrap(e.into()))?;
             Ok(())
         })();
         if result.is_err() {

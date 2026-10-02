@@ -1,4 +1,4 @@
-use anyhow::{Context, Result, ensure};
+use anyhow::{Result, ensure};
 use gpui::WindowAppearance;
 use serde::{Deserialize, Serialize};
 use std::{
@@ -59,7 +59,8 @@ impl SettingsStore {
         self.loaded = false;
         match fs::read(&self.path) {
             | Ok(bytes) => {
-                let settings = serde_json::from_slice(&bytes).context(crate::i18n::Message::new("설정 파일을 읽을 수 없습니다. 원본을 보존했습니다"))?;
+                let settings = serde_json::from_slice(&bytes)
+                    .map_err(|e| crate::i18n::Message::new("설정 파일을 읽을 수 없습니다. 원본을 보존했습니다").wrap(e.into()))?;
                 self.baseline = Some(bytes);
                 self.loaded = true;
                 Ok(settings)
@@ -69,7 +70,7 @@ impl SettingsStore {
                 self.loaded = true;
                 Ok(Settings::default())
             },
-            | Err(e) => Err(e).context(crate::i18n::Message::new("설정 파일 접근 실패. 원본을 보존했습니다")),
+            | Err(e) => Err(crate::i18n::Message::new("설정 파일 접근 실패. 원본을 보존했습니다").wrap(e.into())),
         }
     }
     pub fn save(&mut self, settings: &Settings) -> Result<()> {
@@ -77,7 +78,7 @@ impl SettingsStore {
         let current = match fs::read(&self.path) {
             | Ok(bytes) => Some(bytes),
             | Err(e) if e.kind() == std::io::ErrorKind::NotFound => None,
-            | Err(e) => return Err(e).context(crate::i18n::Message::new("설정 파일 접근 실패. 원본을 보존했습니다")),
+            | Err(e) => return Err(crate::i18n::Message::new("설정 파일 접근 실패. 원본을 보존했습니다").wrap(e.into())),
         };
         ensure!(
             current == self.baseline,
@@ -98,7 +99,7 @@ impl SettingsStore {
         if result.is_err() {
             let _ = fs::remove_file(&temp);
         }
-        result.context(crate::i18n::Message::new("설정을 저장하지 못했습니다. 선택은 현재 세션에 적용됩니다"))?;
+        result.map_err(|e| crate::i18n::Message::new("설정을 저장하지 못했습니다. 선택은 현재 세션에 적용됩니다").wrap(e))?;
         self.baseline = Some(bytes);
         Ok(())
     }

@@ -15,16 +15,27 @@ impl Language {
 pub struct Message {
     pub key: &'static str,
     pub detail: Option<String>,
+    source: Option<anyhow::Error>,
 }
 impl Message {
     pub fn new(key: &'static str) -> Self {
-        Self { key, detail: None }
+        Self {
+            key,
+            detail: None,
+            source: None,
+        }
     }
     pub fn detail(key: &'static str, detail: impl ToString) -> Self {
         Self {
             key,
             detail: Some(detail.to_string()),
+            source: None,
         }
+    }
+    /// Unlike anyhow's opaque ContextError, this wrapper retains typed message provenance in the source chain.
+    pub fn wrap(mut self, source: anyhow::Error) -> anyhow::Error {
+        self.source = Some(source);
+        anyhow::Error::new(self)
     }
     pub fn localized(&self, language: Language) -> String {
         match &self.detail {
@@ -38,7 +49,11 @@ impl fmt::Display for Message {
         f.write_str(&self.localized(Language::Korean))
     }
 }
-impl std::error::Error for Message {}
+impl std::error::Error for Message {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        self.source.as_ref().map(|error| error.as_ref())
+    }
+}
 pub fn error_text(error: &anyhow::Error, language: Language) -> String {
     error
         .chain()
