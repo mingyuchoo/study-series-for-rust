@@ -3,10 +3,10 @@ use std::fmt;
 impl Language {
     /// Catalog lookups apply only to application-owned text, never user content.
     pub fn text(self, key: &str) -> &str {
-        if self == Self::English {
-            if let Some((_, english)) = TEXT.iter().find(|(k, _)| *k == key) {
-                return english;
-            }
+        if self == Self::English
+            && let Some((_, english)) = TEXT.iter().find(|(k, _)| *k == key)
+        {
+            return english;
         }
         key
     }
