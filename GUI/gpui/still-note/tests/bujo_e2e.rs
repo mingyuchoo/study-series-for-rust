@@ -80,6 +80,288 @@ fn set_date(cx: &mut VisualTestContext, value: &str) {
     render(cx);
 }
 
+fn reveal_settings(cx: &mut VisualTestContext) {
+    render(cx);
+    if cx.debug_bounds("language-en").is_none() {
+        click(cx, "nav-menu-toggle");
+    }
+}
+
+#[gpui::test]
+fn lt01_lt02_lt03_lt05_real_controls_preserve_draft_selection_and_restore_settings(cx: &mut TestAppContext) {
+    use stillnote::settings::{Language, ThemeMode};
+    let dir = tempdir().unwrap();
+    let path = dir.path().join("journal.json");
+    cx.update(bind_input_keys);
+    let (view, cx) = cx.add_window_view(|_, cx| JournalView::new(path.clone(), parse_date("2026-10-02").unwrap(), cx));
+    render(cx);
+    cx.read(|app| {
+        assert_eq!(view.read(app).settings.language, Language::Korean);
+        assert_eq!(view.read(app).settings.theme, ThemeMode::System);
+    });
+    add(cx, "사용자 기록 English 그대로");
+    let journal = snapshot(&view, cx).journal().clone();
+    let bytes = fs::read(&path).unwrap();
+    let id = journal.entries[0].id;
+    click(cx, format!("edit-{id}"));
+    type_in(cx, "entry-input", "한글🙂 draft");
+    cx.simulate_keystrokes("home right shift-right");
+    render(cx);
+    let input = snapshot(&view, cx).entry_input;
+    let before_selection = cx.update(|window, app| input.update(app, |input, cx| input.selected_text_range(false, window, cx).unwrap().range));
+    reveal_settings(cx);
+    for selector in ["language-en", "theme-light", "theme-dark", "language-ko", "language-en"] {
+        click(cx, selector);
+    }
+    assert_eq!(snapshot(&view, cx).entry_input, input, "changing presentation must retain input Entity");
+    assert_eq!(snapshot(&view, cx).entry_text, "한글🙂 draft");
+    assert_eq!(snapshot(&view, cx).journal(), &journal);
+    assert_eq!(fs::read(&path).unwrap(), bytes);
+    assert_eq!(cx.window_title().as_deref(), Some("Stillnote · My bullet journal"));
+    cx.read(|app| {
+        let view = view.read(app);
+        assert_eq!(view.editing, Some(id));
+        assert_eq!(view.date, parse_date("2026-10-02").unwrap());
+        assert_eq!(view.settings.language, Language::English);
+        assert_eq!(view.settings.theme, ThemeMode::Dark);
+        assert_eq!(view.window_title, "Stillnote · My bullet journal");
+        assert_eq!(view.entry_input.read(app).palette, stillnote::theme::Palette::DARK);
+        assert_eq!(view.entry_input.read(app).placeholder.as_ref(), "Capture a thought in one line");
+        assert_eq!(view.search_input.read(app).placeholder.as_ref(), "Search all entries…");
+        assert_eq!(view.collection_input.read(app).placeholder.as_ref(), "New collection name");
+        assert_eq!(view.target_input.read(app).placeholder.as_ref(), "Target date YYYY-MM-DD");
+    });
+    cx.update(|window, app| {
+        input.update(app, |input, cx| {
+            assert_eq!(input.selected_text_range(false, window, cx).unwrap().range, before_selection);
+            window.focus(&input.focus_handle(cx));
+        })
+    });
+    cx.simulate_input("X");
+    render(cx);
+    assert_eq!(
+        snapshot(&view, cx).entry_text,
+        "한X🙂 draft",
+        "typing must replace original selection after toggles"
+    );
+    // Unsaved draft is independent of persisted presentation settings.
+    cx.update(|window, _| window.remove_window());
+    cx.run_until_parked();
+    let (reopened, cx) = cx.add_window_view(|_, cx| JournalView::new(path.clone(), parse_date("2026-10-02").unwrap(), cx));
+    render(cx);
+    cx.read(|app| {
+        assert_eq!(reopened.read(app).settings.language, Language::English);
+        assert_eq!(reopened.read(app).settings.theme, ThemeMode::Dark);
+        assert_eq!(reopened.read(app).entry_input.read(app).palette, stillnote::theme::Palette::DARK);
+    });
+    assert_eq!(snapshot(&reopened, cx).journal(), &journal);
+}
+
+#[gpui::test]
+fn lt04_lt09_shared_appearance_handler_updates_system_and_all_inputs(cx: &mut TestAppContext) {
+    use gpui::WindowAppearance;
+    use stillnote::{settings::ThemeMode, theme::Palette};
+    let dir = tempdir().unwrap();
+    cx.update(bind_input_keys);
+    let (view, cx) = cx.add_window_view(|_, cx| JournalView::new(dir.path().join("journal.json"), parse_date("2026-10-02").unwrap(), cx));
+    reveal_settings(cx);
+    for (selector, mode) in [
+        ("theme-system", ThemeMode::System),
+        ("theme-light", ThemeMode::Light),
+        ("theme-dark", ThemeMode::Dark),
+    ] {
+        click(cx, selector);
+        for (appearance, system_expected) in [(WindowAppearance::Light, ThemeMode::Light), (WindowAppearance::Dark, ThemeMode::Dark)] {
+            cx.update(|_, app| view.update(app, |view, cx| view.appearance_changed(appearance, cx)));
+            let expected = if mode == ThemeMode::System { system_expected } else { mode };
+            cx.read(|app| {
+                let view = view.read(app);
+                assert_eq!(view.settings.theme, mode);
+                assert_eq!(view.effective_theme, expected);
+                for input in [
+                    &view.entry_input,
+                    &view.search_input,
+                    &view.date_input,
+                    &view.collection_input,
+                    &view.target_input,
+                ] {
+                    assert_eq!(input.read(app).palette, Palette::for_theme(expected));
+                }
+            });
+        }
+    }
+}
+
+#[gpui::test]
+fn lt02_lt06_settings_failure_localizes_without_blocking_user_data(cx: &mut TestAppContext) {
+    use stillnote::settings::Language;
+    let dir = tempdir().unwrap();
+    let path = dir.path().join("journal.json");
+    let invalid = b"{invalid settings";
+    fs::write(dir.path().join("settings.json"), invalid).unwrap();
+    cx.update(bind_input_keys);
+    let (view, cx) = cx.add_window_view(|_, cx| JournalView::new(path.clone(), parse_date("2026-10-02").unwrap(), cx));
+    render(cx);
+    assert!(cx.read(|app| view.read(app).settings_error.is_some()));
+    reveal_settings(cx);
+    click(cx, "language-en");
+    let error = cx.read(|app| view.read(app).settings_error.clone().unwrap());
+    assert!(error.is_ascii(), "English settings error contains untranslated application text: {error}");
+    assert!(error.to_lowercase().contains("setting"));
+    cx.read(|app| assert_eq!(view.read(app).settings.language, Language::English));
+    assert_eq!(fs::read(dir.path().join("settings.json")).unwrap(), invalid);
+    add(cx, "설정 오류에도 저널 저장");
+    assert_eq!(stillnote::Session::open(path).unwrap().journal.entries[0].text, "설정 오류에도 저널 저장");
+    set_date(cx, "2023-02-29");
+    let error = snapshot(&view, cx).error.unwrap();
+    assert!(error.is_ascii(), "English date error contains Korean: {error}");
+}
+
+#[gpui::test]
+fn lt07_both_languages_all_required_widths_keep_settings_and_window_controls_reachable(cx: &mut TestAppContext) {
+    let dir = tempdir().unwrap();
+    cx.update(bind_input_keys);
+    let (_, cx) = cx.add_window_view(|_, cx| JournalView::new(dir.path().join("journal.json"), parse_date("2026-10-02").unwrap(), cx));
+    for width in [600., 768., 1024., 1360.] {
+        cx.simulate_resize(size(px(width), px(900.)));
+        for language in ["language-ko", "language-en"] {
+            reveal_settings(cx);
+            click(cx, language);
+            for selector in [
+                "language-ko",
+                "language-en",
+                "theme-system",
+                "theme-light",
+                "theme-dark",
+                "window-minimize",
+                "window-maximize",
+                "window-close",
+            ] {
+                assert_reachable(cx, selector, width, 900.);
+            }
+            let selectors = ["language-ko", "language-en", "theme-system", "theme-light", "theme-dark"];
+            for (i, a) in selectors.iter().enumerate() {
+                let a = cx.debug_bounds(a).unwrap();
+                for b in &selectors[i + 1..] {
+                    let b = cx.debug_bounds(b).unwrap();
+                    assert!(
+                        a.right() <= b.left() || b.right() <= a.left() || a.bottom() <= b.top() || b.bottom() <= a.top(),
+                        "overlapping settings {a:?}/{b:?}"
+                    );
+                }
+            }
+            click(cx, "theme-light");
+            click(cx, "theme-dark");
+        }
+    }
+}
+
+#[gpui::test]
+fn lt08_keyboard_tab_reaches_and_activates_every_setting(cx: &mut TestAppContext) {
+    use stillnote::settings::{Language, ThemeMode};
+    let dir = tempdir().unwrap();
+    fs::write(dir.path().join("settings.json"), r#"{"language":"english","theme":"dark"}"#).unwrap();
+    cx.update(bind_input_keys);
+    let (view, cx) = cx.add_window_view(|_, cx| JournalView::new(dir.path().join("journal.json"), parse_date("2026-10-02").unwrap(), cx));
+    cx.simulate_resize(size(px(1600.), px(900.)));
+    render(cx);
+    for index in 0..5 {
+        let mut reached = false;
+        for _ in 0..30 {
+            cx.simulate_keystrokes("tab");
+            render(cx);
+            if cx.update(|window, app| view.read(app).setting_focus[index].is_focused(window)) {
+                reached = true;
+                break;
+            }
+        }
+        assert!(reached, "keyboard could not focus setting {index}");
+        cx.simulate_keystrokes(if index % 2 == 0 { "enter" } else { "space" });
+        render(cx);
+        cx.read(|app| {
+            let settings = view.read(app).settings;
+            match index {
+                | 0 => assert_eq!(settings.language, Language::Korean),
+                | 1 => assert_eq!(settings.language, Language::English),
+                | 2 => assert_eq!(settings.theme, ThemeMode::System),
+                | 3 => assert_eq!(settings.theme, ThemeMode::Light),
+                | 4 => assert_eq!(settings.theme, ThemeMode::Dark),
+                | _ => unreachable!(),
+            }
+        });
+    }
+}
+
+#[gpui::test]
+fn lt02_lt03_existing_errors_search_migration_and_ime_survive_presentation_changes(cx: &mut TestAppContext) {
+    let dir = tempdir().unwrap();
+    let path = dir.path().join("journal.json");
+    cx.update(bind_input_keys);
+    let (view, cx) = cx.add_window_view(|_, cx| JournalView::new(path.clone(), parse_date("2026-10-02").unwrap(), cx));
+    add(cx, "검색할 사용자 기록");
+    let id = snapshot(&view, cx).journal().entries[0].id;
+    click(cx, format!("migrate-{id}"));
+    type_in(cx, "target-input", "2027-03-01");
+    click(cx, "target-future");
+    type_in(cx, "search-input", "사용자");
+    let before = snapshot(&view, cx);
+    let inputs = cx.read(|app| {
+        let view = view.read(app);
+        [
+            view.entry_input.clone(),
+            view.search_input.clone(),
+            view.date_input.clone(),
+            view.collection_input.clone(),
+            view.target_input.clone(),
+        ]
+    });
+    let input = inputs[0].clone();
+    cx.update(|window, app| {
+        input.update(app, |input, cx| {
+            input.replace_and_mark_text_in_range(None, "한🙂", Some(1..1), window, cx);
+        })
+    });
+    reveal_settings(cx);
+    click(cx, "language-en");
+    click(cx, "theme-light");
+    cx.read(|app| {
+        let view = view.read(app);
+        assert_eq!(view.migrating, Some(id));
+        assert_eq!(view.target_log, Log::Future);
+        assert_eq!(view.target_input.read(app).content.as_ref(), "2027-03-01");
+        assert_eq!(view.search_input.read(app).content.as_ref(), "사용자");
+        assert_eq!(view.date, before.date);
+        assert_eq!(view.log, before.log);
+        assert_eq!(view.filter, before.filter);
+        assert_eq!(view.entry_input, inputs[0]);
+        assert_eq!(view.search_input, inputs[1]);
+        assert_eq!(view.date_input, inputs[2]);
+        assert_eq!(view.collection_input, inputs[3]);
+        assert_eq!(view.target_input, inputs[4]);
+    });
+    cx.update(|window, app| {
+        input.update(app, |input, cx| {
+            assert_eq!(input.content.as_ref(), "한🙂");
+            assert_eq!(input.marked_text_range(window, cx), Some(0..3));
+            assert_eq!(input.selected_text_range(false, window, cx).unwrap().range, 1..1);
+            input.unmark_text(window, cx);
+        })
+    });
+    type_in(cx, "search-input", "");
+    // A persisted journal write failure must use the current language, and
+    // translating the already-visible error must not clear the user's draft.
+    fs::create_dir(path.with_extension("json.bak")).unwrap();
+    add(cx, "failed draft");
+    let english = snapshot(&view, cx).error.unwrap();
+    assert!(english.contains("Unable to save"), "{english}");
+    assert!(english.is_ascii(), "application-owned failure text was not translated: {english}");
+    reveal_settings(cx);
+    click(cx, "language-ko");
+    assert!(snapshot(&view, cx).error.unwrap().contains("저장하지 못했습니다"));
+    assert_eq!(snapshot(&view, cx).entry_text, "failed draft");
+    assert_eq!(snapshot(&view, cx).journal(), before.journal());
+}
+
 fn assert_reachable(cx: &mut VisualTestContext, selector: &str, width: f32, height: f32) {
     let selector: &'static str = Box::leak(selector.to_owned().into_boxed_str());
     let bounds = cx.debug_bounds(selector).unwrap_or_else(|| panic!("missing {selector} at {width}px"));

@@ -32,7 +32,8 @@ actions!(
 pub struct TextInput {
     focus_handle: FocusHandle,
     pub content: SharedString,
-    placeholder: SharedString,
+    pub placeholder: SharedString,
+    pub palette: Palette,
     selected_range: Range<usize>,
     selection_reversed: bool,
     marked_range: Option<Range<usize>>,
@@ -394,7 +395,7 @@ impl Element for TextElement {
         let style = window.text_style();
 
         let (display_text, text_color) = if content.is_empty() {
-            (input.placeholder.clone(), rgb(FAINT).into())
+            (input.placeholder.clone(), rgb(input.palette.faint).into())
         } else {
             (content, style.color)
         };
@@ -445,7 +446,7 @@ impl Element for TextElement {
                 None,
                 Some(fill(
                     Bounds::new(point(bounds.left() + cursor_pos, bounds.top()), size(px(2.), bounds.bottom() - bounds.top())),
-                    rgb(INK),
+                    rgb(input.palette.ink),
                 )),
             )
         } else {
@@ -455,7 +456,7 @@ impl Element for TextElement {
                         point(bounds.left() + line.x_for_index(selected_range.start) - horizontal_offset, bounds.top()),
                         point(bounds.left() + line.x_for_index(selected_range.end) - horizontal_offset, bounds.bottom()),
                     ),
-                    rgba(0xfaff6940),
+                    rgba(input.palette.selection),
                 )),
                 None,
             )
@@ -517,9 +518,9 @@ impl Render for TextInput {
             .border_2()
             .rounded(px(INPUT_RADIUS))
             .border_color(if self.focus_handle.is_focused(window) {
-                rgb(PRIMARY)
+                rgb(self.palette.primary)
             } else {
-                rgb(HAIRLINE_STRONG)
+                rgb(self.palette.hairline_strong)
             })
             .on_action(cx.listener(Self::backspace))
             .on_action(cx.listener(Self::delete))
@@ -539,8 +540,8 @@ impl Render for TextInput {
             .on_mouse_up_out(MouseButton::Left, cx.listener(Self::on_mouse_up))
             .on_mouse_move(cx.listener(Self::on_mouse_move))
             .w_full()
-            .bg(rgb(FIELD))
-            .text_color(rgb(INK))
+            .bg(rgb(self.palette.field))
+            .text_color(rgb(self.palette.ink))
             .font_family(FONT_FAMILY)
             .font_weight(gpui::FontWeight(BODY_WEIGHT))
             .line_height(px(24.8))
@@ -572,6 +573,7 @@ impl TextInput {
             focus_handle: cx.focus_handle(),
             content: "".into(),
             placeholder: placeholder.to_owned().into(),
+            palette: Palette::DARK,
             selected_range: 0..0,
             selection_reversed: false,
             marked_range: None,

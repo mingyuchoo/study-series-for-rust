@@ -5,6 +5,87 @@ use uuid::Uuid;
 #[path = "support/font_metadata.rs"]
 mod font_metadata;
 
+#[test]
+fn lt01_lt04_defaults_and_all_system_fixed_appearance_combinations() {
+    use gpui::WindowAppearance::{Dark, Light, VibrantDark, VibrantLight};
+    use stillnote::settings::{Language, Settings, ThemeMode};
+    assert_eq!(
+        Settings::default(),
+        Settings {
+            language: Language::Korean,
+            theme: ThemeMode::System
+        }
+    );
+    for (appearance, system_expected) in [
+        (Light, ThemeMode::Light),
+        (VibrantLight, ThemeMode::Light),
+        (Dark, ThemeMode::Dark),
+        (VibrantDark, ThemeMode::Dark),
+    ] {
+        assert_eq!(ThemeMode::System.resolve(appearance), system_expected);
+        assert_eq!(ThemeMode::Light.resolve(appearance), ThemeMode::Light);
+        assert_eq!(ThemeMode::Dark.resolve(appearance), ThemeMode::Dark);
+    }
+}
+
+#[test]
+fn lt09_light_text_accent_cursor_and_focus_have_readable_contrast() {
+    use stillnote::theme::Palette;
+    fn luminance(rgb: u32) -> f64 {
+        let channel = |shift: u32| {
+            let value = f64::from((rgb >> shift) & 255_u32) / 255.;
+            if value <= 0.04045 {
+                value / 12.92
+            } else {
+                ((value + 0.055) / 1.055).powf(2.4)
+            }
+        };
+        0.2126 * channel(16) + 0.7152 * channel(8) + 0.0722 * channel(0)
+    }
+    fn contrast(foreground: u32, background: u32) -> f64 {
+        let a = luminance(foreground);
+        let b = luminance(background);
+        (a.max(b) + 0.05) / (a.min(b) + 0.05)
+    }
+    let p = Palette::LIGHT;
+    for background in [p.canvas, p.field, p.card, p.soft, p.elevated] {
+        for text in [p.ink, p.body, p.body_strong, p.muted, p.faint] {
+            assert!(contrast(text, background) >= 4.5, "light text {text:x} on {background:x}");
+        }
+        assert!(contrast(p.primary, background) >= 3., "cursor/focus on {background:x}");
+    }
+    for accent in [p.primary, p.primary_active] {
+        assert!(contrast(p.on_primary, accent) >= 4.5, "accent button text");
+    }
+    assert_eq!(Palette::DARK.canvas, 0x0a0a0a);
+    assert_eq!(Palette::DARK.primary, 0xfaff69);
+    assert_ne!(Palette::LIGHT.canvas, Palette::DARK.canvas);
+}
+
+#[test]
+fn lt02_catalog_and_error_context_translate_application_text_only() {
+    use stillnote::{
+        i18n::{Message, error_text},
+        settings::Language,
+    };
+    for (korean, english) in [
+        ("인덱스", "Index"),
+        ("전체 기록 검색…", "Search all entries…"),
+        ("시스템", "System"),
+        ("라이트", "Light"),
+        ("다크", "Dark"),
+        ("저장하지 못했습니다", "Unable to save"),
+    ] {
+        assert_eq!(Language::Korean.text(korean), korean);
+        assert_eq!(Language::English.text(korean), english);
+    }
+    assert_eq!(Language::English.text("사용자가 쓴 기록 café"), "사용자가 쓴 기록 café");
+    let error = anyhow::Error::new(Message::new("저장하지 못했습니다")).context(std::io::Error::other("OS detail"));
+    assert!(error_text(&error, Language::English).contains("Unable to save"));
+    assert!(error_text(&error, Language::English).contains("OS detail"));
+    assert!(error_text(&error, Language::Korean).contains("저장하지 못했습니다"));
+}
+
 fn day(value: &str) -> NaiveDate {
     parse_date(value).unwrap()
 }

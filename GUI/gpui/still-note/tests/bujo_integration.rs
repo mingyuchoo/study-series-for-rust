@@ -4,6 +4,99 @@ use tempfile::tempdir;
 use uuid::Uuid;
 
 #[test]
+fn lt01_lt05_settings_defaults_roundtrip_and_directory_isolation_preserve_journal() {
+    use stillnote::settings::{Language, Settings, SettingsStore, ThemeMode};
+    let dir = tempdir().unwrap();
+    let path = dir.path().join("journal.json");
+    let mut session = Session::open(&path).unwrap();
+    session
+        .transact(|j| j.add_entry(parse_date("2026-10-02")?, Log::Daily, Kind::Note, "사용자 기록 English"))
+        .unwrap();
+    let journal_bytes = fs::read(&path).unwrap();
+    let mut store = SettingsStore::new(&path);
+    assert_eq!(
+        store.load().unwrap(),
+        Settings {
+            language: Language::Korean,
+            theme: ThemeMode::System
+        }
+    );
+    assert!(!dir.path().join("settings.json").exists());
+    let chosen = Settings {
+        language: Language::English,
+        theme: ThemeMode::Dark,
+    };
+    store.save(&chosen).unwrap();
+    assert_eq!(SettingsStore::new(&path).load().unwrap(), chosen);
+    assert_eq!(SettingsStore::new(dir.path().join("another-journal.json")).load().unwrap(), chosen);
+    let other = tempdir().unwrap();
+    assert_eq!(SettingsStore::new(other.path().join("journal.json")).load().unwrap(), Settings::default());
+    assert_eq!(fs::read(&path).unwrap(), journal_bytes);
+    assert_eq!(Session::open(&path).unwrap().journal, session.journal);
+}
+
+#[test]
+fn lt06_invalid_settings_preserve_original_and_do_not_block_journal() {
+    use stillnote::settings::{Settings, SettingsStore};
+    for invalid in [
+        "{broken",
+        r#"{"language":"Klingon","theme":"system"}"#,
+        r#"{"language":"korean","theme":"Purple"}"#,
+    ] {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("journal.json");
+        let settings = dir.path().join("settings.json");
+        fs::write(&settings, invalid).unwrap();
+        let mut store = SettingsStore::new(&path);
+        assert!(store.load().is_err());
+        assert!(store.save(&Settings::default()).is_err(), "invalid settings require recovery before overwrite");
+        assert_eq!(fs::read(&settings).unwrap(), invalid.as_bytes());
+        let mut session = Session::open(&path).unwrap();
+        session.transact(|j| j.add_collection("설정 오류에도 작성 가능")).unwrap();
+        assert_eq!(Session::open(path).unwrap().journal, session.journal);
+    }
+}
+
+#[test]
+fn lt06_settings_read_and_atomic_write_failures_preserve_files() {
+    use stillnote::settings::{Language, Settings, SettingsStore, ThemeMode};
+    let dir = tempdir().unwrap();
+    let path = dir.path().join("journal.json");
+    let settings_path = dir.path().join("settings.json");
+    fs::create_dir(&settings_path).unwrap();
+    let mut store = SettingsStore::new(&path);
+    assert!(store.load().is_err());
+    assert!(store.save(&Settings::default()).is_err());
+    assert!(settings_path.is_dir());
+    fs::remove_dir(&settings_path).unwrap();
+    let mut store = SettingsStore::new(&path);
+    store.load().unwrap();
+    store.save(&Settings::default()).unwrap();
+    let bytes = fs::read(&settings_path).unwrap();
+    // An external change must be preserved instead of silently overwritten.
+    let externally_changed = b"{external change}";
+    fs::write(&settings_path, externally_changed).unwrap();
+    assert!(
+        store
+            .save(&Settings {
+                language: Language::English,
+                theme: ThemeMode::Light
+            })
+            .is_err()
+    );
+    assert_eq!(fs::read(&settings_path).unwrap(), externally_changed);
+    fs::write(&settings_path, &bytes).unwrap();
+    assert_eq!(SettingsStore::new(&path).load().unwrap(), Settings::default());
+    assert!(!path.exists());
+    let blocked_parent = dir.path().join("not-a-directory");
+    let mut blocked_store = SettingsStore::new(blocked_parent.join("journal.json"));
+    blocked_store.load().unwrap();
+    fs::write(&blocked_parent, "keep parent file").unwrap();
+    assert!(blocked_store.save(&Settings::default()).is_err());
+    assert_eq!(fs::read(blocked_parent).unwrap(), b"keep parent file");
+}
+
+#[test]
 fn ac07_empty_first_run_does_not_seed_or_write_until_user_mutation() {
     let dir = tempdir().unwrap();
     let path = dir.path().join("journal.json");

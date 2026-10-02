@@ -51,3 +51,70 @@ pub fn register_fonts(cx: &gpui::App) {
         ])
         .expect("Unable to register bundled Pretendard fonts");
 }
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Palette {
+    pub canvas: u32,
+    pub ink: u32,
+    pub body: u32,
+    pub body_strong: u32,
+    pub muted: u32,
+    pub faint: u32,
+    pub field: u32,
+    pub card: u32,
+    pub soft: u32,
+    pub elevated: u32,
+    pub hairline: u32,
+    pub hairline_soft: u32,
+    pub hairline_strong: u32,
+    pub primary: u32,
+    pub primary_active: u32,
+    pub primary_disabled: u32,
+    pub on_primary: u32,
+    pub selection: u32,
+}
+impl Palette {
+    pub const DARK: Self = Self {
+        canvas: CANVAS,
+        ink: INK,
+        body: BODY,
+        body_strong: BODY_STRONG,
+        muted: MUTED,
+        faint: FAINT,
+        field: FIELD,
+        card: CARD,
+        soft: SOFT,
+        elevated: ELEVATED,
+        hairline: HAIRLINE,
+        hairline_soft: HAIRLINE_SOFT,
+        hairline_strong: HAIRLINE_STRONG,
+        primary: PRIMARY,
+        primary_active: PRIMARY_ACTIVE,
+        primary_disabled: PRIMARY_DISABLED,
+        on_primary: ON_PRIMARY,
+        selection: 0xfaff6940,
+    };
+    pub const LIGHT: Self = Self {
+        canvas: 0xf7f7f5,
+        ink: 0x191919,
+        body: 0x333333,
+        body_strong: 0x242424,
+        muted: 0x595959,
+        faint: 0x606060,
+        field: 0xffffff,
+        card: 0xffffff,
+        soft: 0xebebe7,
+        elevated: 0xe1e1db,
+        hairline: 0xb5b5ad,
+        hairline_soft: 0xb5b5ad,
+        hairline_strong: 0x898980,
+        primary: 0x555a00,
+        primary_active: 0x454a00,
+        primary_disabled: 0xd0d0c0,
+        on_primary: 0xffffff,
+        selection: 0x555a0040,
+    };
+    pub fn for_theme(mode: crate::settings::ThemeMode) -> Self {
+        if mode == crate::settings::ThemeMode::Light { Self::LIGHT } else { Self::DARK }
+    }
+}

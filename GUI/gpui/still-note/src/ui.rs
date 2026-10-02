@@ -1,4 +1,8 @@
 use crate::{
+    i18n::{Message, error_text},
+    settings::{Language, Settings, SettingsStore, ThemeMode},
+};
+use crate::{
     input::{Submitted, TextInput},
     *,
 };
@@ -23,7 +27,7 @@ pub fn journal_window_options(bounds: Bounds<Pixels>) -> WindowOptions {
     }
 }
 
-fn window_control(id: &'static str, glyph: &'static str, area: WindowControlArea) -> impl IntoElement {
+fn window_control(id: &'static str, glyph: &'static str, area: WindowControlArea, palette: Palette) -> impl IntoElement {
     let glyph_selector = if id == "window-maximize" && glyph == "❐" {
         "window-restore-glyph"
     } else if id == "window-maximize" {
@@ -41,8 +45,8 @@ fn window_control(id: &'static str, glyph: &'static str, area: WindowControlArea
         .items_center()
         .justify_center()
         .rounded(px(CONTROL_RADIUS))
-        .bg(rgb(CARD))
-        .text_color(rgb(INK))
+        .bg(rgb(palette.card))
+        .text_color(rgb(palette.ink))
         .text_size(px(16.))
         .line_height(px(16.))
         .font_weight(FontWeight(CONTROL_WEIGHT))
@@ -77,9 +81,24 @@ enum Command {
     StopEditing,
     Jump(Uuid),
     ToggleMenu,
+    Language(Language),
+    Theme(ThemeMode),
 }
 
 pub struct JournalView {
+    pub settings: Settings,
+    pub settings_path: PathBuf,
+    pub effective_theme: ThemeMode,
+    pub palette: Palette,
+    pub window_title: String,
+    pub setting_focus: [FocusHandle; 5],
+    pub settings_error: Option<String>,
+    settings_store: SettingsStore,
+    settings_error_source: Option<anyhow::Error>,
+    error_source: Option<anyhow::Error>,
+    load_error_source: Option<anyhow::Error>,
+    appearance: WindowAppearance,
+    appearance_observed: bool,
     pub session: Option<Session>,
     pub date: NaiveDate,
     pub log: Log,
@@ -104,19 +123,27 @@ pub struct JournalView {
 impl JournalView {
     pub fn new(path: PathBuf, date: NaiveDate, cx: &mut Context<Self>) -> Self {
         register_fonts(cx);
+        let mut settings_store = SettingsStore::new(&path);
+        let (settings, settings_error_source) = match settings_store.load() {
+            | Ok(settings) => (settings, None),
+            | Err(error) => (Settings::default(), Some(error)),
+        };
+        let language = settings.language;
+        let settings_path = settings_store.path.clone();
+        let settings_error = settings_error_source.as_ref().map(|e| error_text(e, language));
         let (session, error) = match Session::open(path.clone()) {
             | Ok(s) => (Some(s), None),
-            | Err(e) => (None, Some(format!("{e:#}"))),
+            | Err(e) => (None, Some(e)),
         };
-        let entry_input = cx.new(|cx| TextInput::new("머릿속의 생각을 한 줄로 기록해 보세요", cx));
-        let search_input = cx.new(|cx| TextInput::new("전체 기록 검색…", cx));
+        let entry_input = cx.new(|cx| TextInput::new(language.text("머릿속의 생각을 한 줄로 기록해 보세요"), cx));
+        let search_input = cx.new(|cx| TextInput::new(language.text("전체 기록 검색…"), cx));
         let date_input = cx.new(|cx| {
             let mut input = TextInput::new("YYYY-MM-DD", cx);
             input.set_text(&date.to_string(), cx);
             input
         });
-        let collection_input = cx.new(|cx| TextInput::new("새 컬렉션 이름", cx));
-        let target_input = cx.new(|cx| TextInput::new("대상 날짜 YYYY-MM-DD", cx));
+        let collection_input = cx.new(|cx| TextInput::new(language.text("새 컬렉션 이름"), cx));
+        let target_input = cx.new(|cx| TextInput::new(language.text("대상 날짜 YYYY-MM-DD"), cx));
         let subscriptions = vec![
             cx.subscribe(&entry_input, |this, _, _: &Submitted, cx| {
                 this.commit_entry(cx);
@@ -132,12 +159,26 @@ impl JournalView {
             }),
             cx.observe(&search_input, |_, _, cx| cx.notify()),
         ];
+        let load_error = error.as_ref().map(|e| error_text(e, language));
         Self {
+            settings,
+            settings_path,
+            settings_store,
+            settings_error,
+            settings_error_source,
+            effective_theme: ThemeMode::Dark,
+            palette: Palette::DARK,
+            window_title: language.text("Stillnote · 나의 불렛저널").to_owned(),
+            setting_focus: std::array::from_fn(|_| cx.focus_handle()),
+            appearance: WindowAppearance::Dark,
+            appearance_observed: false,
+            error_source: None,
+            load_error_source: error,
             session,
             date,
             log: Log::Daily,
-            load_error: error.clone(),
-            error,
+            error: load_error.clone(),
+            load_error,
             filter: Filter::All,
             kind: Kind::Task,
             index: false,
@@ -155,6 +196,74 @@ impl JournalView {
             _subscriptions: subscriptions,
         }
     }
+    fn tr<'a>(&self, key: &'a str) -> &'a str {
+        self.settings.language.text(key)
+    }
+    fn present_errors(&mut self) {
+        self.error = self
+            .error_source
+            .as_ref()
+            .or(self.load_error_source.as_ref())
+            .map(|e| error_text(e, self.settings.language));
+        self.load_error = self.load_error_source.as_ref().map(|e| error_text(e, self.settings.language));
+        self.settings_error = self.settings_error_source.as_ref().map(|e| error_text(e, self.settings.language));
+    }
+    fn set_error(&mut self, error: anyhow::Error) {
+        self.error_source = Some(error);
+        self.present_errors();
+    }
+    fn save_settings(&mut self) {
+        self.settings_error_source = self
+            .settings_store
+            .save(&self.settings)
+            .map_err(|e| e.context(Message::new("설정을 저장하지 못했습니다. 선택은 현재 세션에 적용됩니다")))
+            .err();
+        self.present_errors();
+    }
+    pub fn set_language(&mut self, language: Language, cx: &mut Context<Self>) {
+        self.settings.language = language;
+        for (input, key) in [
+            (&self.entry_input, "머릿속의 생각을 한 줄로 기록해 보세요"),
+            (&self.search_input, "전체 기록 검색…"),
+            (&self.collection_input, "새 컬렉션 이름"),
+            (&self.target_input, "대상 날짜 YYYY-MM-DD"),
+        ] {
+            input.update(cx, |input, cx| {
+                input.placeholder = language.text(key).to_owned().into();
+                cx.notify();
+            });
+        }
+        self.window_title = language.text("Stillnote · 나의 불렛저널").to_owned();
+        self.save_settings();
+        cx.notify();
+    }
+    pub fn set_theme(&mut self, theme: ThemeMode, cx: &mut Context<Self>) {
+        self.settings.theme = theme;
+        self.apply_palette(cx);
+        self.save_settings();
+        cx.notify();
+    }
+    pub fn appearance_changed(&mut self, appearance: WindowAppearance, cx: &mut Context<Self>) {
+        self.appearance = appearance;
+        self.apply_palette(cx);
+        cx.notify();
+    }
+    fn apply_palette(&mut self, cx: &mut Context<Self>) {
+        self.effective_theme = self.settings.theme.resolve(self.appearance);
+        self.palette = Palette::for_theme(self.effective_theme);
+        for input in [
+            &self.entry_input,
+            &self.search_input,
+            &self.date_input,
+            &self.collection_input,
+            &self.target_input,
+        ] {
+            input.update(cx, |input, cx| {
+                input.palette = self.palette;
+                cx.notify();
+            });
+        }
+    }
     pub fn journal(&self) -> &Journal {
         self.session.as_ref().map(|s| &s.journal).unwrap_or(&self.empty)
     }
@@ -162,17 +271,18 @@ impl JournalView {
         let result = self
             .session
             .as_mut()
-            .ok_or_else(|| anyhow::anyhow!("원본 파일 보호를 위해 읽기 전용입니다. README의 복구 안내를 확인해 주세요"))
+            .ok_or_else(|| anyhow::anyhow!(Message::new("원본 파일 보호를 위해 읽기 전용입니다. README의 복구 안내를 확인해 주세요")))
             .and_then(|s| s.transact(op));
         match result {
             | Ok(v) => {
                 self.error = None;
+                self.error_source = None;
                 self.notice = format!("로컬 저장 완료 · {}", Local::now().format("%H:%M"));
                 cx.notify();
                 Some(v)
             },
             | Err(e) => {
-                self.error = Some(format!("저장하지 못했습니다 · {e:#}"));
+                self.set_error(e.context(Message::new("저장하지 못했습니다")));
                 cx.notify();
                 None
             },
@@ -187,10 +297,11 @@ impl JournalView {
         match parse_date(&self.date_input.read(cx).content) {
             | Ok(date) => {
                 self.error = None;
+                self.error_source = None;
                 self.set_date(date, cx);
             },
             | Err(_) => {
-                self.error = Some("올바른 날짜를 입력해 주세요 (YYYY-MM-DD)".into());
+                self.set_error(Message::new("올바른 날짜를 입력해 주세요 (YYYY-MM-DD)").into());
                 cx.notify();
             },
         }
@@ -240,7 +351,7 @@ impl JournalView {
         let date = match parse_date(&raw) {
             | Ok(d) => d,
             | Err(_) => {
-                self.error = Some("이월 대상 날짜를 확인해 주세요".into());
+                self.set_error(Message::new("이월 대상 날짜를 확인해 주세요").into());
                 cx.notify();
                 return;
             },
@@ -253,6 +364,8 @@ impl JournalView {
     fn command(&mut self, command: Command, cx: &mut Context<Self>) {
         match command {
             | Command::ToggleMenu => self.menu_open = !self.menu_open,
+            | Command::Language(language) => self.set_language(language, cx),
+            | Command::Theme(theme) => self.set_theme(theme, cx),
             | Command::Nav(log) => {
                 self.menu_open = false;
                 self.log = log;
@@ -286,7 +399,7 @@ impl JournalView {
             },
             | Command::Month(delta) => match shift_month(self.date, delta) {
                 | Ok(date) => self.set_date(date, cx),
-                | Err(e) => self.error = Some(e.to_string()),
+                | Err(e) => self.set_error(e),
             },
             | Command::Today => self.set_date(Local::now().date_naive(), cx),
             | Command::Filter => {
@@ -368,7 +481,18 @@ impl JournalView {
         cx: &mut Context<Self>,
     ) -> impl IntoElement + use<I, L> {
         let id = id.into();
-        let segmented = id.starts_with("kind-") || id.starts_with("target-");
+        let setting = id.starts_with("language-") || id.starts_with("theme-");
+        let focus = match id.as_str() {
+            | "language-ko" => Some(self.setting_focus[0].clone()),
+            | "language-en" => Some(self.setting_focus[1].clone()),
+            | "theme-system" => Some(self.setting_focus[2].clone()),
+            | "theme-light" => Some(self.setting_focus[3].clone()),
+            | "theme-dark" => Some(self.setting_focus[4].clone()),
+            | _ => None,
+        };
+        let keyboard_command = command.clone();
+        let palette = self.palette;
+        let segmented = setting || id.starts_with("kind-") || id.starts_with("target-");
         let tab = segmented || id.starts_with("nav-") || id.starts_with("collection-");
         let primary = matches!(id.as_str(), "add-entry" | "save-entry" | "confirm-migrate" | "create-collection");
         let wrapping = id.starts_with("collection-") || id.starts_with("index-") || id.starts_with("trace-") || id.starts_with("source-");
@@ -392,25 +516,36 @@ impl JournalView {
             .border_color(if tab && !active {
                 rgba(0x00000000)
             } else {
-                rgb(if primary { PRIMARY } else { CARD })
+                rgb(if primary { self.palette.primary } else { self.palette.card })
             })
             .cursor_pointer()
+            .tab_index(0)
+            .when_some(focus, |d, focus| d.track_focus(&focus))
+            .focus(move |s| s.border_color(rgb(palette.primary)).bg(rgb(palette.elevated)).text_color(rgb(palette.ink)))
+            .on_key_down(cx.listener(move |this, event: &KeyDownEvent, _, cx| {
+                if matches!(event.keystroke.key.as_str(), "enter" | "space") {
+                    this.command(keyboard_command.clone(), cx);
+                    cx.stop_propagation();
+                }
+            }))
             .text_size(px(14.))
             .line_height(px(if tab { 19.6 } else { 14. }))
             .font_weight(FontWeight(if tab { NAV_WEIGHT } else { CONTROL_WEIGHT }))
             .text_color(rgb(if primary {
-                ON_PRIMARY
+                self.palette.on_primary
             } else if tab && !active {
-                MUTED
+                self.palette.muted
             } else {
-                INK
+                self.palette.ink
             }))
             .bg(if tab && !active {
                 rgba(0x00000000)
             } else {
-                rgb(if primary { PRIMARY } else { CARD })
+                rgb(if primary { self.palette.primary } else { self.palette.card })
             })
-            .when(primary, |d| d.active(|s| s.bg(rgb(PRIMARY_ACTIVE)).border_color(rgb(PRIMARY_ACTIVE))))
+            .when(primary, |d| {
+                d.active(|s| s.bg(rgb(self.palette.primary_active)).border_color(rgb(self.palette.primary_active)))
+            })
             .child(
                 div()
                     .id(SharedString::from(label_id.clone()))
@@ -420,6 +555,65 @@ impl JournalView {
                     .child(label),
             )
             .on_click(cx.listener(move |this, _, _, cx| this.command(command.clone(), cx)))
+    }
+    fn settings_controls(&self, cx: &mut Context<Self>) -> impl IntoElement + use<> {
+        div()
+            .id("settings-controls")
+            .debug_selector(|| "settings-controls".into())
+            .flex()
+            .flex_wrap()
+            .gap_2()
+            .child(
+                div()
+                    .id("language-controls")
+                    .flex()
+                    .gap_1()
+                    .rounded(px(CONTROL_RADIUS))
+                    .bg(rgb(self.palette.soft))
+                    .child(self.button(
+                        "language-ko",
+                        "한국어",
+                        Command::Language(Language::Korean),
+                        self.settings.language == Language::Korean,
+                        cx,
+                    ))
+                    .child(self.button(
+                        "language-en",
+                        "English",
+                        Command::Language(Language::English),
+                        self.settings.language == Language::English,
+                        cx,
+                    )),
+            )
+            .child(
+                div()
+                    .id("theme-controls")
+                    .flex()
+                    .gap_1()
+                    .rounded(px(CONTROL_RADIUS))
+                    .bg(rgb(self.palette.soft))
+                    .child(self.button(
+                        "theme-system",
+                        self.tr("시스템").to_owned(),
+                        Command::Theme(ThemeMode::System),
+                        self.settings.theme == ThemeMode::System,
+                        cx,
+                    ))
+                    .child(self.button(
+                        "theme-light",
+                        self.tr("라이트").to_owned(),
+                        Command::Theme(ThemeMode::Light),
+                        self.settings.theme == ThemeMode::Light,
+                        cx,
+                    ))
+                    .child(self.button(
+                        "theme-dark",
+                        self.tr("다크").to_owned(),
+                        Command::Theme(ThemeMode::Dark),
+                        self.settings.theme == ThemeMode::Dark,
+                        cx,
+                    )),
+            )
     }
     fn input(&self, id: &'static str, input: &Entity<TextInput>) -> impl IntoElement + use<> {
         div()
@@ -448,19 +642,19 @@ impl JournalView {
     }
     fn title(&self) -> String {
         if self.index {
-            return "인덱스".into();
+            return self.tr("인덱스").to_owned();
         }
         match self.log {
-            | Log::Daily => "일간 로그".into(),
-            | Log::Monthly => "월간 로그".into(),
-            | Log::Future => "미래 로그".into(),
+            | Log::Daily => self.tr("일간 로그").to_owned(),
+            | Log::Monthly => self.tr("월간 로그").to_owned(),
+            | Log::Future => self.tr("미래 로그").to_owned(),
             | Log::Collection(id) => self
                 .journal()
                 .collections
                 .iter()
                 .find(|c| c.id == id)
                 .map(|c| c.name.clone())
-                .unwrap_or("컬렉션".into()),
+                .unwrap_or(self.tr("컬렉션").to_owned()),
         }
     }
     fn location(&self, e: &Entry) -> String {
@@ -468,16 +662,16 @@ impl JournalView {
             "{} · {}",
             e.date,
             match &e.log {
-                | Log::Daily => "일간".into(),
-                | Log::Monthly => "월간".into(),
-                | Log::Future => "미래".into(),
+                | Log::Daily => self.tr("일간").to_owned(),
+                | Log::Monthly => self.tr("월간").to_owned(),
+                | Log::Future => self.tr("미래").to_owned(),
                 | Log::Collection(id) => self
                     .journal()
                     .collections
                     .iter()
                     .find(|c| c.id == *id)
                     .map(|c| c.name.clone())
-                    .unwrap_or("컬렉션".into()),
+                    .unwrap_or(self.tr("컬렉션").to_owned()),
             }
         )
     }
@@ -489,7 +683,11 @@ impl JournalView {
             if e.kind == Kind::Task {
                 actions = actions.child(self.button(
                     format!("complete-{id}"),
-                    if e.status == Status::Complete { "재개" } else { "완료" },
+                    if e.status == Status::Complete {
+                        self.tr("재개").to_owned()
+                    } else {
+                        self.tr("완료").to_owned()
+                    },
                     Command::Complete(id),
                     false,
                     cx,
@@ -503,14 +701,14 @@ impl JournalView {
                     false,
                     cx,
                 ))
-                .child(self.button(format!("edit-{id}"), "수정", Command::Edit(id), false, cx))
-                .child(self.button(format!("cancel-{id}"), "취소", Command::Cancel(id), false, cx));
+                .child(self.button(format!("edit-{id}"), self.tr("수정").to_owned(), Command::Edit(id), false, cx))
+                .child(self.button(format!("cancel-{id}"), self.tr("취소").to_owned(), Command::Cancel(id), false, cx));
             if e.is_open_task() {
-                actions = actions.child(self.button(format!("migrate-{id}"), "이월 →", Command::Migrate(id), false, cx));
+                actions = actions.child(self.button(format!("migrate-{id}"), self.tr("이월 →").to_owned(), Command::Migrate(id), false, cx));
             }
         }
         if search {
-            actions = actions.child(self.button(format!("jump-{id}"), "로그 열기", Command::Jump(id), false, cx));
+            actions = actions.child(self.button(format!("jump-{id}"), self.tr("로그 열기").to_owned(), Command::Jump(id), false, cx));
         }
         let mut body = div().flex_1().min_w(px(0.)).flex().flex_col().gap_1().child(
             div()
@@ -521,19 +719,25 @@ impl JournalView {
                 .whitespace_normal()
                 .text_size(px(16.))
                 .text_color(rgb(if e.status == Status::Complete || e.status == Status::Cancelled {
-                    MUTED
+                    self.palette.muted
                 } else {
-                    BODY
+                    self.palette.body
                 }))
                 .child(format!("{}{}", if e.important { "★  " } else { "" }, e.text)),
         );
         if search {
-            body = body.child(div().text_size(px(12.)).line_height(px(18.2)).text_color(rgb(MUTED)).child(self.location(e)));
+            body = body.child(
+                div()
+                    .text_size(px(12.))
+                    .line_height(px(18.2))
+                    .text_color(rgb(self.palette.muted))
+                    .child(self.location(e)),
+            );
         }
         if let Some(target) = e.migrated_to.and_then(|id| self.journal().entry(id).ok()) {
             body = body.child(self.button(
                 format!("trace-{id}"),
-                format!("이월됨 · {}  ↗", self.location(target)),
+                format!("{} · {}  ↗", self.tr("이월됨"), self.location(target)),
                 Command::Jump(target.id),
                 false,
                 cx,
@@ -542,7 +746,7 @@ impl JournalView {
         if let Some(source) = e.migrated_from.and_then(|id| self.journal().entry(id).ok()) {
             body = body.child(self.button(
                 format!("source-{id}"),
-                format!("원본 · {}  ↗", self.location(source)),
+                format!("{} · {}  ↗", self.tr("원본"), self.location(source)),
                 Command::Jump(source.id),
                 false,
                 cx,
@@ -556,18 +760,25 @@ impl JournalView {
             .gap_3()
             .py_4()
             .border_b_1()
-            .border_color(rgb(HAIRLINE))
+            .border_color(rgb(self.palette.hairline))
             .flex_col()
             .rounded(px(CARD_RADIUS))
             .border_1()
-            .border_color(rgb(HAIRLINE_SOFT))
-            .bg(rgb(CARD))
+            .border_color(rgb(self.palette.hairline_soft))
+            .bg(rgb(self.palette.card))
             .p_6()
             .child(
                 div()
                     .flex()
                     .gap_3()
-                    .child(div().w(px(24.)).flex_shrink_0().text_size(px(24.)).text_color(rgb(INK)).child(e.symbol()))
+                    .child(
+                        div()
+                            .w(px(24.))
+                            .flex_shrink_0()
+                            .text_size(px(24.))
+                            .text_color(rgb(self.palette.ink))
+                            .child(e.symbol()),
+                    )
                     .child(body),
             )
             .child(actions)
@@ -575,12 +786,21 @@ impl JournalView {
 }
 impl Render for JournalView {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        if !self.appearance_observed {
+            self.appearance_observed = true;
+            self.appearance_changed(window.appearance(), cx);
+            self._subscriptions
+                .push(cx.observe_window_appearance(window, |this, window, cx| this.appearance_changed(window.appearance(), cx)));
+        }
+        window.set_window_title(&self.window_title);
         let search = self.search_input.read(cx).content.to_string();
         let searching = !search.trim().is_empty();
         let records: Vec<Entry> = self.visible_entries(cx).into_iter().cloned().collect();
         let open = records.iter().filter(|e| e.is_open_task()).count();
         let width = window.viewport_size().width;
         let compact = width < px(COMPACT_BREAKPOINT);
+        let settings_in_menu = width < px(1360.);
+        let settings_controls = self.settings_controls(cx);
         let short = window.viewport_size().height < px(650.);
         let show_sidebar = width >= px(SIDEBAR_BREAKPOINT) && !short;
         let mut nav_links = div()
@@ -591,11 +811,11 @@ impl Render for JournalView {
             .flex_wrap()
             .items_center()
             .gap_2()
-            .bg(rgb(CANVAS));
+            .bg(rgb(self.palette.canvas));
         for (id, label, short, log) in [
-            ("nav-daily", "일간 로그", "일간", Log::Daily),
-            ("nav-monthly", "월간 로그", "월간", Log::Monthly),
-            ("nav-future", "미래 로그", "미래", Log::Future),
+            ("nav-daily", self.tr("일간 로그").to_owned(), self.tr("일간").to_owned(), Log::Daily),
+            ("nav-monthly", self.tr("월간 로그").to_owned(), self.tr("월간").to_owned(), Log::Monthly),
+            ("nav-future", self.tr("미래 로그").to_owned(), self.tr("미래").to_owned(), Log::Future),
         ] {
             nav_links = nav_links.child(self.button(
                 id,
@@ -605,7 +825,7 @@ impl Render for JournalView {
                 cx,
             ));
         }
-        nav_links = nav_links.child(self.button("nav-index", "인덱스", Command::Index, self.index, cx));
+        nav_links = nav_links.child(self.button("nav-index", self.tr("인덱스").to_owned(), Command::Index, self.index, cx));
         let nav_content = div()
             .id("design-nav-content")
             .debug_selector(|| "design-nav-content".into())
@@ -614,7 +834,8 @@ impl Render for JournalView {
             .px_6()
             .flex()
             .items_center()
-            .gap_6()
+            .gap_2()
+            .when(!settings_in_menu, |d| d.gap_6())
             .child(
                 div()
                     .id("nav-wordmark")
@@ -625,19 +846,36 @@ impl Render for JournalView {
                     .text_size(px(24.))
                     .child("stillnote"),
             )
-            .when(compact, |d| {
+            .when(settings_in_menu, |d| {
                 d.justify_between().child(self.button(
                     "nav-menu-toggle",
-                    if self.menu_open { "✕ 메뉴 닫기" } else { "☰ 메뉴" },
+                    if compact {
+                        if self.menu_open {
+                            self.tr("✕ 메뉴 닫기").to_owned()
+                        } else {
+                            self.tr("☰ 메뉴").to_owned()
+                        }
+                    } else {
+                        "⚙".to_owned()
+                    },
                     Command::ToggleMenu,
                     false,
                     cx,
                 ))
             });
         let (nav_content, mobile_menu) = if compact {
-            (nav_content, if self.menu_open { Some(nav_links) } else { None })
+            (nav_content, if self.menu_open { Some(nav_links.child(settings_controls)) } else { None })
+        } else if settings_in_menu {
+            (
+                nav_content.child(nav_links),
+                if self.menu_open {
+                    Some(div().id("settings-menu").flex().flex_wrap().child(settings_controls))
+                } else {
+                    None
+                },
+            )
         } else {
-            (nav_content.child(nav_links), None)
+            (nav_content.child(nav_links).child(div().flex_1().min_w(px(0.))).child(settings_controls), None)
         };
         // Only this blank region has caption hit testing. Interactive navigation
         // remains client content; native controls keep Windows NC event routing.
@@ -658,13 +896,14 @@ impl Render for JournalView {
                     .flex()
                     .flex_shrink_0()
                     .gap_2()
-                    .child(window_control("window-minimize", "−", WindowControlArea::Min))
+                    .child(window_control("window-minimize", "−", WindowControlArea::Min, self.palette))
                     .child(window_control(
                         "window-maximize",
                         if window.is_maximized() { "❐" } else { "□" },
                         WindowControlArea::Max,
+                        self.palette,
                     ))
-                    .child(window_control("window-close", "×", WindowControlArea::Close)),
+                    .child(window_control("window-close", "×", WindowControlArea::Close, self.palette)),
             );
         let nav = div()
             .id("design-nav")
@@ -672,7 +911,7 @@ impl Render for JournalView {
             .w_full()
             .h(px(NAV_HEIGHT))
             .flex_shrink_0()
-            .bg(rgb(CANVAS))
+            .bg(rgb(self.palette.canvas))
             .child(nav_content);
         let mut collections = div().id("collections-scroll").flex().gap_2();
         if show_sidebar {
@@ -697,7 +936,11 @@ impl Render for JournalView {
             .child(self.input("collection-input", &self.collection_input))
             .child(self.button(
                 "create-collection",
-                if compact { "+ 만들기" } else { "+ 컬렉션 만들기" },
+                if compact {
+                    self.tr("+ 만들기").to_owned()
+                } else {
+                    self.tr("+ 컬렉션 만들기").to_owned()
+                },
                 Command::Collection,
                 false,
                 cx,
@@ -717,9 +960,9 @@ impl Render for JournalView {
             .gap_3()
             .p_6()
             .rounded(px(CARD_RADIUS))
-            .bg(rgb(CARD))
+            .bg(rgb(self.palette.card))
             .when(show_sidebar, |d| d.w(px(208.)).flex_shrink_0().h_full())
-            .child(div().text_size(px(14.)).text_color(rgb(MUTED)).child("컬렉션"))
+            .child(div().text_size(px(14.)).text_color(rgb(self.palette.muted)).child(self.tr("컬렉션").to_owned()))
             .child(collections)
             .child(collection_form);
         let mut main = div().w_full().min_w(px(0.)).flex().flex_col().gap_4().child(
@@ -728,7 +971,12 @@ impl Render for JournalView {
                 .justify_between()
                 .items_center()
                 .gap_4()
-                .child(div().text_size(px(12.)).text_color(rgb(MUTED)).child("나의 기록"))
+                .child(
+                    div()
+                        .text_size(px(12.))
+                        .text_color(rgb(self.palette.muted))
+                        .child(self.tr("나의 기록").to_owned()),
+                )
                 .child(
                     div()
                         .w(px(if compact { 240. } else { 280. }))
@@ -758,33 +1006,54 @@ impl Render for JournalView {
                                 .text_size(px(32.))
                                 .line_height(px(38.4))
                                 .font_weight(FontWeight(HEADING_WEIGHT))
-                                .child(if searching { "검색 결과.".into() } else { format!("{}.", self.title()) }),
+                                .child(if searching {
+                                    self.tr("검색 결과.").to_owned()
+                                } else {
+                                    format!("{}.", self.title())
+                                }),
                         )
                         .child(
                             div()
                                 .text_size(px(16.))
                                 .line_height(px(24.8))
                                 .font_weight(FontWeight(LEAD_WEIGHT))
-                                .text_color(rgb(BODY))
+                                .text_color(rgb(self.palette.body))
                                 .child(if self.index {
-                                    "기록이 쌓이면 나만의 지도가 됩니다".into()
+                                    self.tr("기록이 쌓이면 나만의 지도가 됩니다").to_owned()
                                 } else {
-                                    format!("{}년 {}월 {}일 · 열린 할 일 {}개", self.date.year(), self.date.month(), self.date.day(), open)
+                                    if self.settings.language == Language::Korean {
+                                        format!("{}년 {}월 {}일 · 열린 할 일 {}개", self.date.year(), self.date.month(), self.date.day(), open)
+                                    } else {
+                                        format!("{} · {open} open tasks", self.date)
+                                    }
                                 }),
                         ),
                 )
                 .child(self.button(
                     "status-filter",
                     match self.filter {
-                        | Filter::All => "모든 기록",
-                        | Filter::Open => "미완료",
-                        | Filter::Complete => "완료",
+                        | Filter::All => self.tr("모든 기록").to_owned(),
+                        | Filter::Open => self.tr("미완료").to_owned(),
+                        | Filter::Complete => self.tr("완료").to_owned(),
                     },
                     Command::Filter,
                     false,
                     cx,
                 )),
         );
+        if let Some(error) = &self.settings_error {
+            main = main.child(
+                div()
+                    .id("settings-error")
+                    .debug_selector(|| "settings-error".into())
+                    .p_3()
+                    .rounded(px(CARD_RADIUS))
+                    .bg(rgb(self.palette.soft))
+                    .text_color(rgb(self.palette.ink))
+                    .text_size(px(14.))
+                    .child(error.clone()),
+            );
+        }
         if let Some(error) = self.load_error.as_ref().or(self.error.as_ref()) {
             main = main.child(
                 div()
@@ -792,14 +1061,14 @@ impl Render for JournalView {
                     .debug_selector(|| "error-message".into())
                     .p_3()
                     .rounded(px(CARD_RADIUS))
-                    .bg(rgb(SOFT))
-                    .text_color(rgb(INK))
+                    .bg(rgb(self.palette.soft))
+                    .text_color(rgb(self.palette.ink))
                     .text_size(px(14.))
                     .line_height(px(21.7))
                     .child(if self.load_error.is_some() {
-                        "읽기 전용 · 원본 파일을 확인해 주세요"
+                        self.tr("읽기 전용 · 원본 파일을 확인해 주세요").to_owned()
                     } else {
-                        "오류 · 입력을 유지했습니다"
+                        self.tr("오류 · 입력을 유지했습니다").to_owned()
                     })
                     .child(div().mt_2().child(error.clone())),
             );
@@ -819,7 +1088,7 @@ impl Render for JournalView {
                         cx,
                     ))
                     .child(div().w(px(155.)).child(self.input("date-input", &self.date_input)))
-                    .child(self.button("go-date", "이동", Command::Date, false, cx))
+                    .child(self.button("go-date", self.tr("이동").to_owned(), Command::Date, false, cx))
                     .child(self.button(
                         "next-date",
                         "›",
@@ -827,7 +1096,7 @@ impl Render for JournalView {
                         false,
                         cx,
                     ))
-                    .child(self.button("today", "오늘", Command::Today, false, cx)),
+                    .child(self.button("today", self.tr("오늘").to_owned(), Command::Today, false, cx)),
             );
             if self.log == Log::Future {
                 let mut months = div().flex().flex_wrap().gap_2();
@@ -845,10 +1114,14 @@ impl Render for JournalView {
                                 .items_center()
                                 .text_size(px(14.))
                                 .font_weight(FontWeight(NAV_WEIGHT))
-                                .bg(rgb(if offset == 0 { CARD } else { CANVAS }))
-                                .text_color(rgb(if offset == 0 { INK } else { MUTED }))
+                                .bg(rgb(if offset == 0 { self.palette.card } else { self.palette.canvas }))
+                                .text_color(rgb(if offset == 0 { self.palette.ink } else { self.palette.muted }))
                                 .cursor_pointer()
-                                .child(format!("{}년 {}월", date.year(), date.month()))
+                                .child(if self.settings.language == Language::Korean {
+                                    format!("{}년 {}월", date.year(), date.month())
+                                } else {
+                                    format!("{}-{:02}", date.year(), date.month())
+                                })
                                 .on_click(cx.listener(move |this, _, _, cx| {
                                     if let Ok(date) = parse_date(&raw) {
                                         this.set_date(date, cx)
@@ -860,25 +1133,43 @@ impl Render for JournalView {
                 main = main.child(months);
             }
             if self.editing.is_some() {
-                main = main.child(div().flex().gap_2().child(div().text_color(rgb(INK)).child("기록 수정 중")).child(self.button(
-                    "cancel-edit",
-                    "수정 취소",
-                    Command::StopEditing,
-                    false,
-                    cx,
-                )));
+                main = main.child(
+                    div()
+                        .flex()
+                        .gap_2()
+                        .child(div().text_color(rgb(self.palette.ink)).child(self.tr("기록 수정 중").to_owned()))
+                        .child(self.button("cancel-edit", self.tr("수정 취소").to_owned(), Command::StopEditing, false, cx)),
+                );
             }
             main = main.child(
                 div()
                     .flex()
                     .gap_2()
                     .p_2()
-                    .bg(rgb(SOFT))
+                    .bg(rgb(self.palette.soft))
                     .rounded(px(CONTROL_RADIUS))
                     .flex_wrap()
-                    .child(self.button("kind-task", "• 할 일", Command::Kind(Kind::Task), self.kind == Kind::Task, cx))
-                    .child(self.button("kind-event", "○ 이벤트", Command::Kind(Kind::Event), self.kind == Kind::Event, cx))
-                    .child(self.button("kind-note", "– 메모", Command::Kind(Kind::Note), self.kind == Kind::Note, cx)),
+                    .child(self.button(
+                        "kind-task",
+                        self.tr("• 할 일").to_owned(),
+                        Command::Kind(Kind::Task),
+                        self.kind == Kind::Task,
+                        cx,
+                    ))
+                    .child(self.button(
+                        "kind-event",
+                        self.tr("○ 이벤트").to_owned(),
+                        Command::Kind(Kind::Event),
+                        self.kind == Kind::Event,
+                        cx,
+                    ))
+                    .child(self.button(
+                        "kind-note",
+                        self.tr("– 메모").to_owned(),
+                        Command::Kind(Kind::Note),
+                        self.kind == Kind::Note,
+                        cx,
+                    )),
             );
             main = main.child(
                 div()
@@ -889,7 +1180,11 @@ impl Render for JournalView {
                     .child(self.input("entry-input", &self.entry_input))
                     .child(self.button(
                         if self.editing.is_some() { "save-entry" } else { "add-entry" },
-                        if self.editing.is_some() { "수정 저장" } else { "기록 +" },
+                        if self.editing.is_some() {
+                            self.tr("수정 저장").to_owned()
+                        } else {
+                            self.tr("기록 +").to_owned()
+                        },
                         Command::Add,
                         true,
                         cx,
@@ -900,23 +1195,41 @@ impl Render for JournalView {
             main = main.child(
                 div()
                     .p_6()
-                    .bg(rgb(CARD))
+                    .bg(rgb(self.palette.card))
                     .rounded(px(CARD_RADIUS))
                     .flex()
                     .flex_col()
                     .gap_2()
-                    .child("이 할 일은 언제 다시 할까요?")
+                    .child(self.tr("이 할 일은 언제 다시 할까요?").to_owned())
                     .child(
                         div()
                             .flex()
                             .gap_2()
                             .p_2()
-                            .bg(rgb(SOFT))
+                            .bg(rgb(self.palette.soft))
                             .rounded(px(CONTROL_RADIUS))
                             .flex_wrap()
-                            .child(self.button("target-daily", "일간", Command::Target(Log::Daily), self.target_log == Log::Daily, cx))
-                            .child(self.button("target-monthly", "월간", Command::Target(Log::Monthly), self.target_log == Log::Monthly, cx))
-                            .child(self.button("target-future", "미래", Command::Target(Log::Future), self.target_log == Log::Future, cx)),
+                            .child(self.button(
+                                "target-daily",
+                                self.tr("일간").to_owned(),
+                                Command::Target(Log::Daily),
+                                self.target_log == Log::Daily,
+                                cx,
+                            ))
+                            .child(self.button(
+                                "target-monthly",
+                                self.tr("월간").to_owned(),
+                                Command::Target(Log::Monthly),
+                                self.target_log == Log::Monthly,
+                                cx,
+                            ))
+                            .child(self.button(
+                                "target-future",
+                                self.tr("미래").to_owned(),
+                                Command::Target(Log::Future),
+                                self.target_log == Log::Future,
+                                cx,
+                            )),
                     )
                     .child(
                         div()
@@ -924,8 +1237,8 @@ impl Render for JournalView {
                             .flex_wrap()
                             .gap_2()
                             .child(self.input("target-input", &self.target_input))
-                            .child(self.button("confirm-migrate", "이월 저장", Command::ConfirmMigration, true, cx))
-                            .child(self.button("cancel-migrate", "닫기", Command::StopEditing, false, cx)),
+                            .child(self.button("confirm-migrate", self.tr("이월 저장").to_owned(), Command::ConfirmMigration, true, cx))
+                            .child(self.button("cancel-migrate", self.tr("닫기").to_owned(), Command::StopEditing, false, cx)),
                     ),
             );
         }
@@ -941,8 +1254,8 @@ impl Render for JournalView {
                 content = content.child(
                     div()
                         .py_10()
-                        .text_color(rgb(MUTED))
-                        .child("아직 인덱스가 비어 있어요. 오늘의 첫 기록을 남겨 보세요."),
+                        .text_color(rgb(self.palette.muted))
+                        .child(self.tr("아직 인덱스가 비어 있어요. 오늘의 첫 기록을 남겨 보세요.").to_owned()),
                 );
             }
             let mut locations = Vec::new();
@@ -978,8 +1291,8 @@ impl Render for JournalView {
                         .mb_3()
                         .text_size(px(14.))
                         .line_height(px(21.7))
-                        .text_color(rgb(INK))
-                        .child("이번 달의 달력 · 날짜를 누르면 일간 로그가 열립니다"),
+                        .text_color(rgb(self.palette.ink))
+                        .child(self.tr("이번 달의 달력 · 날짜를 누르면 일간 로그가 열립니다").to_owned()),
                 );
                 let mut calendar = div().flex().flex_wrap().gap_1().mb_5();
                 let first = self.date.with_day(1).unwrap();
@@ -997,19 +1310,41 @@ impl Render for JournalView {
                             .p_2()
                             .rounded(px(CONTROL_RADIUS))
                             .text_size(px(14.))
-                            .text_color(rgb(INK))
-                            .bg(rgb(if date == Local::now().date_naive() { ELEVATED } else { CARD }))
+                            .text_color(rgb(self.palette.ink))
+                            .bg(rgb(if date == Local::now().date_naive() {
+                                self.palette.elevated
+                            } else {
+                                self.palette.card
+                            }))
                             .cursor_pointer()
                             .child(format!(
                                 "{} {}",
                                 day,
-                                ["월", "화", "수", "목", "금", "토", "일"][date.weekday().num_days_from_monday() as usize]
+                                [
+                                    self.tr("월").to_owned(),
+                                    self.tr("화").to_owned(),
+                                    self.tr("수").to_owned(),
+                                    self.tr("목").to_owned(),
+                                    self.tr("금").to_owned(),
+                                    self.tr("토").to_owned(),
+                                    self.tr("일").to_owned()
+                                ][date.weekday().num_days_from_monday() as usize]
                             ))
-                            .child(div().text_size(px(12.)).line_height(px(18.2)).text_color(rgb(MUTED)).child(if count > 0 {
-                                format!("{count} 기록")
-                            } else {
-                                String::new()
-                            }))
+                            .child(
+                                div()
+                                    .text_size(px(12.))
+                                    .line_height(px(18.2))
+                                    .text_color(rgb(self.palette.muted))
+                                    .child(if count > 0 {
+                                        if self.settings.language == Language::Korean {
+                                            format!("{count} 기록")
+                                        } else {
+                                            format!("{count} entries")
+                                        }
+                                    } else {
+                                        String::new()
+                                    }),
+                            )
                             .on_click(cx.listener(move |this, _, _, cx| {
                                 this.log = Log::Daily;
                                 this.set_date(date, cx)
@@ -1020,8 +1355,8 @@ impl Render for JournalView {
                     div()
                         .text_size(px(14.))
                         .line_height(px(21.7))
-                        .text_color(rgb(INK))
-                        .child("이번 달의 할 일과 기록"),
+                        .text_color(rgb(self.palette.ink))
+                        .child(self.tr("이번 달의 할 일과 기록").to_owned()),
                 );
             }
             if records.is_empty() {
@@ -1031,7 +1366,7 @@ impl Render for JournalView {
                         .debug_selector(move || if searching { "search-empty".into() } else { "empty-state".into() })
                         .p_8()
                         .rounded(px(CARD_RADIUS))
-                        .bg(rgb(CARD))
+                        .bg(rgb(self.palette.card))
                         .flex()
                         .flex_col()
                         .gap_3()
@@ -1040,18 +1375,25 @@ impl Render for JournalView {
                                 .text_size(px(24.))
                                 .line_height(px(30.))
                                 .font_weight(FontWeight(HEADING_WEIGHT))
-                                .text_color(rgb(INK))
+                                .text_color(rgb(self.palette.ink))
                                 .child(if searching {
-                                    "찾은 기록이 없습니다."
+                                    self.tr("찾은 기록이 없습니다.").to_owned()
                                 } else {
-                                    "작은 기록으로 시작하세요."
+                                    self.tr("작은 기록으로 시작하세요.").to_owned()
                                 }),
                         )
-                        .child(div().text_size(px(14.)).line_height(px(21.7)).text_color(rgb(MUTED)).child(if searching {
-                            "검색어 또는 상태 필터를 바꿔 보세요."
-                        } else {
-                            "해야 할 일, 있었던 일, 기억하고 싶은 생각.\n한 줄이면 충분해요. 입력 후 Enter로 저장합니다."
-                        })),
+                        .child(
+                            div()
+                                .text_size(px(14.))
+                                .line_height(px(21.7))
+                                .text_color(rgb(self.palette.muted))
+                                .child(if searching {
+                                    self.tr("검색어 또는 상태 필터를 바꿔 보세요.").to_owned()
+                                } else {
+                                    self.tr("해야 할 일, 있었던 일, 기억하고 싶은 생각.\n한 줄이면 충분해요. 입력 후 Enter로 저장합니다.")
+                                        .to_owned()
+                                }),
+                        ),
                 );
             }
             for e in &records {
@@ -1063,9 +1405,9 @@ impl Render for JournalView {
             .id("design-footer")
             .debug_selector(|| "design-footer".into())
             .flex_shrink_0()
-            .bg(rgb(CANVAS))
+            .bg(rgb(self.palette.canvas))
             .border_t_1()
-            .border_color(rgb(HAIRLINE))
+            .border_color(rgb(self.palette.hairline))
             .px_6()
             .py_4()
             .flex()
@@ -1075,18 +1417,23 @@ impl Render for JournalView {
             .gap_4()
             .text_size(px(12.))
             .line_height(px(18.2))
-            .text_color(rgb(MUTED))
+            .text_color(rgb(self.palette.muted))
             .child(
                 div()
                     .text_size(px(24.))
                     .font_weight(FontWeight(HEADING_WEIGHT))
-                    .text_color(rgb(INK))
+                    .text_color(rgb(self.palette.ink))
                     .whitespace_nowrap()
                     .flex_shrink_0()
                     .child("stillnote"),
             )
-            .child(self.notice.clone())
-            .when(!compact, |d| d.child("Enter 기록 · Ctrl+A 선택 · Ctrl+V 붙여넣기"));
+            .child(
+                self.notice
+                    .split_once(" · ")
+                    .map(|(key, detail)| format!("{} · {detail}", self.tr(key)))
+                    .unwrap_or_else(|| self.tr(&self.notice).to_owned()),
+            )
+            .when(!compact, |d| d.child(self.tr("Enter 기록 · Ctrl+A 선택 · Ctrl+V 붙여넣기").to_owned()));
         let footer = if short {
             main = main.child(footer);
             None
@@ -1125,7 +1472,7 @@ impl Render for JournalView {
                     .h_full()
                     .overflow_y_scroll()
                     .rounded(px(CARD_RADIUS))
-                    .bg(rgb(CARD))
+                    .bg(rgb(self.palette.card))
                     .child(
                         div()
                             .px_6()
@@ -1145,37 +1492,42 @@ impl Render for JournalView {
                                             .text_size(px(STAT_SIZE))
                                             .line_height(px(STAT_SIZE))
                                             .font_weight(FontWeight(STAT_WEIGHT))
-                                            .text_color(rgb(PRIMARY))
+                                            .text_color(rgb(self.palette.primary))
                                             .child(open.to_string()),
                                     )
-                                    .child(div().text_size(px(13.)).text_color(rgb(MUTED)).child("열린 할 일")),
+                                    .child(
+                                        div()
+                                            .text_size(px(13.))
+                                            .text_color(rgb(self.palette.muted))
+                                            .child(self.tr("열린 할 일").to_owned()),
+                                    ),
                             )
                             .child(
                                 div()
                                     .text_size(px(24.))
                                     .line_height(px(30.))
                                     .font_weight(FontWeight(HEADING_WEIGHT))
-                                    .child("천천히 돌아보기."),
+                                    .child(self.tr("천천히 돌아보기.").to_owned()),
                             )
                             .child(
                                 div()
                                     .text_size(px(14.))
                                     .line_height(px(21.7))
-                                    .text_color(rgb(BODY))
-                                    .child("오늘의 기록이 내일의 방향이 됩니다. 필요한 일만 다음으로 가져가세요."),
+                                    .text_color(rgb(self.palette.body))
+                                    .child(self.tr("오늘의 기록이 내일의 방향이 됩니다. 필요한 일만 다음으로 가져가세요.").to_owned()),
                             )
-                            .child(div().h(px(1.)).bg(rgb(HAIRLINE)))
-                            .child("빠른 기록 범례")
+                            .child(div().h(px(1.)).bg(rgb(self.palette.hairline)))
+                            .child(self.tr("빠른 기록 범례").to_owned())
                             .children(
                                 [
-                                    "•   해야 할 일",
-                                    "×   완료한 일",
-                                    "○   이벤트",
-                                    "–   생각과 메모",
-                                    ">   다른 로그로 이월",
-                                    "<   미래 로그에 예약",
-                                    "★   중요한 기록",
-                                    "⊘   취소한 기록",
+                                    self.tr("•   해야 할 일").to_owned(),
+                                    self.tr("×   완료한 일").to_owned(),
+                                    self.tr("○   이벤트").to_owned(),
+                                    self.tr("–   생각과 메모").to_owned(),
+                                    self.tr(">   다른 로그로 이월").to_owned(),
+                                    self.tr("<   미래 로그에 예약").to_owned(),
+                                    self.tr("★   중요한 기록").to_owned(),
+                                    self.tr("⊘   취소한 기록").to_owned(),
                                 ]
                                 .into_iter()
                                 .map(|label| div().text_size(px(14.)).line_height(px(21.7)).child(label)),
@@ -1185,18 +1537,28 @@ impl Render for JournalView {
                                     .mt_6()
                                     .text_size(px(12.))
                                     .line_height(px(18.2))
-                                    .text_color(rgb(MUTED))
-                                    .child("Ryder Carroll의 불렛저널 방법에서 영감을 받았습니다."),
+                                    .text_color(rgb(self.palette.muted))
+                                    .child(self.tr("Ryder Carroll의 불렛저널 방법에서 영감을 받았습니다.").to_owned()),
                             ),
                     ),
             );
         }
         div()
             .size_full()
+            .on_key_down(|event, window, cx| {
+                if event.keystroke.key == "tab" {
+                    if event.keystroke.modifiers.shift {
+                        window.focus_prev();
+                    } else {
+                        window.focus_next();
+                    }
+                    cx.stop_propagation();
+                }
+            })
             .flex()
             .flex_col()
-            .bg(rgb(CANVAS))
-            .text_color(rgb(INK))
+            .bg(rgb(self.palette.canvas))
+            .text_color(rgb(self.palette.ink))
             .font_family(FONT_FAMILY)
             .font_weight(FontWeight(BODY_WEIGHT))
             .text_size(px(16.))
