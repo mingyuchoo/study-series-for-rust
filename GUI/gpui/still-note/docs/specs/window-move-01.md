@@ -1,6 +1,6 @@
 # WINDOW-MOVE-01: Restore Windows titlebar dragging
 
-- Version: 1
+- Version: 2
 - Status: READY
 - Spec owner: /root
 - Base revision: 0f824c31db9bf949a3b0645b392081278f959652
@@ -9,13 +9,13 @@
 ## Contract
 
 Keep the existing integrated titlebar and GPUI native window controls. Restore
-Windows movement through the blank titlebar region using the existing GPUI API,
+Windows movement through all non-interactive titlebar areas (background, padding, gaps and logo) using the existing GPUI API,
 without new dependencies or journal/storage changes. Preserve interactive
 navigation, controls, minimum sizing, resize and maximize/restore behavior.
 
 | AC-ID | Given / When | Expected | Verification |
 |---|---|---|---|
-| AC-01 | Windows production window, drag blank titlebar | Window position changes; the backend receives a caption hit | Runnable regression of rendered hit-test routing; native executable drag with before/after screenshot origins |
+| AC-01 | Windows production window, drag titlebar background/padding/gaps/logo | Window position changes; the backend receives a caption hit | Runnable regression of rendered hit-test routing; native executable drag with before/after screenshot origins |
 | AC-02 | Navigation/buttons/input or window controls receive pointer | Interactive areas retain client/control hits rather than caption; maximize/restore still work | Rendered hit-test regression, existing chrome tests; native double-click maximize/restore observation |
 | AC-03 | Full repository verification and executable build | All five verification stages pass with nonzero tests in every category; application builds | Clean checkpoint `bash scripts/verify.sh`, `cargo build --locked`, logs and counts |
 
@@ -37,8 +37,9 @@ navigation, controls, minimum sizing, resize and maximize/restore behavior.
 Windows, GPUI pinned 0.2.2, commands in `.agents/verification.env`.
 Use installed Git Bash if the `bash` shim targets WSL. Test counts come from
 the Cargo test summaries; no skipped/empty suites or assertion weakening.
-No required questions. Movement means dragging the existing blank integrated
+No required questions. Movement means dragging all non-interactive areas of the integrated
 titlebar. Any unavailable native observation is a reported blocker, not PASS.
 Rollback is reverting the checkpoint. Maximum three rework cycles.
 Final PASS requires all ACs, five tool stages, independent reviewer PASS,
 identical evidence/final SHA, and a clean tree; no merge/deployment implied.
+

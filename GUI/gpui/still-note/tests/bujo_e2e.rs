@@ -616,6 +616,53 @@ fn window_move_ac01_ac02_native_chrome_keeps_mouse_default_and_client_controls_w
 }
 
 #[gpui::test]
+fn window_move_v2_ac01_ac02_whole_titlebar_background_and_logo_keep_native_default(cx: &mut TestAppContext) {
+    let dir = tempdir().unwrap();
+    cx.update(bind_input_keys);
+    let (view, cx) = cx.add_window_view(|_, cx| JournalView::new(dir.path().join("journal.json"), parse_date("2026-10-02").unwrap(), cx));
+    for width in [600., 768., 1360., 1600.] {
+        cx.simulate_resize(size(px(width), px(900.)));
+        render(cx);
+        let nav = cx.debug_bounds("design-nav").unwrap();
+        let logo = cx.debug_bounds("nav-wordmark").unwrap();
+        let minimize = cx.debug_bounds("window-minimize").unwrap();
+        let maximize = cx.debug_bounds("window-maximize").unwrap();
+        let close = cx.debug_bounds("window-close").unwrap();
+        let navigation = cx.debug_bounds("nav-menu-toggle").or_else(|| cx.debug_bounds("nav-daily")).unwrap();
+        let mut positions = vec![
+            logo.center(),
+            point(nav.left() + px(12.), nav.center().y),
+            point(nav.right() - px(12.), nav.center().y),
+            point(nav.center().x, nav.top() + px(4.)),
+            point(nav.center().x, nav.bottom() - px(4.)),
+            point((logo.right() + navigation.left()) / 2., nav.center().y),
+            point((minimize.right() + maximize.left()) / 2., nav.center().y),
+            point((maximize.right() + close.left()) / 2., nav.center().y),
+        ];
+        if let Some(settings) = cx.debug_bounds("settings-controls") {
+            let index = cx.debug_bounds("nav-index").unwrap();
+            assert!(settings.left() > index.right(), "fixture must include the central flexible spacer");
+            positions.push(point((index.right() + settings.left()) / 2., nav.center().y));
+        }
+        for position in positions {
+            cx.simulate_mouse_move(position, None, Modifiers::none());
+            cx.simulate_mouse_down(position, gpui::MouseButton::Left, Modifiers::none());
+            assert!(
+                !cx.update(|window, _| window.default_prevented()),
+                "noninteractive upper bar at {position:?} ({width}px) must preserve native movement"
+            );
+        }
+        reveal_settings(cx);
+        click(cx, "theme-light");
+        assert_eq!(cx.read(|app| view.read(app).settings.theme), stillnote::settings::ThemeMode::Light);
+        click(cx, "theme-dark");
+        assert_eq!(cx.read(|app| view.read(app).settings.theme), stillnote::settings::ThemeMode::Dark);
+        click(cx, "language-en");
+        assert_eq!(cx.read(|app| view.read(app).settings.language), stillnote::settings::Language::English);
+    }
+}
+
+#[gpui::test]
 fn layout_ac01_ac02_ac03_ac04_long_text_short_windows_scroll_and_resize_preserve_state(cx: &mut TestAppContext) {
     let dir = tempdir().unwrap();
     cx.update(bind_input_keys);

@@ -486,6 +486,7 @@ impl JournalView {
     ) -> impl IntoElement + use<I, L> {
         let id = id.into();
         let setting = id.starts_with("language-") || id.starts_with("theme-");
+        let titlebar_control = setting || id.starts_with("nav-");
         let focus = match id.as_str() {
             | "language-ko" => Some(self.setting_focus[0].clone()),
             | "language-en" => Some(self.setting_focus[1].clone()),
@@ -523,6 +524,8 @@ impl JournalView {
                 rgb(if primary { self.palette.primary } else { self.palette.card })
             })
             .cursor_pointer()
+            // Interactive titlebar controls override the surrounding caption hitbox.
+            .when(titlebar_control, |d| d.occlude())
             .tab_index(0)
             .when_some(focus, |d, focus| d.track_focus(&focus))
             .focus(move |s| s.border_color(rgb(palette.primary)).bg(rgb(palette.elevated)).text_color(rgb(palette.ink)))
@@ -886,8 +889,8 @@ impl Render for JournalView {
         } else {
             (nav_content.child(nav_links).child(div().flex_1().min_w(px(0.))).child(settings_controls), None)
         };
-        // Only this blank region has caption hit testing. Interactive navigation
-        // remains client content; native controls keep Windows NC event routing.
+        // Keep a flexible gap before the native controls; the whole navigation
+        // background is the caption, with interactive controls occluding it.
         let nav_content = nav_content
             .child(
                 div()
@@ -895,10 +898,7 @@ impl Render for JournalView {
                     .debug_selector(|| "window-drag-region".into())
                     .flex_1()
                     .min_w(px(0.))
-                    .h_full()
-                    // Caption clicks must reach the native move/maximize handler.
-                    .occlude()
-                    .window_control_area(WindowControlArea::Drag),
+                    .h_full(),
             )
             .child(
                 div()
@@ -923,6 +923,9 @@ impl Render for JournalView {
             .h(px(NAV_HEIGHT))
             .flex_shrink_0()
             .bg(rgb(self.palette.canvas))
+            // Caption clicks must reach Windows without the root focus listener.
+            .occlude()
+            .window_control_area(WindowControlArea::Drag)
             .child(nav_content);
         let mut collections = div().id("collections-scroll").flex().gap_2();
         if show_sidebar {
