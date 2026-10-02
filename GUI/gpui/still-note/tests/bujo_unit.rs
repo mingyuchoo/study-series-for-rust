@@ -2,6 +2,9 @@ use chrono::{Datelike, NaiveDate};
 use stillnote::model::{Filter, Journal, Kind, Log, Status, parse_date, shift_month};
 use uuid::Uuid;
 
+#[path = "support/font_metadata.rs"]
+mod font_metadata;
+
 fn day(value: &str) -> NaiveDate {
     parse_date(value).unwrap()
 }
@@ -9,7 +12,7 @@ fn day(value: &str) -> NaiveDate {
 #[test]
 fn design_ac01_ac02_ac03_exact_black_yellow_and_type_contract() {
     use stillnote::theme::*;
-    // Expectations come directly from DESIGN.md, independent of rendering code.
+    // DESIGN.md tokens; user-requested FONT-01 overrides the original font family.
     assert_eq!(
         [
             CANVAS,
@@ -33,7 +36,8 @@ fn design_ac01_ac02_ac03_exact_black_yellow_and_type_contract() {
         [PRIMARY, PRIMARY_ACTIVE, PRIMARY_DISABLED, ON_PRIMARY],
         [0xfaff69, 0xe6eb52, 0x3a3a1f, 0x0a0a0a]
     );
-    assert_eq!(FONT_FAMILY, "Inter");
+    assert_eq!(FONT_FAMILY, "Pretendard");
+    assert_eq!(CODE_FONT_FAMILY, "Pretendard");
     assert_eq!([HEADING_WEIGHT, BODY_WEIGHT, CONTROL_WEIGHT, NAV_WEIGHT], [700., 400., 600., 500.]);
     assert_eq!([STAT_SIZE, STAT_WEIGHT, HEADING_TRACKING, STAT_TRACKING], [56., 700., -1., -1.5]);
     assert_eq!([CONTROL_HEIGHT, INPUT_RADIUS, CONTROL_RADIUS, CARD_RADIUS], [40., 8., 8., 12.]);

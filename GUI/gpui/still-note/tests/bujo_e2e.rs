@@ -98,6 +98,31 @@ fn assert_reachable(cx: &mut VisualTestContext, selector: &str, width: f32, heig
 }
 
 #[gpui::test]
+fn font_ac01_ac02_production_constructor_registers_pretendard_at_every_ui_weight(cx: &mut TestAppContext) {
+    let dir = tempdir().unwrap();
+    let (_view, cx) = cx.add_window_view(|_, cx| JournalView::new(dir.path().join("journal.json"), parse_date("2026-10-02").unwrap(), cx));
+    render(cx);
+    cx.read(|app| {
+        let text = app.text_system();
+        assert!(
+            text.all_font_names().iter().any(|name| name == "Pretendard"),
+            "registered family must be available without relying on a fallback"
+        );
+        for weight in [400., 500., 600., 700.] {
+            let mut requested = gpui::font("Pretendard");
+            requested.weight = gpui::FontWeight(weight);
+            let id = text.resolve_font(&requested);
+            let resolved = text.get_font_for_id(id).unwrap();
+            assert_eq!(resolved.family.as_ref(), "Pretendard");
+            assert_eq!(resolved.weight, gpui::FontWeight(weight));
+            for ch in ['A', '한', '글', '힣'] {
+                assert!(text.advance(id, px(16.), ch).is_ok(), "registered face missing {ch}, weight {weight}");
+            }
+        }
+    });
+}
+
+#[gpui::test]
 fn design_ac02_ac04_all_breakpoints_keep_controls_and_actions_reachable(cx: &mut TestAppContext) {
     let dir = tempdir().unwrap();
     cx.update(bind_input_keys);

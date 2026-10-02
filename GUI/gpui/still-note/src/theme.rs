@@ -16,8 +16,8 @@ pub const PRIMARY: u32 = 0xfaff69;
 pub const PRIMARY_ACTIVE: u32 = 0xe6eb52;
 pub const PRIMARY_DISABLED: u32 = 0x3a3a1f;
 pub const ON_PRIMARY: u32 = CANVAS;
-pub const FONT_FAMILY: &str = "Inter";
-pub const CODE_FONT_FAMILY: &str = "JetBrains Mono";
+pub const FONT_FAMILY: &str = "Pretendard";
+pub const CODE_FONT_FAMILY: &str = FONT_FAMILY;
 pub const HEADING_WEIGHT: f32 = 700.;
 pub const BODY_WEIGHT: f32 = 400.;
 pub const LEAD_WEIGHT: f32 = BODY_WEIGHT;
@@ -38,12 +38,16 @@ pub const COMPACT_BREAKPOINT: f32 = 768.;
 pub const SIDEBAR_BREAKPOINT: f32 = 1024.;
 pub const ASIDE_BREAKPOINT: f32 = 1180.;
 
-/// Register bundled SIL Open Font License fonts before opening a window.
+/// Register full Korean Pretendard 1.3.9 under the SIL Open Font License.
+/// Static weights make the requested 400/500/600/700 faces explicit on every
+/// native text backend, without depending on system-installed fonts or a CDN.
 pub fn register_fonts(cx: &gpui::App) {
     cx.text_system()
         .add_fonts(vec![
-            std::borrow::Cow::Borrowed(include_bytes!("../assets/fonts/Inter.ttf")),
-            std::borrow::Cow::Borrowed(include_bytes!("../assets/fonts/JetBrainsMono.ttf")),
+            std::borrow::Cow::Borrowed(include_bytes!("../assets/fonts/Pretendard-Regular.otf")),
+            std::borrow::Cow::Borrowed(include_bytes!("../assets/fonts/Pretendard-Medium.otf")),
+            std::borrow::Cow::Borrowed(include_bytes!("../assets/fonts/Pretendard-SemiBold.otf")),
+            std::borrow::Cow::Borrowed(include_bytes!("../assets/fonts/Pretendard-Bold.otf")),
         ])
-        .expect("Unable to register bundled Inter and JetBrains Mono fonts");
+        .expect("Unable to register bundled Pretendard fonts");
 }
