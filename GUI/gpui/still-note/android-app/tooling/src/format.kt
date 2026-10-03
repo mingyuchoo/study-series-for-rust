@@ -5,7 +5,7 @@ fun runFormat(args: Array<String>) {
     val root = File(System.getProperty("user.dir"))
     require(File(root, "project.yaml").isFile) { "Run from android-app." }
     require(args.isEmpty() || args.toList() == listOf("--write")) {
-        "Usage: format.main.kts [--write]"
+        "Usage: kotlin run -m tooling -- format [--write]"
     }
     val write = args.isNotEmpty()
     val paths = listOf("app/src", "app/test", "app/instrumentedTest", "core/src", "tooling/src")

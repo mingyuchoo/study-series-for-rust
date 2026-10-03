@@ -1,0 +1,37 @@
+<?xml version='1.0' encoding='UTF-8' ?>
+<testsuite name="app.stillnote.AdaptiveLayoutTest" tests="2" failures="1" errors="0" skipped="0" time="62.762" timestamp="2026-10-03T05:51:24" hostname="localhost">
+  <properties>
+    <property name="device" value="Stillnote_Kotlin_Verification(AVD) - 16" />
+    <property name="flavor" value="" />
+    <property name="project" value=":" />
+  </properties>
+  <testcase name="ac11_expandedShortLargeFontSidebarDialogAndBothThemesLocales" classname="app.stillnote.AdaptiveLayoutTest" time="49.49" />
+  <testcase name="ac11_compactShortLargeFontCollectionsDialogAndBothThemesLocales" classname="app.stillnote.AdaptiveLayoutTest" time="2.809">
+    <failure></failure>
+  </testcase>
+  <system-err>Exception thrown during onAfterAll invocation of plugin AndroidTestApkInstallerPlugin: device 'emulator-5560' not found
+device 'emulator-5560' not found
+com.android.ddmlib.AdbCommandRejectedException: device 'emulator-5560' not found
+	at com.android.ddmlib.AdbHelper.setDevice(AdbHelper.java:967)
+	at com.android.ddmlib.AdbHelper.setDevice(AdbHelper.java:986)
+	at com.android.ddmlib.internal.DeviceImpl.lambda$executeRemoteCommand$18(DeviceImpl.java:785)
+	at com.android.ddmlib.internal.DeviceImpl.logRun1(DeviceImpl.java:1801)
+	at com.android.ddmlib.internal.DeviceImpl.executeRemoteCommand(DeviceImpl.java:755)
+	at com.android.ddmlib.internal.DeviceImpl.lambda$executeRemoteCommand$15(DeviceImpl.java:618)
+	at com.android.ddmlib.internal.DeviceImpl.logRun1(DeviceImpl.java:1801)
+	at com.android.ddmlib.internal.DeviceImpl.executeRemoteCommand(DeviceImpl.java:615)
+	at com.android.ddmlib.internal.DeviceImpl.lambda$executeShellCommand$14(DeviceImpl.java:573)
+	at com.android.ddmlib.internal.DeviceImpl.logRun1(DeviceImpl.java:1801)
+	at com.android.ddmlib.internal.DeviceImpl.executeShellCommand(DeviceImpl.java:570)
+	at com.android.tools.utp.plugins.deviceprovider.ddmlib.DdmlibAndroidDevice.executeShellCommand(DdmlibAndroidDevice.kt)
+	at com.android.tools.utp.plugins.deviceprovider.ddmlib.DdmlibAndroidDeviceController$executeAsync$deferred$1.invokeSuspend(DdmlibAndroidDeviceController.kt:171)
+	at kotlin.coroutines.jvm.internal.BaseContinuationImpl.resumeWith(ContinuationImpl.kt:33)
+	at kotlinx.coroutines.DispatchedTask.run(DispatchedTask.kt:108)
+	at kotlinx.coroutines.scheduling.CoroutineScheduler.runSafely(CoroutineScheduler.kt:584)
+	at kotlinx.coroutines.scheduling.CoroutineScheduler$Worker.executeTask(CoroutineScheduler.kt:793)
+	at kotlinx.coroutines.scheduling.CoroutineScheduler$Worker.runWorker(CoroutineScheduler.kt:697)
+	at kotlinx.coroutines.scheduling.CoroutineScheduler$Worker.run(CoroutineScheduler.kt:684)
+
+Test run failed to complete. Expected 14 tests, received 1
+</system-err>
+</testsuite>
