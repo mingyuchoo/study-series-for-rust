@@ -72,6 +72,25 @@ IDE가 연결 해제를 제공하지 않는다면 IDE를 닫고 `.idea/gradle.xm
 settings/build 파일을 추가하지 않는다. Android APK 패키징에 필요한
 Gradle/AGP 호출은 Kotlin Toolchain이 내부에서 관리한다.
 
+### Android Studio 실행 버튼이 포맷 검사만 수행하는 경우
+
+`kotlin run --module tooling`과 `Kotlin formatting checked`가 출력되면
+실행 대상으로 검증 유틸리티인 `tooling`이 선택되어 있다. 인자 없는
+`tooling` 실행은 포맷 검사 후 종료하는 정상 동작이다.
+
+1. 상단 실행 설정에서 저장소에 포함된 **Stillnote Android**를 선택한다.
+2. 실행 장치에서 Android API 36 이상 에뮬레이터를 선택한다.
+3. **Run** 또는 `Shift+F10`으로 실행한다.
+
+공유 설정은 `.run/Stillnote_Android.run.xml`에 있으며 Android App 타입으로
+`app.main` 모듈의 기본 Activity를 실행한다. 실행 전
+`.run/Stillnote_Build.run.xml`의 **Stillnote build** 설정으로 `kotlin build`를
+수행하므로 변경된 코드도 APK에 반영된다. 빌드 실패 시 앱 실행도 중단한다.
+설정이 보이지 않으면 **File → Reload All from Disk**로 새로 고침한다.
+**Run → Edit Configurations**에서 **Before launch**의
+**Run Another Configuration: Stillnote build** 작업을 유지한다.
+Kotlin CLI의 `tooling` 설정은 검증용으로 사용한다.
+
 ## Data and recovery
 
 Internal app files: `journal.json`, `journal.json.bak` (previous durable journal),

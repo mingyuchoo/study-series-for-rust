@@ -1,0 +1,9 @@
+<component name="ProjectRunConfigurationManager">
+  <configuration name="Stillnote build" type="Amper.Run">
+    <option name="command" value="build" />
+    <EXTENSION ID="amper.run.common">
+      <option name="module" value="app" />
+    </EXTENSION>
+    <method v="2" />
+  </configuration>
+</component>
