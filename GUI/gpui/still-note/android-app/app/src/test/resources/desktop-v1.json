@@ -1,0 +1,79 @@
+{
+  "version": 1,
+  "entries": [
+    {
+      "id": "00000000-0000-0000-0000-000000000001",
+      "date": "2024-02-29",
+      "log": "Daily",
+      "kind": "Task",
+      "status": "Scheduled",
+      "important": true,
+      "text": "한글 café 📝",
+      "migrated_from": null,
+      "migrated_to": "00000000-0000-0000-0000-000000000002"
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000002",
+      "date": "2025-01-01",
+      "log": "Future",
+      "kind": "Task",
+      "status": "Complete",
+      "important": true,
+      "text": "한글 café 📝",
+      "migrated_from": "00000000-0000-0000-0000-000000000001",
+      "migrated_to": null
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000003",
+      "date": "2026-10-02",
+      "log": {
+        "Collection": "00000000-0000-0000-0000-000000000064"
+      },
+      "kind": "Note",
+      "status": "Open",
+      "important": false,
+      "text": "읽은 책",
+      "migrated_from": null,
+      "migrated_to": null
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000004",
+      "date": "2026-10-03",
+      "log": "Monthly",
+      "kind": "Event",
+      "status": "Cancelled",
+      "important": false,
+      "text": "생일 ○",
+      "migrated_from": null,
+      "migrated_to": null
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000005",
+      "date": "0001-01-01",
+      "log": "Daily",
+      "kind": "Task",
+      "status": "Migrated",
+      "important": false,
+      "text": "경계",
+      "migrated_from": null,
+      "migrated_to": "00000000-0000-0000-0000-000000000006"
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000006",
+      "date": "9999-12-31",
+      "log": "Monthly",
+      "kind": "Task",
+      "status": "Open",
+      "important": false,
+      "text": "경계",
+      "migrated_from": "00000000-0000-0000-0000-000000000005",
+      "migrated_to": null
+    }
+  ],
+  "collections": [
+    {
+      "id": "00000000-0000-0000-0000-000000000064",
+      "name": "독서 📚"
+    }
+  ]
+}

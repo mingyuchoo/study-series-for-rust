@@ -1,0 +1,30 @@
+<?xml version='1.0' encoding='UTF-8' ?>
+<testsuite name="app.stillnote.AdaptiveLayoutTest" tests="14" failures="1" errors="0" skipped="0" time="194.018" timestamp="2026-10-03T04:33:15" hostname="localhost">
+  <properties>
+    <property name="device" value="Stillnote_API_36(AVD) - 16" />
+    <property name="flavor" value="" />
+    <property name="project" value=":app" />
+  </properties>
+  <testcase name="ac11_expandedShortLargeFontSidebarDialogAndBothThemesLocales" classname="app.stillnote.AdaptiveLayoutTest" time="20.733" />
+  <testcase name="ac11_compactShortLargeFontCollectionsDialogAndBothThemesLocales" classname="app.stillnote.AdaptiveLayoutTest" time="12.246" />
+  <testcase name="ac03_ac04_monthCalendarFutureCollectionIndexAndSearchLocation" classname="app.stillnote.StillnoteFlowTest" time="28.406" />
+  <testcase name="ac01_ac02_blankCaptureEditCompleteReopenCancelAndUnicode" classname="app.stillnote.StillnoteFlowTest" time="21.471" />
+  <testcase name="ac10_recreatedViewModelRestoresSelectionAndEditMigrationFromSavedHandle" classname="app.stillnote.StillnoteFlowTest" time="19.986" />
+  <testcase name="ac05_searchAllLogsStatusFilterIncludesOpenEventsAndNotes" classname="app.stillnote.StillnoteFlowTest" time="26.036">
+    <failure>androidx.compose.ui.test.ComposeTimeoutException: Condition still not satisfied after 10000 ms
+at androidx.compose.ui.test.AndroidComposeUiTestEnvironment$AndroidComposeUiTestImpl.waitUntil(ComposeUiTest.android.kt:755)
+at androidx.compose.ui.test.junit4.AndroidComposeTestRule.waitUntil(AndroidComposeTestRule.android.kt:362)
+at app.stillnote.StillnoteFlowTest.enter(StillnoteFlowTest.kt:118)
+at app.stillnote.StillnoteFlowTest.enter$default(StillnoteFlowTest.kt:104)
+at app.stillnote.StillnoteFlowTest.ac05_searchAllLogsStatusFilterIncludesOpenEventsAndNotes(StillnoteFlowTest.kt:364)
+</failure>
+  </testcase>
+  <testcase name="ac09_ac10_liveLanguageThemePreserveDraftAndPersistSettings" classname="app.stillnote.StillnoteFlowTest" time="8.873" />
+  <testcase name="ac10_savedInstanceRestorationRetainsDraftDateFilterAndSearch" classname="app.stillnote.StillnoteFlowTest" time="7.69" />
+  <testcase name="ac11_backClosesTransientUiAndPrimaryTargetsMeet48Dp" classname="app.stillnote.StillnoteFlowTest" time="12.001" />
+  <testcase name="ac08_ac09_corruptSettingsDoesNotBlockJournalCorruptJournalBlocksCapture" classname="app.stillnote.StillnoteFlowTest" time="6.297" />
+  <testcase name="ac08_saveConflictKeepsDraftAndDisplayedModel" classname="app.stillnote.StillnoteFlowTest" time="8.694" />
+  <testcase name="ac10_imeCompositionProtocolDoesNotCaptureUntilFinished" classname="app.stillnote.StillnoteFlowTest" time="3.724" />
+  <testcase name="ac08_corruptJournalShowsRecoveryAndDisablesCapture" classname="app.stillnote.StillnoteFlowTest" time="2.607" />
+  <testcase name="ac06_migrateAndNavigateBothLinksWithFrozenOriginal" classname="app.stillnote.StillnoteFlowTest" time="12.951" />
+</testsuite>

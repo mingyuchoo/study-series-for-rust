@@ -1,0 +1,15 @@
+# Cargo build output. Keep Cargo.lock tracked for this application.
+/target/
+!/Cargo.lock
+
+# Verification evidence, release bundles/installers, and README local test journals.
+/.artifacts/
+
+# JournalStore and SettingsStore temporary save files, including interrupted saves.
+.stillnote-*.tmp
+
+# Python bytecode caches from importing/discovering the script test suites.
+/tests/**/__pycache__/
+
+# graft's local graph data — regenerable, not committed (run `graft build`).
+/graft/
