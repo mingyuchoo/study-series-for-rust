@@ -2,20 +2,13 @@ package app.stillnote.application
 
 import app.stillnote.domain.*
 
-data class LoadedJournal(
-    val journal: Journal = Journal(),
-    val settings: Settings = Settings(),
-    val blocked: Boolean = false,
-    val error: String? = null,
-)
-
 /** Effectful use cases depend only on ports. Scheduling belongs to the caller. */
 class JournalService(
     private val journals: JournalRepository,
     private val preferences: SettingsRepository,
     private val ids: IdGenerator,
-) {
-    fun load(): LoadedJournal {
+) : JournalUseCases {
+    override fun load(): LoadedJournal {
         var error: String? = null
         val settings =
             try {
@@ -31,7 +24,7 @@ class JournalService(
         }
     }
 
-    fun execute(journal: Journal, command: JournalCommand): Journal {
+    override fun execute(journal: Journal, command: JournalCommand): Journal {
         val next =
             journal.apply(
                 command,
@@ -46,5 +39,5 @@ class JournalService(
         return next
     }
 
-    fun saveSettings(settings: Settings) = preferences.save(settings)
+    override fun saveSettings(settings: Settings) = preferences.save(settings)
 }

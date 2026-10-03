@@ -1,36 +1,15 @@
 # Independent Android verification
 
+> Historical verification snapshot. Results, source hashes and paths below apply only to that run.
+> Current structure and commands: [architecture](../ARCHITECTURE.md), [README](../../README.md).
+
 Spec: ANDROID-01 version 1. Builder `/root/builder`; verifier `/root/verifier`; independent reviewer `/root/reviewer`; coordinator `/root`. Date: 2026-10-03. Product/config were read-only to the verifier; tests and fixtures were independently authored.
 
 Frozen source identity: `source-manifest.sha256`, SHA256 `7837fb850a062d64b087ca74865ffbfd050a9b24f7c00e92c5b555d1d99a4cb9`. Build outputs, tool caches, local.properties and verification reports are excluded. This scoped identity replaces a clean Git checkpoint because the workspace contains the user's preexisting desktop relocation. No staging or commits were performed.
 
-## Current result
+## Result on 2026-10-03
 
 Final-12 automated verification PASS, exit 0, on dedicated emulator-5560 / Stillnote_Verification_Final, API 36: 14 UI tests passed, zero failures/errors/skips; 23 JVM cases (cached unchanged inputs), format, lint, Rust compatibility and APK build passed. All 37 frozen files were independently rehashed before and after the run, zero mismatches. Full acceptance remains incomplete for actual Korean IME, spoken TalkBack and physical-device manual checks. Final-08 passed all checks and all 14 UI tests. Final-09 failed after external Android Studio deployment took its test activity out of the foreground. Subsequent full and targeted failures identified exact test viewport/IME/materialization problems; evidence and corrections are preserved below. The product is unchanged; subsequent edits make fixture Cargo.lock eligible for inclusion and correct the test harness. Failed invocations are not classified as PASS.
-
-## Reproduction and isolation
-
-Execution directory: `C:/Users/mingy/github/mingyuchoo/study-series-for-rust/GUI/gpui/still-note/android-app`.
-
-JDK: `C:/Users/mingy/.codex/tools/stillnote-android/jdk17/jdk-17.0.20.1+1`. SDK: `C:/Users/mingy/AppData/Local/Android/Sdk`. Set JAVA_HOME, ANDROID_HOME and platform-tools on PATH; set ANDROID_SERIAL to the assigned dedicated API 36 emulator. Run `scripts/verify.ps1` from android-app, or invoke it from the workspace root. Its serial/qemu/API checks reject physical devices and other API levels. No user's journal or physical device was used. Instrumentation installs the test package, launches an empty ComponentActivity test host, and uses UUID-named isolated cache files with cleanup. Real MainActivity observations were made separately by the coordinator.
-
-Use an exclusively owned, unlocked test emulator: wait for `sys.boot_completed=1` and API 36/qemu confirmation, then avoid Android Studio deployments or other foreground interactions for the whole run. Final environment: emulator-5560 / Stillnote_Verification_Final, physical 1080x2400 / density 420. Enable its software keyboard even when the host keyboard is connected before running tests:
-
-```powershell
-adb -s $env:ANDROID_SERIAL shell getprop sys.boot_completed
-adb -s $env:ANDROID_SERIAL shell settings put secure show_ime_with_hard_keyboard 1
-adb -s $env:ANDROID_SERIAL shell settings get secure show_ime_with_hard_keyboard
-```
-
-Expected outputs are boot 1 and keyboard 1. Apply this only to the dedicated disposable test emulator; final-09 demonstrates why sharing the foreground with another deployment invalidates UI evidence.
-
-The mandatory sequential commands are:
-
-```text
-gradlew.bat spotlessCheck lintDebug testDebugUnitTest assembleDebug
-cargo run --locked --manifest-path app/src/test/rust-fixture/Cargo.toml -- validate app/build/compatibility-roundtrip.json
-gradlew.bat connectedDebugAndroidTest
-```
 
 ## Test coverage and evidence
 

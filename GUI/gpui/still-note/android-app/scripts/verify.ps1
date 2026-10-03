@@ -6,6 +6,8 @@ $sdk = & adb -s $env:ANDROID_SERIAL shell getprop ro.build.version.sdk
 if ($qemu.Trim() -ne '1' -or $sdk.Trim() -ne '36') { throw 'Verification requires the isolated Android 16 emulator.' }
 & ./kotlin.bat run -m tooling -- format
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+& ./kotlin.bat run -m tooling -- architecture
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 & ./kotlin.bat build
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 & ./kotlin.bat test

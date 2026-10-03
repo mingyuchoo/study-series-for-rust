@@ -1,5 +1,8 @@
 # Android implementation handoff
 
+> Historical verification snapshot. Results, source hashes and paths below apply only to that run.
+> Current structure and commands: [architecture](../ARCHITECTURE.md), [README](../../README.md).
+
 Spec: ANDROID-01 version 1. Date: 2026-10-03.
 Source manifest SHA256: 7837fb850a062d64b087ca74865ffbfd050a9b24f7c00e92c5b555d1d99a4cb9 (37 files).
 Coordinator: /root. Builder: /root/builder. Independent verifier: /root/verifier. Independent reviewer: /root/reviewer.
@@ -36,4 +39,3 @@ Coordinator and reviewer inspected actual tablet dark layout/system bars and act
 Physical Korean keyboard composition, spoken TalkBack, actual-device observations and actual OS process-kill restoration remain unverified. Implementation and automated checks are complete; the strict ANDROID-01 release gate remains pending/FAIL for these missing manual criteria. Do not describe the remaining manual checks as passed.
 
 Historical failed attempts were preserved. An external Android Studio deployment interrupted final-09 on emulator5558; verification was moved to a newly isolated emulator without stopping other user work. Test-harness corrections retained the required assertions and real pointer paths, including proper Lazy item placement before scrolling/visibility checks. The final full run passed on the exact source above.
-

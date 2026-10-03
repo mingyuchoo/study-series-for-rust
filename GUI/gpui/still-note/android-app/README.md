@@ -7,6 +7,10 @@ importance, editing, cancellation, completion/reopen and linked task migration a
 implemented. Korean/System are defaults; language and theme update immediately.
 The bundled Pretendard 1.3.9 fonts retain their SIL OFL in LICENSE-Pretendard.txt.
 
+The launcher uses an original notebook icon with task/event/note marks, adaptive
+shape support and a monochrome layer for themed icons. See
+[icon assets and generation notes](docs/APP-ICON.md).
+
 ## Architecture
 
 The Kotlin/JVM `core` module contains immutable domain rules, explicit commands,
@@ -16,11 +20,17 @@ Compose UI, ViewModel scheduling and dependency composition. See
 pure/effect boundaries and preserved persistence policies. Run
 `./kotlin.bat test -m core` for the core tests without an emulator or Android SDK.
 
+The ViewModel depends on the `JournalUseCases` inbound port. `StillnoteRoute.kt`
+connects Android lifecycle, saved state and clock effects to `StillnoteScreen.kt`,
+which receives screen state and event/memory contracts. Search and index queries
+are pure core use cases; `ProtectedFileStore` owns shared file protection and
+durable-baseline handling. `./kotlin.bat run -m tooling -- architecture` checks
+inward dependency rules and is included in the verification scripts.
+
 The Android module uses `app/src`, `app/res`, `app/test`, and `app/testResources`;
 UI tests use `app/instrumentedTest`. The JVM core retains `src/main/kotlin` and
 `src/test/kotlin` through the Maven-like layout. Package names remain
-`app.stillnote` and its subpackages. Historical verification manifests retain the
-source paths from their original runs.
+`app.stillnote` and its subpackages.
 
 ## Build and run
 
@@ -109,9 +119,7 @@ JSON editor and restore a known valid desktop-compatible journal to
 `files/journal.json` while the app is stopped, then restart. Never remove your only
 copy. For invalid settings, first export the original and then correct the
 `language` (`korean`/`english`) and `theme` (`system`/`light`/`dark`) fields. Release
-internal data is accessible only through supported device backup/development
-access; uninstalling clears it. Automatic OS backup is disabled to prevent
-uncontrolled restore of stale journals.
+builds do not support `run-as`; uninstalling clears internal data.
 
 ## Verification
 
@@ -128,20 +136,18 @@ The scripts reject physical devices and non-API-36 emulators. The UI adapter kee
 the selected emulator awake and dismisses its keyguard before testing; `ANDROID_HOME` must
 point to the installed SDK. All commands propagate failures. Use
 `./scripts/format.ps1 -Write` or `bash scripts/format.sh --write` to format Kotlin.
-Check reports under `build/android-checks/build/reports`, CLI logs under
-`build/logs`, and evidence under
+Check reports under `build/android-checks/build/reports` and dated evidence under
 `docs/verification`. Physical-device keyboard composition and TalkBack must be
 checked on an actual device; automated tests are not evidence of those manual
-checks. Product code and tests have different owners under the repository's
-independent verification contract.
+checks.
 
 The `tooling` module is the verification utility. Running
 `./kotlin.bat run --module tooling` without arguments defaults to a read-only Kotlin
-formatting check. Pass `-- format --write`, `-- lint`, or `-- ui` for the other
+formatting check. Pass `-- format --write`, `-- architecture`, `-- lint`, or `-- ui` for the other
 actions. To launch the Android application, run `./kotlin.bat run -m app`
 with `--device-id emulator-NNNN` as shown above.
 
-`./kotlin.bat test` runs the existing 31 core/app JVM tests, with AGP's mockable
+`./kotlin.bat test` runs 35 core/app JVM tests, with AGP's mockable
 Android jar. The independent Rust harness validates `build/compatibility-roundtrip.json`.
 `./kotlin.bat run -m tooling -- lint` checks the app sources. The `ui` command first
 installs and launches the actual CLI APK on the selected emulator, then runs the

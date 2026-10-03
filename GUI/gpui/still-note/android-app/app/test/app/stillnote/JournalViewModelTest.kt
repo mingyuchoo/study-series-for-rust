@@ -65,6 +65,30 @@ class JournalViewModelTest {
         )
 
     @Test
+    fun cancelledUseCaseDoesNotPublishOrReportASaveFailure() =
+        runTest(dispatcher) {
+            val useCases =
+                object : JournalUseCases {
+                    override fun load() = LoadedJournal()
+
+                    override fun execute(journal: Journal, command: JournalCommand): Journal {
+                        throw kotlinx.coroutines.CancellationException("cancelled")
+                    }
+
+                    override fun saveSettings(settings: Settings) = Unit
+                }
+            val vm = JournalViewModel(useCases, SavedStateHandle(), dispatcher)
+            advanceUntilIdle()
+            var succeeded = false
+            vm.execute(JournalCommand.AddCollection("books")) { succeeded = true }
+            advanceUntilIdle()
+            assertEquals(Journal(), vm.state.value.journal)
+            assertNull(vm.state.value.error)
+            assertFalse(vm.state.value.busy)
+            assertFalse(succeeded)
+        }
+
+    @Test
     fun failedSaveKeepsPublishedJournalAndDraftCallbackThenRetrySucceeds() =
         runTest(dispatcher) {
             val vm = viewModel()

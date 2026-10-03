@@ -1,5 +1,8 @@
 # Root emulator observations
 
+> Historical verification snapshot. Results, source hashes and paths below apply only to that run.
+> Current structure and commands: [architecture](../ARCHITECTURE.md), [README](../../README.md).
+
 Observer: /root. Device: isolated Stillnote_API_36, emulator-5558, API 36.
 Product APK built from source manifest 229b82eff40350a72cdff5fca6529d2b0bef9808fa7f2655f502588a949fa17d; subsequent test-only refinements do not change these product observations.
 

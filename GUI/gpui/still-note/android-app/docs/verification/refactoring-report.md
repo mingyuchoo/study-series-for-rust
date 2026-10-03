@@ -1,5 +1,8 @@
 # Clean Architecture 리팩토링 검증
 
+> Historical verification snapshot. Results, source hashes and paths below apply only to that run.
+> Current structure and commands: [architecture](../ARCHITECTURE.md), [README](../../README.md).
+
 실행일: 2026-10-03 (Asia/Seoul). 구조와 분석은 [ARCHITECTURE.md](../ARCHITECTURE.md)에
 기록했다. 기존 독립 검증 보고서와 source manifest는 이전 시점의 기록으로 유지한다.
 이번 검증은 같은 에이전트가 수행한 변경 검증이며 독립 리뷰 결과는 아니다.

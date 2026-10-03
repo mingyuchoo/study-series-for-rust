@@ -1,8 +1,9 @@
-package app.stillnote.application
+package app.stillnote
 
+import app.stillnote.application.JournalRepository
 import app.stillnote.domain.Journal
 
-class Session<T : JournalRepository>(val store: T) {
+internal class StoreSession<T : JournalRepository>(val store: T) {
     var journal: Journal = store.load()
         private set
 

@@ -2,11 +2,11 @@ This isolated executable imports the actual read-only desktop `model.rs` and
 `i18n.rs`. Only the settings `Language` enum is stubbed to avoid compiling GPUI;
 the journal structs, serde derives and validation are the desktop implementation.
 
-From the workspace root:
+From the `android-app` project root:
 
 ```powershell
-cargo run --locked --manifest-path android-app/scripts/rust-fixture/Cargo.toml -- generate android-app/app/testResources/desktop-v1.json
-cargo run --locked --manifest-path android-app/scripts/rust-fixture/Cargo.toml -- validate android-app/build/compatibility-roundtrip.json
+cargo run --locked --manifest-path scripts/rust-fixture/Cargo.toml -- generate app/testResources/desktop-v1.json
+cargo run --locked --manifest-path scripts/rust-fixture/Cargo.toml -- validate build/compatibility-roundtrip.json
 ```
 
 The JVM fixture test compares JSON trees exactly and reopens the durable Kotlin

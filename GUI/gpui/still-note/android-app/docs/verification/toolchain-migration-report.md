@@ -1,5 +1,8 @@
 # Kotlin Toolchain 전환 검증
 
+> Historical verification snapshot. Results, source hashes and paths below apply only to that run.
+> Current structure and commands: [architecture](../ARCHITECTURE.md), [README](../../README.md).
+
 검증일: 2026-10-03, Windows 11.
 
 ## 전환 내용

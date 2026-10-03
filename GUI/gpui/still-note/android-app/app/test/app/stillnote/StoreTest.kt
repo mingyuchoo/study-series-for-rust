@@ -1,6 +1,5 @@
 package app.stillnote
 
-import app.stillnote.application.Session
 import app.stillnote.data.*
 import app.stillnote.domain.*
 import java.io.File
@@ -115,7 +114,7 @@ class StoreTest {
     @Test
     fun ac01_ac07_firstLoadIsBlankAndNeverWritesSeeds() {
         val file = path()
-        val session = Session(JournalStore(file))
+        val session = StoreSession(JournalStore(file))
         assertEquals(Journal(), session.journal)
         assertFalse(file.exists())
         assertEquals(emptyList<String>(), temporary.root.listFiles()!!.map { it.name })
@@ -146,14 +145,14 @@ class StoreTest {
 
     @Test
     fun ac08_backupEqualsPreviousDurableSnapshot() {
-        val session = Session(JournalStore(path()))
+        val session = StoreSession(JournalStore(path()))
         session.transact { note(it, "first") }
         val first = path().readBytes()
         session.transact { note(it, "second") }
         assertArrayEquals(first, session.store.backupPath.readBytes())
         assertEquals(
             listOf("first", "second"),
-            Session(JournalStore(path())).journal.entries.map { it.text },
+            StoreSession(JournalStore(path())).journal.entries.map { it.text },
         )
     }
 
@@ -206,7 +205,7 @@ class StoreTest {
                     return super.read(file)
                 }
             }
-        val session = Session(JournalStore(path(), access))
+        val session = StoreSession(JournalStore(path(), access))
         session.transact { note(it, "original") }
         val bytes = path().readBytes()
         val model = session.journal
@@ -222,7 +221,7 @@ class StoreTest {
 
     @Test
     fun ac08_externalChangesAndDeletionProtectBytesAndMemory() {
-        val session = Session(JournalStore(path()))
+        val session = StoreSession(JournalStore(path()))
         session.transact { note(it, "original") }
         val original = session.journal
         path().writeText("external edit")
@@ -248,7 +247,7 @@ class StoreTest {
                         super.replace(file, bytes)
                     }
                 }
-            val session = Session(JournalStore(file, access))
+            val session = StoreSession(JournalStore(file, access))
             session.transact { note(it, "original") }
             val bytes = file.readBytes()
             val model = session.journal
@@ -262,7 +261,7 @@ class StoreTest {
 
     @Test
     fun ac08_realBackupPathFailureKeepsBytesAndMemory() {
-        val session = Session(JournalStore(path()))
+        val session = StoreSession(JournalStore(path()))
         session.transact { note(it, "original") }
         val bytes = path().readBytes()
         val model = session.journal
@@ -276,7 +275,7 @@ class StoreTest {
 
     @Test
     fun ac08_operationFailureAndSerializedConcurrentWrites() {
-        val session = Session(JournalStore(path()))
+        val session = StoreSession(JournalStore(path()))
         session.transact { note(it, "original") }
         val bytes = path().readBytes()
         rejected {
@@ -323,7 +322,7 @@ class StoreTest {
         rejected { corrupt.load() }
         rejected { corrupt.save(Settings()) }
         assertEquals("{corrupt settings}", settingsFile.readText())
-        val session = Session(JournalStore(path()))
+        val session = StoreSession(JournalStore(path()))
         session.transact { note(it, "journal still works") }
         assertEquals("journal still works", JournalStore(path()).load().entries.single().text)
     }

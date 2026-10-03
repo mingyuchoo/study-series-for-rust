@@ -13,17 +13,8 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 
-data class UiState(
-    val journal: Journal = Journal(),
-    val settings: Settings = Settings(),
-    val loading: Boolean = true,
-    val blocked: Boolean = false,
-    val busy: Boolean = false,
-    val error: String? = null,
-)
-
 class JournalViewModel(
-    private val service: JournalService,
+    private val service: JournalUseCases,
     val savedState: SavedStateHandle = SavedStateHandle(),
     private val ioDispatcher: kotlinx.coroutines.CoroutineDispatcher = Dispatchers.IO,
 ) : ViewModel() {

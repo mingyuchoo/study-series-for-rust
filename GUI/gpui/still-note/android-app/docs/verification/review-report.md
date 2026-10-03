@@ -1,5 +1,8 @@
 # Independent review — ANDROID-01
 
+> Historical verification snapshot. Results, source hashes and paths below apply only to that run.
+> Current structure and commands: [architecture](../ARCHITECTURE.md), [README](../../README.md).
+
 Reviewer: `/root/reviewer`. Spec: ANDROID-01 version 1, READY. Product and tests were read-only to this reviewer; only this report was edited.
 
 Reviewed frozen source manifest SHA256: `7837fb850a062d64b087ca74865ffbfd050a9b24f7c00e92c5b555d1d99a4cb9`. Independently rehashed all 37 listed files: zero mismatches. Reports and outputs are excluded from the manifest. The user's preexisting desktop relocation is not staged or committed; this scoped manifest is the agreed revision identity.

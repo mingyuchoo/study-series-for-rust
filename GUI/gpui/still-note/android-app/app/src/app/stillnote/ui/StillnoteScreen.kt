@@ -22,56 +22,61 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import app.stillnote.application.JournalCommand
+import app.stillnote.application.*
 import app.stillnote.domain.*
-import app.stillnote.presentation.JournalViewModel
+import app.stillnote.presentation.JournalScreenActions
+import app.stillnote.presentation.ScreenMemory
+import app.stillnote.presentation.UiState
 import java.time.LocalDate
 import java.time.YearMonth
 import java.util.UUID
 
 @Composable
-private fun saved(vm: JournalViewModel, key: String, default: String = ""): MutableState<String> {
-    val state = rememberSaveable(key) { mutableStateOf(vm.recalled(key, default)) }
-    LaunchedEffect(state.value) { vm.remember(key, state.value) }
+private fun saved(memory: ScreenMemory, key: String, default: String = ""): MutableState<String> {
+    val state = rememberSaveable(key) { mutableStateOf(memory.recalled(key, default)) }
+    LaunchedEffect(state.value) { memory.remember(key, state.value) }
     return state
 }
 
 @Composable
-fun StillnoteApp(vm: JournalViewModel) {
-    val state by vm.state.collectAsStateWithLifecycle()
+fun StillnoteScreen(
+    state: UiState,
+    actions: JournalScreenActions,
+    memory: ScreenMemory,
+    today: () -> LocalDate,
+) {
     val ko = state.settings.language == Language.Korean
     fun tr(k: String, e: String) = if (ko) k else e
-    var logName by saved(vm, "log", "Daily")
-    var dateText by saved(vm, "date", LocalDate.now().toString())
-    var search by saved(vm, "search")
-    var filterName by saved(vm, "filter", "All")
-    var kindName by saved(vm, "kind", "Task")
+    var logName by saved(memory, "log", "Daily")
+    var dateText by saved(memory, "date", today().toString())
+    var search by saved(memory, "search")
+    var filterName by saved(memory, "filter", "All")
+    var kindName by saved(memory, "kind", "Task")
     var menu by rememberSaveable { mutableStateOf(false) }
-    var collectionName by saved(vm, "collection-name")
-    var editId by saved(vm, "edit-id")
-    var editText by saved(vm, "edit-text")
-    var migrationId by saved(vm, "migration-id")
-    var migrationDate by saved(vm, "migration-date", LocalDate.now().plusDays(1).toString())
-    var migrationLog by saved(vm, "migration-log", "Daily")
+    var collectionName by saved(memory, "collection-name")
+    var editId by saved(memory, "edit-id")
+    var editText by saved(memory, "edit-text")
+    var migrationId by saved(memory, "migration-id")
+    var migrationDate by saved(memory, "migration-date", today().plusDays(1).toString())
+    var migrationLog by saved(memory, "migration-log", "Daily")
     var draft by
         rememberSaveable(stateSaver = TextFieldValue.Saver) {
             mutableStateOf(
                 TextFieldValue(
-                    vm.recalled("draft"),
+                    memory.recalled("draft"),
                     TextRange(
-                        vm.recalled("draft-cursor", "0").toIntOrNull() ?: 0,
-                        vm.recalled("draft-end", "0").toIntOrNull() ?: 0,
+                        memory.recalled("draft-cursor", "0").toIntOrNull() ?: 0,
+                        memory.recalled("draft-end", "0").toIntOrNull() ?: 0,
                     ),
                 )
             )
         }
     LaunchedEffect(draft) {
-        vm.remember("draft", draft.text)
-        vm.remember("draft-cursor", draft.selection.start.toString())
-        vm.remember("draft-end", draft.selection.end.toString())
+        memory.remember("draft", draft.text)
+        memory.remember("draft-cursor", draft.selection.start.toString())
+        memory.remember("draft-end", draft.selection.end.toString())
     }
-    var selectedDate by saved(vm, "selected-date", LocalDate.now().toString())
+    var selectedDate by saved(memory, "selected-date", today().toString())
     val date =
         try {
             parseDate(dateText)
@@ -120,16 +125,18 @@ fun StillnoteApp(vm: JournalViewModel) {
             val d = parseDate(dateText)
             val text = draft.text
             val kind = Kind.valueOf(kindName)
-            vm.execute(JournalCommand.AddEntry(d, log, kind, text)) { draft = TextFieldValue() }
+            actions.execute(JournalCommand.AddEntry(d, log, kind, text)) {
+                draft = TextFieldValue()
+            }
         } catch (_: Exception) {
-            vm.report("date")
+            actions.report("date")
         }
     }
     fun createCollection() {
         val submitted = collectionName
-        vm.execute(JournalCommand.AddCollection(submitted)) {
+        actions.execute(JournalCommand.AddCollection(submitted)) { committed ->
             collectionName = ""
-            navigate(vm.state.value.journal.collections.last().id.toString())
+            navigate(committed.collections.last().id.toString())
         }
     }
     fun errorMessage(code: String): String =
@@ -246,7 +253,7 @@ fun StillnoteApp(vm: JournalViewModel) {
                                                 "language-$l",
                                                 l == state.settings.language,
                                             ) {
-                                                vm.settings(state.settings.copy(language = l))
+                                                actions.settings(state.settings.copy(language = l))
                                             }
                                         }
                                     }
@@ -262,7 +269,7 @@ fun StillnoteApp(vm: JournalViewModel) {
                                                 "theme-$t",
                                                 t == state.settings.theme,
                                             ) {
-                                                vm.settings(state.settings.copy(theme = t))
+                                                actions.settings(state.settings.copy(theme = t))
                                             }
                                         }
                                     }
@@ -303,7 +310,7 @@ fun StillnoteApp(vm: JournalViewModel) {
                                     )
                                     if (!state.blocked)
                                         Action(tr("닫기", "Dismiss"), "dismiss-error") {
-                                            vm.dismissError()
+                                            actions.dismissError()
                                         }
                                 }
                             }
@@ -339,11 +346,11 @@ fun StillnoteApp(vm: JournalViewModel) {
                                                         .also { parseDate(it.toString()) }
                                                         .toString()
                                         } catch (_: Exception) {
-                                            vm.report("date")
+                                            actions.report("date")
                                         }
                                     }
                                     Action(tr("오늘", "Today"), "today") {
-                                        dateText = LocalDate.now().toString()
+                                        dateText = today().toString()
                                     }
                                     Action("›", "next") {
                                         try {
@@ -356,7 +363,7 @@ fun StillnoteApp(vm: JournalViewModel) {
                                                         .also { parseDate(it.toString()) }
                                                         .toString()
                                         } catch (_: Exception) {
-                                            vm.report("date")
+                                            actions.report("date")
                                         }
                                     }
                                 }
@@ -470,15 +477,7 @@ fun StillnoteApp(vm: JournalViewModel) {
                                 }
                             }
                         if (logName == "Index" && search.isBlank()) {
-                            val locations =
-                                state.journal.entries.distinctBy { e ->
-                                    when (val l = e.log) {
-                                        Log.Daily -> "D${e.date}"
-                                        Log.Monthly -> "M${YearMonth.from(e.date)}"
-                                        Log.Future -> "F${YearMonth.from(e.date)}"
-                                        is Log.Collection -> l.id.toString()
-                                    }
-                                }
+                            val locations = state.journal.indexLocations()
                             items(locations, key = { "index-${it.id}" }) { e ->
                                 Action(
                                     "${location(e,state.journal,ko)} · ${e.date}",
@@ -494,12 +493,11 @@ fun StillnoteApp(vm: JournalViewModel) {
                             }
                         }
                         val visible =
-                            if (search.isNotBlank()) state.journal.search(search, filter)
-                            else if (logName == "Index") emptyList()
-                            else
-                                state.journal.visible(date, log).filter {
-                                    matchesFilter(it, filter)
-                                }
+                            JournalQuery(date, log, search, filter, logName == "Index")
+                                .entries(state.journal)
+                        if (search.isNotBlank()) state.journal.search(search, filter)
+                        else if (logName == "Index") emptyList()
+                        else state.journal.visible(date, log).filter { matchesFilter(it, filter) }
                         if (
                             visible.isEmpty() &&
                                 (logName != "Index" || search.isNotBlank()) &&
@@ -551,7 +549,7 @@ fun StillnoteApp(vm: JournalViewModel) {
                                             e.important,
                                             !state.busy,
                                         ) {
-                                            vm.execute(JournalCommand.ToggleImportant(e.id))
+                                            actions.execute(JournalCommand.ToggleImportant(e.id))
                                         }
                                         if (e.kind == Kind.Task)
                                             Action(
@@ -560,7 +558,7 @@ fun StillnoteApp(vm: JournalViewModel) {
                                                 "complete-${e.id}",
                                                 enabled = !state.busy,
                                             ) {
-                                                vm.execute(
+                                                actions.execute(
                                                     JournalCommand.SetStatus(
                                                         e.id,
                                                         if (e.status == Status.Complete) Status.Open
@@ -574,7 +572,7 @@ fun StillnoteApp(vm: JournalViewModel) {
                                             "cancel-${e.id}",
                                             enabled = !state.busy,
                                         ) {
-                                            vm.execute(
+                                            actions.execute(
                                                 JournalCommand.SetStatus(
                                                     e.id,
                                                     if (e.status == Status.Cancelled) Status.Open
@@ -653,7 +651,7 @@ fun StillnoteApp(vm: JournalViewModel) {
                     Action(tr("저장", "Save"), "edit-save", enabled = !state.busy) {
                         val id = UUID.fromString(editId)
                         val text = editText
-                        vm.execute(JournalCommand.EditEntry(id, text)) {
+                        actions.execute(JournalCommand.EditEntry(id, text)) {
                             if (editId == id.toString()) editId = ""
                         }
                     }
@@ -702,11 +700,11 @@ fun StillnoteApp(vm: JournalViewModel) {
                                     else -> Log.Daily
                                 }
                             val id = UUID.fromString(migrationId)
-                            vm.execute(JournalCommand.Migrate(id, d, target)) {
+                            actions.execute(JournalCommand.Migrate(id, d, target)) {
                                 if (migrationId == id.toString()) migrationId = ""
                             }
                         } catch (_: Exception) {
-                            vm.report("date")
+                            actions.report("date")
                         }
                     }
                 },

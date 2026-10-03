@@ -1,109 +1,115 @@
-# Android 구조와 리팩토링 기록
+# Android Clean Architecture
 
-## 분석 결과
+## 분석과 이번 변경
 
-기존 `Journal`은 불변 데이터와 검증 규칙을 갖고 있었지만 생성·이월 메서드가
-UUID를 직접 생성하여 같은 입력으로 같은 결과를 얻을 수 없었다.
-`Store.kt`에는 설정 모델, JSON 변환, 파일 I/O, 백업·충돌 정책, 메모리 세션이
-함께 들어 있었다. `JournalViewModel`은 파일 경로를 받아 저장소를 직접 생성하고
-로드 실패 정책까지 처리했다. Compose 화면은 데이터 계층의 설정 타입을 사용하고
-저널 변경 람다를 ViewModel에 전달했다. 이 때문에 UI와 파일 구현을 분리하여
-유스케이스를 검증하기 어려웠다.
+기존 코드에는 이미 `app → core` 모듈 경계, 불변 도메인, 명시적 변경 명령,
+저장소 포트와 DI 조립부가 있었다. 도메인에 UUID를 주입하는 이전 리팩토링도
+유지했다. 이번에는 남아 있던 결합과 중복을 다음과 같이 정리했다.
 
-## 현재 구조
+| 기존 책임 혼합 | 변경 후 |
+| --- | --- |
+| ViewModel이 구체 JournalService를 참조 | JournalUseCases 입력 포트에 의존 |
+| Compose 화면에서 ViewModel·생명주기·SavedState·시계 접근 | StillnoteRoute가 프레임워크 연결, StillnoteScreen은 상태와 계약을 전달받음 |
+| 화면 안에서 검색·필터·인덱스 계산 | core의 JournalQuery와 indexLocations 순수 조회 |
+| 저널과 설정 저장소에 로드 보호·baseline·충돌·저장 처리 중복 | ProtectedFileStore가 공통 파일 정책 소유, 각 저장소는 모델별 변환과 백업 선택 |
+| 내부 패키지 의존성 규칙이 문서에만 존재 | tooling architecture 명령과 verify 스크립트에서 소스 규칙 검사 |
+
+## 구조와 의존성
 
 ```text
-android-app/
-  core/                          Android 의존성이 없는 Kotlin/JVM 모듈
-    src/main/kotlin/app/stillnote/
-      domain/
-        Journal.kt               불변 모델, 검증, 상태 변경, 검색
-        Settings.kt              설정 값과 열거형
-      application/
-        JournalCommand.kt        명시적 명령과 순수한 상태 전이
-        Repositories.kt          저장소·ID 생성 포트와 경계 오류
-        JournalService.kt        초기 로드, 명령 실행·저장, 설정 저장
-        Session.kt               저장 성공 후에만 갱신하는 동기식 세션
-  app/src/app/stillnote/
-    data/
-      JournalCodec.kt            데스크톱 v1 JSON ↔ 도메인 변환
-      SettingsCodec.kt           설정 JSON ↔ 도메인 변환
-      StrictJson.kt              JSON 구문·중복 키·유니코드 검증
-      FileAccess.kt              읽기, fsync, 원자적 파일 교체
-      JournalStore.kt            로드 보호, 충돌 검사, 이전 파일 백업
-      SettingsStore.kt           설정 로드 보호·충돌 검사
-      SameBytes.kt               순수한 바이트 비교
-    presentation/
-      JournalViewModel.kt        화면 상태, SavedState, 코루틴·명령 직렬화
-    ui/                          Compose 화면과 테마
-    di/JournalDependencies.kt    파일 저장소와 UUID 생성기 조립
-    MainActivity.kt              Android 진입점과 ViewModel 연결
+core/src/main/kotlin/app/stillnote/
+  domain/
+    Journal.kt                 불변 모델, 검증, 변경, 검색 규칙
+    Settings.kt                설정 값
+  application/
+    JournalCommand.kt          명시적 변경 명령과 순수 전이
+    JournalQuery.kt            순수 목록 조회와 위치별 인덱스
+    JournalUseCases.kt         입력 포트와 로드 결과
+    Repositories.kt            저장소·ID 생성 출력 포트
+    JournalService.kt          로드·ID 생성·저장 조정
+app/src/app/stillnote/
+  data/
+    JournalStore.kt             저널 어댑터, 검증·이전 파일 백업 선택
+    SettingsStore.kt            설정 어댑터
+    ProtectedFileStore.kt       로드 보호·충돌 검사·내구성 baseline
+    FileAccess.kt              읽기·fsync·원자적 파일 교체
+    JournalCodec.kt             데스크톱 v1 JSON 변환
+    SettingsCodec.kt            설정 JSON 변환
+    StrictJson.kt, SameBytes.kt 순수 구문 검증·바이트 비교
+  presentation/
+    JournalViewModel.kt         코루틴·명령 직렬화·화면 상태 게시
+    UiState.kt                  불변 화면 상태
+    JournalScreenContract.kt    화면 이벤트·복원 상태 접근 계약
+  ui/
+    StillnoteRoute.kt           생명주기 수집·SavedState 연결·시계 제공
+    StillnoteScreen.kt          화면 렌더링·편집 상태·사용자 이벤트
+    Theme.kt                    Compose 테마
+  di/JournalDependencies.kt     파일 저장소와 실제 UUID 생성기 조립
+  MainActivity.kt               Android 진입점과 창 설정
 ```
 
-컴파일 의존성은 `app → core`이다. `core`는 Android, Compose, 파일 API,
-JSON 라이브러리, 코루틴을 참조하지 않는다. 내부에서는 `application → domain`으로
-의존한다. `data`는 application의 저장소 인터페이스를 구현하고,
-presentation은 구체 저장소 대신 `JournalService`를 호출한다.
-`ui`는 domain과 presentation/application의 명령을 사용한다.
-구체 구현 생성은 `di`에서 한다.
+컴파일 의존성은 `app → core`, core 내부에서는 `application → domain`이다.
+presentation은 입력 포트에 의존하고 data는 출력 포트를 구현한다.
+서비스는 저장소 구현을 모르며, 화면은 ViewModel과 파일 저장소를 모른다.
+구체 구현 생성은 DI 조립부에서만 수행한다.
 
-Gradle 모듈 경계가 core에서 app 구현을 참조하는 것을 막는다. app 내부의
-`ui`/`presentation`에서 `data`/`di`를 참조하지 않는 규칙은 패키지 규칙이며,
-별도 Gradle 모듈로 강제하지는 않는다. 작고 긴밀하게 연관된 유스케이스는 하나의
-서비스로 묶고, 저장 포트는 저널과 설정의 독립적인 실패 정책에 맞춰 나누었다.
+`JournalService`는 연관된 저널·설정 사용 흐름을 조정한다. 파일 정책은 하나의
+내부 객체로 모으고, 모델별 저장소는 작은 어댑터로 유지했다. JSON과 파일 효과를
+도메인에 넣지 않았다. 기존 두 제품 모듈을 유지하여 작은 기능마다 모듈이나
+유스케이스 클래스를 추가하지 않았다.
 
-## 순수한 코드와 부수효과
+## 순수 계산과 부수효과
 
-`Journal.addEntry`, `addCollection`, `migrate`는 이제 ID를 필수 인자로 받는다.
-`Journal.apply(command, newId)`는 저장·UUID 생성 없이 새 저널만 반환하며
-입력 저널은 수정하지 않는다. 검색, 날짜 검증, JSON 변환도 결정적인 계산이다.
+순수 계산은 도메인 검증·변경·검색, `Journal.apply(command, newId)`,
+`JournalQuery.entries`, `Journal.indexLocations`, JSON 변환과 바이트 비교다.
+변경 함수는 전달받은 ID만 사용하고 입력 모델을 수정하지 않는다.
+인덱스는 일간의 날짜, 월간·미래의 연월, 컬렉션 ID로 묶어 입력 순서를 유지한다.
+검색은 현재 위치와 인덱스 선택보다 우선하며 상태 필터를 적용한다.
 
-`JournalService`는 **부수효과를 조정하는 코드**이다. 필요한 생성 명령에만
-`IdGenerator`를 호출하고, 순수한 상태 전이 결과를 저장한 뒤 반환한다.
-실제 UUID 생성과 파일 I/O는 app의 어댑터에서 일어난다.
-ViewModel의 디스패처도 주입할 수 있어 테스트에서 실제 파일과 스레드 없이
-상태 전이·실패 정책을 확인한다. Android 생명주기, SavedState, Compose의 상태,
-현재 날짜 조회, 시스템 창 설정은 app의 프레임워크 경계에 남는다.
+서비스는 출력 포트를 호출하는 효과 조정 코드다. 저장소 어댑터는
+실제 파일 효과를 수행한다. ViewModel은 코루틴·Mutex·StateFlow·SavedState를,
+Route와 Compose 화면은 생명주기·UI 상태 효과를 담당한다. Compose 화면 자체는
+순수 함수라고 주장하지 않는다. 날짜 공급 함수를 주입하므로 화면을 실제 시계나
+ViewModel 없이 구성할 수 있고, 성공 이벤트는 저장이 끝난 저널을 전달받는다.
 
 ## 보존한 정책
 
-- 최초 실행은 빈 저널이며 시드 파일을 쓰지 않는다.
-- 파일을 정상 로드하기 전에는 저장을 허용하지 않는다.
-- 외부 변경·삭제는 baseline 비교로 감지하며 덮어쓰지 않는다.
-- 저널은 이전 파일을 백업하고 임시 파일을 fsync한 뒤 원자적으로 교체한다.
-- 변경은 저장 성공 후 화면에 게시하며 성공 콜백도 그때만 실행한다.
-- 손상된 저널은 변경을 막고, 손상된 설정은 정상 저널 사용을 막지 않는다.
-- 설정 저장 실패 시 현재 세션의 선택과 원본 파일을 유지한다.
-- 코루틴 취소는 저장 오류로 변환하지 않고 다시 전파한다.
-- 초기 로드와 이후 명령·설정 저장은 같은 Mutex로 직렬화한다.
-- 데스크톱 JSON v1과 파일 이름, UI 테스트 태그를 유지한다.
+- 최초 실행은 빈 저널이며 파일을 미리 쓰지 않는다.
+- 정상 로드 전에 저장하지 않고, 손상된 원본을 보호한다.
+- 외부 변경·삭제를 baseline 비교로 감지하고 덮어쓰지 않는다.
+- 저널만 이전 파일을 백업하고, 임시 파일 fsync 후 원자적으로 교체한다.
+- baseline과 화면 저널은 저장 성공 후 갱신한다. 저장 실패 시 초안을 유지한다.
+- 설정 실패는 정상 저널을 막지 않으며, 설정 선택은 현재 세션에 적용한다.
+- 초기 로드·명령·설정 저장은 같은 Mutex로 직렬화한다.
+- 코루틴 취소를 저장 오류로 바꾸지 않는다.
+- JSON v1, 파일 이름, 화면 테스트 태그와 SavedState 키를 유지한다.
 
-## 검증
+## 경계 검사와 검증
 
-`core`의 도메인 테스트와 가짜 저장소 기반 유스케이스 테스트,
-`app`의 기존 파일 장애·충돌·JSON 보호 테스트 및 새 ViewModel 테스트를 사용한다.
-화면 테스트는 기존 시나리오를 유지하고 생성 부분만 새 의존성 조립 방식으로 바꿨다.
-검증 스크립트는 Kotlin CLI로 core/app 테스트를 실행한다.
+`kotlin run -m tooling -- architecture`는 core의 Android·JSON·파일 의존성,
+도메인의 application 참조, presentation/data/UI의 역방향 참조 및 core의 직접
+UUID·시계 호출을 검사한다. UI의 생명주기 연결은 Route에 둔다. 이 검사는 소스
+정규식 기반 보조 검사이며 모든 Kotlin 별칭·와일드카드·간접 호출을 분석하는
+컴파일러 플러그인은 아니다. core에서 app을 참조하지 못하는 것은 모듈 컴파일이
+강제한다. verify.ps1과 verify.sh에 이 검사를 포함했다.
 
 ```powershell
 ./kotlin.bat run -m tooling -- format
+./kotlin.bat run -m tooling -- architecture
 ./kotlin.bat build
 ./kotlin.bat test
 cargo run --locked --manifest-path scripts/rust-fixture/Cargo.toml -- validate build/compatibility-roundtrip.json
 ./kotlin.bat run -m tooling -- lint
-# ANDROID_SERIAL은 격리된 API 36 에뮬레이터를 지정한다.
+# 격리된 API 36 에뮬레이터에서만 실행
 ./kotlin.bat run -m tooling -- ui
 ```
 
-`./kotlin.bat test -m core`만으로 Android SDK와 장치 없이 핵심 규칙을 검증할 수 있다.
-앱 빌드에는 Android SDK가 필요하다. `tooling`은 포맷·lint·UI 검증 어댑터를
-제공하는 JVM 모듈이며 제품 코드에서 의존하지 않는다. lint/UI 연결 프로젝트는
-`build/android-checks`에 생성되고, UI 호스트는 CLI가 컴파일한 제품 JAR을 사용한다.
-`docs/verification`의 기존 보고서·manifest는 이전 검증 시점의 기록이며
-전환 검증 결과는 [Toolchain 전환 보고서](verification/toolchain-migration-report.md)에 기록한다.
-이번 실행 요약과 첫 실패·전용 환경 재실행 결과는
-[리팩토링 검증 보고서](verification/refactoring-report.md)에 기록했다.
+새 조회 테스트는 전역 검색·필터 우선순위·빈 인덱스·날짜와 로그별 인덱스 그룹을
+검증한다. ViewModel의 추가 테스트는 저장소 없이 입력 포트를 주입하고 취소 시
+저널·오류·busy·성공 콜백을 검증한다. 기존 파일 장애·충돌·손상 보호 테스트는
+공통 파일 경계로 옮긴 정책을 계속 검증한다.
 
-새 기능은 먼저 domain에 불변 규칙을 구현하고 application에 명령과 필요한 포트를
-추가한다. 저장·운영체제 구현은 data 또는 프레임워크 경계에서 제공하고 di에서
-연결한다. 파일 경로나 Android 타입을 core에 전달하지 않는다.
+이번 실행 결과는 [2026-10-04 검증 기록](verification/clean-architecture-report.md)에
+기록했다. 기존 verification 문서들은 각 실행 시점의 역사적 기록으로 유지한다.
+
+저장소 테스트에서만 쓰는 StoreSession은 app/test에 있으며 제품 API에 포함하지 않는다.
