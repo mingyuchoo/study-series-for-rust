@@ -14,6 +14,7 @@ import androidx.activity.enableEdgeToEdge
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.graphics.asAndroidBitmap
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.StateRestorationTester
@@ -136,6 +137,16 @@ class StillnoteFlowTest {
         // All visibility assertions and pointer actions need the settled native
         // window, including callers which do not go through click().
         InstrumentationRegistry.getInstrumentation().uiAutomation.waitForIdle(500, 5_000)
+        if (
+            tag == "menu" ||
+                (tag.startsWith("nav-") &&
+                    compose
+                        .onAllNodesWithTag("fixed-navigation")
+                        .fetchSemanticsNodes()
+                        .isNotEmpty())
+        ) {
+            return compose.onNodeWithTag(tag).assertIsDisplayed()
+        }
         val nodes = compose.onAllNodesWithTag(tag).fetchSemanticsNodes()
         // Lazy reuse can leave attached semantics with cached bounds even when
         // the item is not placed. Scroll the lazy list in that case as well.
@@ -145,7 +156,12 @@ class StillnoteFlowTest {
                     generateSequence(node.layoutInfo) { it.parentInfo }.all { it.isPlaced }
                 }
         ) {
-            compose.onNode(hasScrollToIndexAction()).performScrollToNode(hasTestTag(tag))
+            compose
+                .onNode(
+                    hasScrollToIndexAction() and
+                        SemanticsMatcher.keyIsDefined(SemanticsProperties.VerticalScrollAxisRange)
+                )
+                .performScrollToNode(hasTestTag(tag))
         }
         compose.onNodeWithTag(tag).performScrollTo()
         InstrumentationRegistry.getInstrumentation().uiAutomation.waitForIdle(500, 5_000)
@@ -294,6 +310,11 @@ class StillnoteFlowTest {
             }
         }
         click("nav-Monthly")
+        // Dates now belong to each log; select the month containing the daily entry.
+        visibleNode("date").performSemanticsAction(SemanticsActions.SetText) {
+            assertTrue(it(AnnotatedString("2024-02-29")))
+        }
+        compose.waitForIdle()
         visibleNode("day-29").assertTextContains("· 1", substring = true)
         compose.onNodeWithTag("day-30").assertDoesNotExist()
         click("next")
@@ -380,7 +401,7 @@ class StillnoteFlowTest {
             val rootRect = android.graphics.Rect()
             val rootVisible = rootView.getGlobalVisibleRect(rootRect)
             val diagnostics =
-                "entryBounds=${node.boundsInRoot}, windowBounds=${node.boundsInWindow}, placement=$placement, rootShown=${rootView.isShown}, rootVisible=$rootVisible, globalRect=$rootRect, viewport=${compose.onNode(hasScrollToIndexAction()).fetchSemanticsNode().boundsInRoot}, ime=${insets?.getInsets(WindowInsetsCompat.Type.ime())}, imeVisible=${insets?.isVisible(WindowInsetsCompat.Type.ime())}, log=${vm.recalled("log")}, search=${vm.recalled("search")}, filter=${vm.recalled("filter")}, entries=${vm.state.value.journal.entries}"
+                "entryBounds=${node.boundsInRoot}, windowBounds=${node.boundsInWindow}, placement=$placement, rootShown=${rootView.isShown}, rootVisible=$rootVisible, globalRect=$rootRect, viewport=${compose.onNode(hasScrollToIndexAction() and SemanticsMatcher.keyIsDefined(SemanticsProperties.VerticalScrollAxisRange)).fetchSemanticsNode().boundsInRoot}, ime=${insets?.getInsets(WindowInsetsCompat.Type.ime())}, imeVisible=${insets?.isVisible(WindowInsetsCompat.Type.ime())}, log=${vm.recalled("log")}, search=${vm.recalled("search")}, filter=${vm.recalled("filter")}, entries=${vm.state.value.journal.entries}"
             val screenshot =
                 File(
                     InstrumentationRegistry.getInstrumentation().targetContext.cacheDir,

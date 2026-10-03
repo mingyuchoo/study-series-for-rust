@@ -52,6 +52,11 @@ On Linux/macOS use `bash kotlin`. The app supports edge-to-edge, keyboard insets
 phone/tablet windows, rotation, font scaling and predictive system back. Expanded
 windows show navigation in a sidebar; phone navigation remains directly reachable.
 Tap Menu · Settings to create/select collections and change language/theme.
+The Stillnote header and navigation stay fixed above the content. Swipe the body
+horizontally between Daily, Monthly, Future and Index, or use the navigation
+buttons. The four pages stop at either end and retain their own dates and scroll
+positions across navigation and state restoration. Settings, editing and migration
+disable page swipes; collections remain accessible through the menu/sidebar.
 Monthly day tiles open the corresponding Daily log. Search covers every log;
 clearing it restores the selected log. Open includes open events and notes.
 Migration preserves the original, adds a linked open task and freezes the original.

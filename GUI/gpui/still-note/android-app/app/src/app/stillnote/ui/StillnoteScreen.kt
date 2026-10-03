@@ -4,7 +4,10 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
@@ -15,7 +18,9 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.font.FontWeight
@@ -47,8 +52,64 @@ fun StillnoteScreen(
 ) {
     val ko = state.settings.language == Language.Korean
     fun tr(k: String, e: String) = if (ko) k else e
-    var logName by saved(memory, "log", "Daily")
-    var dateText by saved(memory, "date", today().toString())
+    val basicLogs = remember { listOf("Daily", "Monthly", "Future", "Index") }
+    val initialLog = remember { memory.recalled("log", "Daily") }
+    val pager =
+        rememberPagerState(initialPage = basicLogs.indexOf(initialLog).coerceAtLeast(0)) {
+            basicLogs.size
+        }
+    var collectionLog by rememberSaveable {
+        mutableStateOf(initialLog.takeUnless { it in basicLogs } ?: "")
+    }
+    val logName = collectionLog.ifEmpty { basicLogs[pager.currentPage] }
+    val pageNames =
+        (basicLogs +
+                state.journal.collections.map { it.id.toString() } +
+                listOfNotNull(collectionLog.takeIf { it.isNotEmpty() }))
+            .distinct()
+    val dates =
+        pageNames.associateWith { name ->
+            key(name) { saved(memory, "date-$name", memory.recalled("date", today().toString())) }
+        }
+    val validDates =
+        pageNames.associateWith { name ->
+            key(name) {
+                saved(
+                    memory,
+                    "selected-date-$name",
+                    memory.recalled("selected-date", today().toString()),
+                )
+            }
+        }
+    val listStates =
+        pageNames.associateWith { name ->
+            key(name) {
+                val list =
+                    rememberSaveable(saver = LazyListState.Saver) {
+                        LazyListState(
+                            memory
+                                .recalled("scroll-index-$name", "0")
+                                .toIntOrNull()
+                                ?.coerceAtLeast(0) ?: 0,
+                            memory
+                                .recalled("scroll-offset-$name", "0")
+                                .toIntOrNull()
+                                ?.coerceAtLeast(0) ?: 0,
+                        )
+                    }
+                LaunchedEffect(list) {
+                    snapshotFlow { list.firstVisibleItemIndex to list.firstVisibleItemScrollOffset }
+                        .collect { (index, offset) ->
+                            memory.remember("scroll-index-$name", index.toString())
+                            memory.remember("scroll-offset-$name", offset.toString())
+                        }
+                }
+                list
+            }
+        }
+    // A collection can still be restoring while the journal is loading.
+    val fallbackDate = saved(memory, "date", today().toString())
+    var dateText by dates.getOrElse(logName) { fallbackDate }
     var search by saved(memory, "search")
     var filterName by saved(memory, "filter", "All")
     var kindName by saved(memory, "kind", "Task")
@@ -76,56 +137,64 @@ fun StillnoteScreen(
         memory.remember("draft-cursor", draft.selection.start.toString())
         memory.remember("draft-end", draft.selection.end.toString())
     }
-    var selectedDate by saved(memory, "selected-date", today().toString())
-    val date =
-        try {
-            parseDate(dateText)
-        } catch (_: Exception) {
-            parseDate(selectedDate)
-        }
-    LaunchedEffect(dateText) {
+    val fallbackSelectedDate = saved(memory, "selected-date", today().toString())
+    var selectedDate by validDates.getOrElse(logName) { fallbackSelectedDate }
+    LaunchedEffect(logName, dateText) {
         try {
             selectedDate = parseDate(dateText).toString()
         } catch (_: Exception) {}
+        memory.remember("date", dateText)
+        memory.remember("selected-date", selectedDate)
     }
-    val log: Log =
-        when (logName) {
+    fun pageLog(name: String): Log =
+        when (name) {
             "Monthly" -> Log.Monthly
             "Future" -> Log.Future
             "Daily",
             "Index" -> Log.Daily
             else ->
                 try {
-                    Log.Collection(UUID.fromString(logName))
+                    Log.Collection(UUID.fromString(name))
                 } catch (_: Exception) {
                     Log.Daily
                 }
         }
     val filter = Filter.valueOf(filterName)
+    var previousLog by remember { mutableStateOf(logName) }
+    LaunchedEffect(logName) {
+        memory.remember("log", logName)
+        if (previousLog != logName) {
+            search = ""
+            previousLog = logName
+        }
+    }
     fun navigate(name: String) {
-        logName = name
         search = ""
         editId = ""
         menu = false
+        val page = basicLogs.indexOf(name)
+        if (page >= 0) {
+            pager.requestScrollToPage(page)
+            collectionLog = ""
+        } else collectionLog = name
     }
     fun jump(e: Entry) {
-        dateText = e.date.toString()
-        logName =
+        val target =
             when (val l = e.log) {
                 Log.Daily -> "Daily"
                 Log.Monthly -> "Monthly"
                 Log.Future -> "Future"
                 is Log.Collection -> l.id.toString()
             }
-        search = ""
-        editId = ""
+        dates.getValue(target).value = e.date.toString()
+        navigate(target)
     }
-    fun capture() {
+    fun capture(pageName: String) {
         try {
-            val d = parseDate(dateText)
+            val d = parseDate(dates.getValue(pageName).value)
             val text = draft.text
             val kind = Kind.valueOf(kindName)
-            actions.execute(JournalCommand.AddEntry(d, log, kind, text)) {
+            actions.execute(JournalCommand.AddEntry(d, pageLog(pageName), kind, text)) {
                 draft = TextFieldValue()
             }
         } catch (_: Exception) {
@@ -188,6 +257,364 @@ fun StillnoteScreen(
             else -> search = ""
         }
     }
+    @Composable
+    fun LogPage(pageName: String, expanded: Boolean, modifier: Modifier) {
+        val logName = pageName
+        var dateText by dates.getValue(pageName)
+        val date =
+            try {
+                parseDate(dateText)
+            } catch (_: Exception) {
+                parseDate(validDates.getValue(pageName).value)
+            }
+        val log = pageLog(pageName)
+        LazyColumn(
+            modifier
+                .fillMaxHeight()
+                .testTag("log-list-$pageName")
+                .padding(horizontal = if (expanded) 28.dp else 16.dp),
+            state = listStates.getValue(pageName),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+            contentPadding = PaddingValues(top = 12.dp, bottom = 24.dp),
+        ) {
+            if (menu)
+                item {
+                    Panel {
+                        Text(tr("언어", "Language"), fontWeight = FontWeight.Bold)
+                        FlowRow {
+                            Language.entries.forEach { l ->
+                                Action(
+                                    if (l == Language.Korean) "한국어" else "English",
+                                    "language-$l",
+                                    l == state.settings.language,
+                                ) {
+                                    actions.settings(state.settings.copy(language = l))
+                                }
+                            }
+                        }
+                        Text(tr("테마", "Theme"), fontWeight = FontWeight.Bold)
+                        FlowRow {
+                            ThemeMode.entries.forEach { t ->
+                                Action(
+                                    when (t) {
+                                        ThemeMode.System -> tr("시스템", "System")
+                                        ThemeMode.Light -> tr("라이트", "Light")
+                                        ThemeMode.Dark -> tr("다크", "Dark")
+                                    },
+                                    "theme-$t",
+                                    t == state.settings.theme,
+                                ) {
+                                    actions.settings(state.settings.copy(theme = t))
+                                }
+                            }
+                        }
+                        Text(tr("컬렉션", "Collections"), fontWeight = FontWeight.Bold)
+                        state.journal.collections.forEach { c ->
+                            Action(c.name, "collection-${c.id}") { navigate(c.id.toString()) }
+                        }
+                        OutlinedTextField(
+                            collectionName,
+                            { collectionName = it },
+                            enabled = !state.busy,
+                            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                            keyboardActions = KeyboardActions(onDone = { createCollection() }),
+                            label = { Text(tr("컬렉션 이름", "Collection name")) },
+                            modifier = Modifier.fillMaxWidth().testTag("collection-name"),
+                        )
+                        Action(
+                            tr("컬렉션 만들기", "Create collection"),
+                            "collection-create",
+                            enabled = !state.blocked && !state.busy,
+                        ) {
+                            createCollection()
+                        }
+                    }
+                }
+            if (state.loading) item { LinearProgressIndicator(Modifier.fillMaxWidth()) }
+            state.error?.let { code ->
+                item {
+                    Panel {
+                        Text(errorMessage(code), color = MaterialTheme.colorScheme.error)
+                        if (!state.blocked)
+                            Action(tr("닫기", "Dismiss"), "dismiss-error") { actions.dismissError() }
+                    }
+                }
+            }
+            item {
+                Text(
+                    if (search.isNotBlank()) tr("검색 결과", "Search results")
+                    else if (logName == "Index") label("Index", ko)
+                    else if (log is Log.Collection)
+                        state.journal.collections.find { it.id == log.id }?.name ?: ""
+                    else label(logName, ko),
+                    style = MaterialTheme.typography.headlineLarge,
+                )
+                Text(
+                    tr("생각을 비우고, 중요한 일에 집중하세요.", "Clear your mind. Focus on what matters."),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            if (logName != "Index")
+                item {
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Action("‹", "previous") {
+                            try {
+                                dateText =
+                                    if (log == Log.Monthly || log == Log.Future)
+                                        shiftMonth(date, -1).toString()
+                                    else
+                                        date
+                                            .minusDays(1)
+                                            .also { parseDate(it.toString()) }
+                                            .toString()
+                            } catch (_: Exception) {
+                                actions.report("date")
+                            }
+                        }
+                        Action(tr("오늘", "Today"), "today") { dateText = today().toString() }
+                        Action("›", "next") {
+                            try {
+                                dateText =
+                                    if (log == Log.Monthly || log == Log.Future)
+                                        shiftMonth(date, 1).toString()
+                                    else
+                                        date
+                                            .plusDays(1)
+                                            .also { parseDate(it.toString()) }
+                                            .toString()
+                            } catch (_: Exception) {
+                                actions.report("date")
+                            }
+                        }
+                    }
+                    OutlinedTextField(
+                        dateText,
+                        { dateText = it },
+                        label = { Text(tr("날짜 YYYY-MM-DD", "Date YYYY-MM-DD")) },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth().testTag("date"),
+                    )
+                }
+            item {
+                OutlinedTextField(
+                    search,
+                    { search = it },
+                    label = { Text(tr("전체 기록 검색", "Search all entries")) },
+                    modifier = Modifier.fillMaxWidth().testTag("search"),
+                )
+                FlowRow {
+                    Filter.entries.forEach { f ->
+                        Action(
+                            when (f) {
+                                Filter.All -> tr("모든 기록", "All")
+                                Filter.Open -> tr("미완료", "Open")
+                                Filter.Complete -> tr("완료", "Complete")
+                            },
+                            "filter-$f",
+                            filter == f,
+                        ) {
+                            filterName = f.name
+                        }
+                    }
+                    if (search.isNotEmpty())
+                        Action(tr("검색 지우기", "Clear search"), "search-clear") { search = "" }
+                }
+            }
+            if (logName != "Index")
+                item {
+                    Panel {
+                        FlowRow {
+                            Kind.entries.forEach { k ->
+                                Action(
+                                    when (k) {
+                                        Kind.Task -> tr("• 할 일", "• Task")
+                                        Kind.Event -> tr("○ 이벤트", "○ Event")
+                                        Kind.Note -> tr("– 메모", "– Note")
+                                    },
+                                    "kind-$k",
+                                    kindName == k.name,
+                                ) {
+                                    kindName = k.name
+                                }
+                            }
+                        }
+                        OutlinedTextField(
+                            draft,
+                            { draft = it },
+                            enabled = !state.busy,
+                            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                            keyboardActions =
+                                KeyboardActions(
+                                    onDone = { if (draft.composition == null) capture(pageName) }
+                                ),
+                            label = { Text(tr("지금 떠오르는 생각을 기록하세요", "Write what's on your mind")) },
+                            modifier = Modifier.fillMaxWidth().testTag("draft"),
+                            minLines = 2,
+                        )
+                        Button(
+                            onClick = { capture(pageName) },
+                            enabled = !state.loading && !state.blocked && !state.busy,
+                            shape = RoundedCornerShape(8.dp),
+                            modifier =
+                                Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("capture"),
+                        ) {
+                            Text(tr("기록하기", "Capture"))
+                        }
+                    }
+                }
+            if (log == Log.Monthly && logName != "Index" && search.isBlank())
+                item {
+                    Panel {
+                        Text(
+                            tr("월간 달력", "Monthly calendar"),
+                            style = MaterialTheme.typography.titleLarge,
+                        )
+                        val month = YearMonth.from(date)
+                        FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                            (1..month.lengthOfMonth()).forEach { day ->
+                                val d = month.atDay(day)
+                                val count = state.journal.visible(d, Log.Daily).size
+                                Action(
+                                    "$day ${if(ko) listOf("월","화","수","목","금","토","일")[d.dayOfWeek.value-1] else d.dayOfWeek.name.take(3)} · $count",
+                                    "day-$day",
+                                ) {
+                                    dates.getValue("Daily").value = d.toString()
+                                    navigate("Daily")
+                                }
+                            }
+                        }
+                    }
+                }
+            if (logName == "Index" && search.isBlank()) {
+                val locations = state.journal.indexLocations()
+                items(locations, key = { "index-${it.id}" }) { e ->
+                    Action("${location(e,state.journal,ko)} · ${e.date}", "index-${e.id}") {
+                        jump(e)
+                    }
+                }
+                items(state.journal.collections, key = { "index-c-${it.id}" }) { c ->
+                    Action(c.name, "index-collection-${c.id}") { navigate(c.id.toString()) }
+                }
+            }
+            val visible =
+                JournalQuery(date, log, search, filter, logName == "Index").entries(state.journal)
+            if (search.isNotBlank()) state.journal.search(search, filter)
+            else if (logName == "Index") emptyList()
+            else state.journal.visible(date, log).filter { matchesFilter(it, filter) }
+            if (visible.isEmpty() && (logName != "Index" || search.isNotBlank()) && !state.loading)
+                item {
+                    Text(
+                        if (search.isNotBlank()) tr("검색 결과가 없습니다.", "No matching entries.")
+                        else
+                            tr(
+                                "아직 기록이 없습니다. 첫 생각을 남겨 보세요.",
+                                "No entries yet. Capture your first thought.",
+                            ),
+                        Modifier.padding(vertical = 20.dp),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            items(visible, key = { it.id }) { e ->
+                Panel(Modifier.testTag("entry-${e.id}")) {
+                    Text(
+                        "${if(e.important) "★ " else ""}${e.symbol()}  ${e.text}",
+                        style = MaterialTheme.typography.bodyLarge,
+                        color =
+                            if (e.important) MaterialTheme.colorScheme.primary
+                            else MaterialTheme.colorScheme.onSurface,
+                    )
+                    Text(
+                        "${e.date} · ${location(e,state.journal,ko)}",
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                    FlowRow {
+                        if (search.isNotBlank())
+                            Action(tr("위치로 이동", "Open location"), "jump-${e.id}") { jump(e) }
+                        if (!e.frozen()) {
+                            Action(tr("수정", "Edit"), "edit-${e.id}", enabled = !state.busy) {
+                                editId = e.id.toString()
+                                editText = e.text
+                            }
+                            Action(
+                                tr("중요", "Important"),
+                                "important-${e.id}",
+                                e.important,
+                                !state.busy,
+                            ) {
+                                actions.execute(JournalCommand.ToggleImportant(e.id))
+                            }
+                            if (e.kind == Kind.Task)
+                                Action(
+                                    if (e.status == Status.Complete) tr("재개", "Reopen")
+                                    else tr("완료", "Complete"),
+                                    "complete-${e.id}",
+                                    enabled = !state.busy,
+                                ) {
+                                    actions.execute(
+                                        JournalCommand.SetStatus(
+                                            e.id,
+                                            if (e.status == Status.Complete) Status.Open
+                                            else Status.Complete,
+                                        )
+                                    )
+                                }
+                            Action(
+                                if (e.status == Status.Cancelled) tr("재개", "Reopen")
+                                else tr("취소", "Cancel"),
+                                "cancel-${e.id}",
+                                enabled = !state.busy,
+                            ) {
+                                actions.execute(
+                                    JournalCommand.SetStatus(
+                                        e.id,
+                                        if (e.status == Status.Cancelled) Status.Open
+                                        else Status.Cancelled,
+                                    )
+                                )
+                            }
+                            if (e.isOpenTask())
+                                Action(
+                                    tr("이월", "Migrate"),
+                                    "migrate-${e.id}",
+                                    enabled = !state.busy,
+                                ) {
+                                    migrationId = e.id.toString()
+                                    migrationLog = "Daily"
+                                    migrationDate = date.plusDays(1).toString()
+                                }
+                        }
+                        e.migratedFrom?.let { id ->
+                            Action(tr("← 원본", "← Source"), "source-${e.id}") {
+                                jump(state.journal.entry(id))
+                            }
+                        }
+                        e.migratedTo?.let { id ->
+                            Action(tr("대상 →", "Target →"), "target-${e.id}") {
+                                jump(state.journal.entry(id))
+                            }
+                        }
+                    }
+                }
+            }
+            item {
+                Panel {
+                    Text(
+                        tr(
+                            "기록 ${visible.size} · 열린 할 일 ${visible.count { it.isOpenTask() }}",
+                            "${visible.size} entries · ${visible.count { it.isOpenTask() }} open tasks",
+                        ),
+                        fontWeight = FontWeight.Bold,
+                    )
+                    Text(
+                        tr(
+                            "• 할 일   ○ 이벤트   – 메모\n× 완료   ⊘ 취소   > 이월   < 예약   ★ 중요",
+                            "• Task   ○ Event   – Note\n× Complete   ⊘ Cancelled   > Migrated   < Scheduled   ★ Important",
+                        )
+                    )
+                }
+            }
+        }
+    }
     StillnoteTheme(state.settings.theme) {
         Surface(color = MaterialTheme.colorScheme.background, modifier = Modifier.fillMaxSize()) {
             BoxWithConstraints(Modifier.safeDrawingPadding().imePadding()) {
@@ -202,7 +629,7 @@ fun StillnoteScreen(
                         ) {
                             Text("Stillnote", style = MaterialTheme.typography.headlineMedium)
                             Spacer(Modifier.height(24.dp))
-                            listOf("Daily", "Monthly", "Future", "Index").forEach { name ->
+                            basicLogs.forEach { name ->
                                 Action(label(name, ko), "nav-$name", name == logName) {
                                     navigate(name)
                                 }
@@ -216,14 +643,12 @@ fun StillnoteScreen(
                                 Action(c.name, "collection-${c.id}") { navigate(c.id.toString()) }
                             }
                         }
-                    LazyColumn(
-                        Modifier.weight(1f)
-                            .fillMaxHeight()
-                            .padding(horizontal = if (expanded) 28.dp else 16.dp),
-                        verticalArrangement = Arrangement.spacedBy(12.dp),
-                        contentPadding = PaddingValues(bottom = 24.dp),
-                    ) {
-                        item {
+                    Column(Modifier.weight(1f).fillMaxHeight()) {
+                        Column(
+                            Modifier.fillMaxWidth()
+                                .testTag("fixed-header")
+                                .padding(horizontal = if (expanded) 28.dp else 16.dp)
+                        ) {
                             Row(
                                 Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -236,389 +661,40 @@ fun StillnoteScreen(
                                 Action(tr("메뉴 · 설정", "Menu · Settings"), "menu") { menu = !menu }
                             }
                             if (!expanded)
-                                FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                                    listOf("Daily", "Monthly", "Future", "Index").forEach { n ->
-                                        Action(label(n, ko), "nav-$n", n == logName) { navigate(n) }
-                                    }
-                                }
-                        }
-                        if (menu)
-                            item {
-                                Panel {
-                                    Text(tr("언어", "Language"), fontWeight = FontWeight.Bold)
-                                    FlowRow {
-                                        Language.entries.forEach { l ->
-                                            Action(
-                                                if (l == Language.Korean) "한국어" else "English",
-                                                "language-$l",
-                                                l == state.settings.language,
-                                            ) {
-                                                actions.settings(state.settings.copy(language = l))
-                                            }
-                                        }
-                                    }
-                                    Text(tr("테마", "Theme"), fontWeight = FontWeight.Bold)
-                                    FlowRow {
-                                        ThemeMode.entries.forEach { t ->
-                                            Action(
-                                                when (t) {
-                                                    ThemeMode.System -> tr("시스템", "System")
-                                                    ThemeMode.Light -> tr("라이트", "Light")
-                                                    ThemeMode.Dark -> tr("다크", "Dark")
-                                                },
-                                                "theme-$t",
-                                                t == state.settings.theme,
-                                            ) {
-                                                actions.settings(state.settings.copy(theme = t))
-                                            }
-                                        }
-                                    }
-                                    Text(tr("컬렉션", "Collections"), fontWeight = FontWeight.Bold)
-                                    state.journal.collections.forEach { c ->
-                                        Action(c.name, "collection-${c.id}") {
-                                            navigate(c.id.toString())
-                                        }
-                                    }
-                                    OutlinedTextField(
-                                        collectionName,
-                                        { collectionName = it },
-                                        enabled = !state.busy,
-                                        keyboardOptions =
-                                            KeyboardOptions(imeAction = ImeAction.Done),
-                                        keyboardActions =
-                                            KeyboardActions(onDone = { createCollection() }),
-                                        label = { Text(tr("컬렉션 이름", "Collection name")) },
-                                        modifier =
-                                            Modifier.fillMaxWidth().testTag("collection-name"),
-                                    )
-                                    Action(
-                                        tr("컬렉션 만들기", "Create collection"),
-                                        "collection-create",
-                                        enabled = !state.blocked && !state.busy,
-                                    ) {
-                                        createCollection()
-                                    }
-                                }
-                            }
-                        if (state.loading) item { LinearProgressIndicator(Modifier.fillMaxWidth()) }
-                        state.error?.let { code ->
-                            item {
-                                Panel {
-                                    Text(
-                                        errorMessage(code),
-                                        color = MaterialTheme.colorScheme.error,
-                                    )
-                                    if (!state.blocked)
-                                        Action(tr("닫기", "Dismiss"), "dismiss-error") {
-                                            actions.dismissError()
-                                        }
-                                }
-                            }
-                        }
-                        item {
-                            Text(
-                                if (search.isNotBlank()) tr("검색 결과", "Search results")
-                                else if (logName == "Index") label("Index", ko)
-                                else if (log is Log.Collection)
-                                    state.journal.collections.find { it.id == log.id }?.name ?: ""
-                                else label(logName, ko),
-                                style = MaterialTheme.typography.headlineLarge,
-                            )
-                            Text(
-                                tr(
-                                    "생각을 비우고, 중요한 일에 집중하세요.",
-                                    "Clear your mind. Focus on what matters.",
-                                ),
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
-                        if (logName != "Index")
-                            item {
-                                FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                                    Action("‹", "previous") {
-                                        try {
-                                            dateText =
-                                                if (log == Log.Monthly || log == Log.Future)
-                                                    shiftMonth(date, -1).toString()
-                                                else
-                                                    date
-                                                        .minusDays(1)
-                                                        .also { parseDate(it.toString()) }
-                                                        .toString()
-                                        } catch (_: Exception) {
-                                            actions.report("date")
-                                        }
-                                    }
-                                    Action(tr("오늘", "Today"), "today") {
-                                        dateText = today().toString()
-                                    }
-                                    Action("›", "next") {
-                                        try {
-                                            dateText =
-                                                if (log == Log.Monthly || log == Log.Future)
-                                                    shiftMonth(date, 1).toString()
-                                                else
-                                                    date
-                                                        .plusDays(1)
-                                                        .also { parseDate(it.toString()) }
-                                                        .toString()
-                                        } catch (_: Exception) {
-                                            actions.report("date")
-                                        }
-                                    }
-                                }
-                                OutlinedTextField(
-                                    dateText,
-                                    { dateText = it },
-                                    label = { Text(tr("날짜 YYYY-MM-DD", "Date YYYY-MM-DD")) },
-                                    singleLine = true,
-                                    modifier = Modifier.fillMaxWidth().testTag("date"),
-                                )
-                            }
-                        item {
-                            OutlinedTextField(
-                                search,
-                                { search = it },
-                                label = { Text(tr("전체 기록 검색", "Search all entries")) },
-                                modifier = Modifier.fillMaxWidth().testTag("search"),
-                            )
-                            FlowRow {
-                                Filter.entries.forEach { f ->
-                                    Action(
-                                        when (f) {
-                                            Filter.All -> tr("모든 기록", "All")
-                                            Filter.Open -> tr("미완료", "Open")
-                                            Filter.Complete -> tr("완료", "Complete")
-                                        },
-                                        "filter-$f",
-                                        filter == f,
-                                    ) {
-                                        filterName = f.name
-                                    }
-                                }
-                                if (search.isNotEmpty())
-                                    Action(tr("검색 지우기", "Clear search"), "search-clear") {
-                                        search = ""
-                                    }
-                            }
-                        }
-                        if (logName != "Index")
-                            item {
-                                Panel {
-                                    FlowRow {
-                                        Kind.entries.forEach { k ->
-                                            Action(
-                                                when (k) {
-                                                    Kind.Task -> tr("• 할 일", "• Task")
-                                                    Kind.Event -> tr("○ 이벤트", "○ Event")
-                                                    Kind.Note -> tr("– 메모", "– Note")
-                                                },
-                                                "kind-$k",
-                                                kindName == k.name,
-                                            ) {
-                                                kindName = k.name
-                                            }
-                                        }
-                                    }
-                                    OutlinedTextField(
-                                        draft,
-                                        { draft = it },
-                                        enabled = !state.busy,
-                                        keyboardOptions =
-                                            KeyboardOptions(imeAction = ImeAction.Done),
-                                        keyboardActions =
-                                            KeyboardActions(
-                                                onDone = {
-                                                    if (draft.composition == null) capture()
-                                                }
-                                            ),
-                                        label = {
-                                            Text(
-                                                tr("지금 떠오르는 생각을 기록하세요", "Write what's on your mind")
-                                            )
-                                        },
-                                        modifier = Modifier.fillMaxWidth().testTag("draft"),
-                                        minLines = 2,
-                                    )
-                                    Button(
-                                        onClick = { capture() },
-                                        enabled = !state.loading && !state.blocked && !state.busy,
-                                        shape = RoundedCornerShape(8.dp),
-                                        modifier =
-                                            Modifier.fillMaxWidth()
-                                                .heightIn(min = 48.dp)
-                                                .testTag("capture"),
-                                    ) {
-                                        Text(tr("기록하기", "Capture"))
-                                    }
-                                }
-                            }
-                        if (log == Log.Monthly && logName != "Index" && search.isBlank())
-                            item {
-                                Panel {
-                                    Text(
-                                        tr("월간 달력", "Monthly calendar"),
-                                        style = MaterialTheme.typography.titleLarge,
-                                    )
-                                    val month = YearMonth.from(date)
-                                    FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                                        (1..month.lengthOfMonth()).forEach { day ->
-                                            val d = month.atDay(day)
-                                            val count = state.journal.visible(d, Log.Daily).size
-                                            Action(
-                                                "$day ${if(ko) listOf("월","화","수","목","금","토","일")[d.dayOfWeek.value-1] else d.dayOfWeek.name.take(3)} · $count",
-                                                "day-$day",
-                                            ) {
-                                                dateText = d.toString()
-                                                navigate("Daily")
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        if (logName == "Index" && search.isBlank()) {
-                            val locations = state.journal.indexLocations()
-                            items(locations, key = { "index-${it.id}" }) { e ->
-                                Action(
-                                    "${location(e,state.journal,ko)} · ${e.date}",
-                                    "index-${e.id}",
+                                FlowRow(
+                                    modifier = Modifier.testTag("fixed-navigation"),
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp),
                                 ) {
-                                    jump(e)
+                                    basicLogs.forEach { name ->
+                                        Action(label(name, ko), "nav-$name", name == logName) {
+                                            navigate(name)
+                                        }
+                                    }
                                 }
-                            }
-                            items(state.journal.collections, key = { "index-c-${it.id}" }) { c ->
-                                Action(c.name, "index-collection-${c.id}") {
-                                    navigate(c.id.toString())
-                                }
-                            }
                         }
-                        val visible =
-                            JournalQuery(date, log, search, filter, logName == "Index")
-                                .entries(state.journal)
-                        if (search.isNotBlank()) state.journal.search(search, filter)
-                        else if (logName == "Index") emptyList()
-                        else state.journal.visible(date, log).filter { matchesFilter(it, filter) }
-                        if (
-                            visible.isEmpty() &&
-                                (logName != "Index" || search.isNotBlank()) &&
-                                !state.loading
-                        )
-                            item {
-                                Text(
-                                    if (search.isNotBlank())
-                                        tr("검색 결과가 없습니다.", "No matching entries.")
-                                    else
-                                        tr(
-                                            "아직 기록이 없습니다. 첫 생각을 남겨 보세요.",
-                                            "No entries yet. Capture your first thought.",
-                                        ),
-                                    Modifier.padding(vertical = 20.dp),
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                            }
-                        items(visible, key = { it.id }) { e ->
-                            Panel(Modifier.testTag("entry-${e.id}")) {
-                                Text(
-                                    "${if(e.important) "★ " else ""}${e.symbol()}  ${e.text}",
-                                    style = MaterialTheme.typography.bodyLarge,
-                                    color =
-                                        if (e.important) MaterialTheme.colorScheme.primary
-                                        else MaterialTheme.colorScheme.onSurface,
-                                )
-                                Text(
-                                    "${e.date} · ${location(e,state.journal,ko)}",
-                                    style = MaterialTheme.typography.bodySmall,
-                                )
-                                FlowRow {
-                                    if (search.isNotBlank())
-                                        Action(tr("위치로 이동", "Open location"), "jump-${e.id}") {
-                                            jump(e)
-                                        }
-                                    if (!e.frozen()) {
-                                        Action(
-                                            tr("수정", "Edit"),
-                                            "edit-${e.id}",
-                                            enabled = !state.busy,
-                                        ) {
-                                            editId = e.id.toString()
-                                            editText = e.text
-                                        }
-                                        Action(
-                                            tr("중요", "Important"),
-                                            "important-${e.id}",
-                                            e.important,
-                                            !state.busy,
-                                        ) {
-                                            actions.execute(JournalCommand.ToggleImportant(e.id))
-                                        }
-                                        if (e.kind == Kind.Task)
-                                            Action(
-                                                if (e.status == Status.Complete) tr("재개", "Reopen")
-                                                else tr("완료", "Complete"),
-                                                "complete-${e.id}",
-                                                enabled = !state.busy,
-                                            ) {
-                                                actions.execute(
-                                                    JournalCommand.SetStatus(
-                                                        e.id,
-                                                        if (e.status == Status.Complete) Status.Open
-                                                        else Status.Complete,
-                                                    )
-                                                )
-                                            }
-                                        Action(
-                                            if (e.status == Status.Cancelled) tr("재개", "Reopen")
-                                            else tr("취소", "Cancel"),
-                                            "cancel-${e.id}",
-                                            enabled = !state.busy,
-                                        ) {
-                                            actions.execute(
-                                                JournalCommand.SetStatus(
-                                                    e.id,
-                                                    if (e.status == Status.Cancelled) Status.Open
-                                                    else Status.Cancelled,
-                                                )
-                                            )
-                                        }
-                                        if (e.isOpenTask())
-                                            Action(
-                                                tr("이월", "Migrate"),
-                                                "migrate-${e.id}",
-                                                enabled = !state.busy,
-                                            ) {
-                                                migrationId = e.id.toString()
-                                                migrationLog = "Daily"
-                                                migrationDate = date.plusDays(1).toString()
-                                            }
-                                    }
-                                    e.migratedFrom?.let { id ->
-                                        Action(tr("← 원본", "← Source"), "source-${e.id}") {
-                                            jump(state.journal.entry(id))
-                                        }
-                                    }
-                                    e.migratedTo?.let { id ->
-                                        Action(tr("대상 →", "Target →"), "target-${e.id}") {
-                                            jump(state.journal.entry(id))
-                                        }
-                                    }
+                        if (collectionLog.isNotEmpty()) {
+                            if (collectionLog in dates)
+                                LogPage(collectionLog, expanded, Modifier.weight(1f))
+                        } else {
+                            HorizontalPager(
+                                state = pager,
+                                modifier = Modifier.weight(1f).fillMaxHeight().testTag("log-pager"),
+                                key = { basicLogs[it] },
+                                userScrollEnabled =
+                                    !menu &&
+                                        editId.isEmpty() &&
+                                        migrationId.isEmpty() &&
+                                        !state.busy,
+                            ) { page ->
+                                Box(
+                                    Modifier.fillMaxSize()
+                                        .then(
+                                            if (page == pager.currentPage) Modifier
+                                            else Modifier.clearAndSetSemantics {}
+                                        )
+                                ) {
+                                    LogPage(basicLogs[page], expanded, Modifier.fillMaxSize())
                                 }
-                            }
-                        }
-                        item {
-                            Panel {
-                                Text(
-                                    tr(
-                                        "기록 ${visible.size} · 열린 할 일 ${visible.count { it.isOpenTask() }}",
-                                        "${visible.size} entries · ${visible.count { it.isOpenTask() }} open tasks",
-                                    ),
-                                    fontWeight = FontWeight.Bold,
-                                )
-                                Text(
-                                    tr(
-                                        "• 할 일   ○ 이벤트   – 메모\n× 완료   ⊘ 취소   > 이월   < 예약   ★ 중요",
-                                        "• Task   ○ Event   – Note\n× Complete   ⊘ Cancelled   > Migrated   < Scheduled   ★ Important",
-                                    )
-                                )
                             }
                         }
                     }
@@ -751,6 +827,7 @@ private fun Action(
         enabled = enabled,
         modifier =
             Modifier.sizeIn(minWidth = 48.dp, minHeight = 48.dp).testTag(tag).semantics {
+                if (nav) this.selected = selected
                 contentDescription =
                     when (tag) {
                         "previous" -> "이전 / Previous"

@@ -6,6 +6,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.text.AnnotatedString
@@ -83,6 +84,16 @@ class AdaptiveLayoutTest {
 
     private fun visibleNode(tag: String): SemanticsNodeInteraction {
         InstrumentationRegistry.getInstrumentation().uiAutomation.waitForIdle(500, 5_000)
+        if (
+            tag == "menu" ||
+                (tag.startsWith("nav-") &&
+                    compose
+                        .onAllNodesWithTag("fixed-navigation")
+                        .fetchSemanticsNodes()
+                        .isNotEmpty())
+        ) {
+            return compose.onNodeWithTag(tag).assertIsDisplayed()
+        }
         val nodes = compose.onAllNodesWithTag(tag).fetchSemanticsNodes()
         if (
             nodes.isEmpty() ||
@@ -90,7 +101,12 @@ class AdaptiveLayoutTest {
                     generateSequence(node.layoutInfo) { it.parentInfo }.all { it.isPlaced }
                 }
         ) {
-            compose.onNode(hasScrollToIndexAction()).performScrollToNode(hasTestTag(tag))
+            compose
+                .onNode(
+                    hasScrollToIndexAction() and
+                        SemanticsMatcher.keyIsDefined(SemanticsProperties.VerticalScrollAxisRange)
+                )
+                .performScrollToNode(hasTestTag(tag))
         }
         compose.onNodeWithTag(tag).performScrollTo()
         InstrumentationRegistry.getInstrumentation().uiAutomation.waitForIdle(500, 5_000)
@@ -162,7 +178,7 @@ class AdaptiveLayoutTest {
         visibleNode("nav-Monthly").assertIsDisplayed().performClick()
         val day = visibleNode("day-1")
         println(
-            "Expanded calendar: day=${day.fetchSemanticsNode().boundsInRoot} viewport=${compose.onNode(hasScrollToIndexAction()).fetchSemanticsNode().boundsInRoot} root=${compose.onRoot().fetchSemanticsNode().boundsInRoot}"
+            "Expanded calendar: day=${day.fetchSemanticsNode().boundsInRoot} viewport=${compose.onNode(hasScrollToIndexAction() and SemanticsMatcher.keyIsDefined(SemanticsProperties.VerticalScrollAxisRange)).fetchSemanticsNode().boundsInRoot} root=${compose.onRoot().fetchSemanticsNode().boundsInRoot}"
         )
         val screenshot =
             File(
