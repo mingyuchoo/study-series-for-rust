@@ -1,9 +1,13 @@
 fun main(args: Array<String>) {
-    require(args.isNotEmpty()) { "Usage: kotlin run -m tooling -- format [--write]|lint|ui" }
-    when (args[0]) {
-        "format" -> runFormat(args.drop(1).toTypedArray())
+    val commandArgs = args.ifEmpty { arrayOf("format") }
+    when (commandArgs[0]) {
+        "format" -> runFormat(commandArgs.drop(1).toTypedArray())
         "lint",
-        "ui" -> runAndroidChecks(args)
-        else -> error("Unknown verification command: ${args[0]}")
+        "ui" -> runAndroidChecks(commandArgs)
+        else ->
+            error(
+                "Unknown verification command: ${commandArgs[0]}. " +
+                    "Usage: kotlin run -m tooling -- format [--write]|lint|ui"
+            )
     }
 }

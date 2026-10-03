@@ -51,6 +51,27 @@ the official [IntelliJ IDEA and Kotlin Toolchain plugin setup](https://kotlin-to
 including its Android plugin instructions. The former Gradle import is no longer
 the project entry point.
 
+### 기존 IDE의 Gradle 연결 오류 해결
+
+이 프로젝트의 빌드 진입점은 JetBrains **Kotlin Toolchain**이다.
+`Directory ... does not contain a Gradle build` 오류는 IDE가 이전 Gradle
+프로젝트 연결을 유지하거나 루트에서 `gradle` 명령을 실행할 때 발생한다.
+빌드는 프로젝트 루트의 PowerShell에서 `./kotlin.bat build`로 실행한다.
+
+IDE에서는 다음 순서로 다시 연결한다.
+
+1. Gradle 도구 창에 남은 `android-app` 연결을 **Unlink Gradle Project**로 해제한다.
+2. Kotlin Toolchain 플러그인과 Android 플러그인을 설치한 IntelliJ IDEA에서
+   `project.yaml`이 있는 이 디렉터리를 다시 연다.
+3. Kotlin Toolchain으로 프로젝트를 가져오고 동기화한다.
+
+IDE가 연결 해제를 제공하지 않는다면 IDE를 닫고 `.idea/gradle.xml`의
+`GradleSettings` 컴포넌트에서 이 루트를 가리키는 `GradleProjectSettings`를
+제거한 뒤 다시 연다. `.idea`는 로컬 설정이므로 다른 체크아웃에서도 이전
+연결을 별도로 해제해야 한다. 루트에 `gradle init`을 실행하거나 Gradle
+settings/build 파일을 추가하지 않는다. Android APK 패키징에 필요한
+Gradle/AGP 호출은 Kotlin Toolchain이 내부에서 관리한다.
+
 ## Data and recovery
 
 Internal app files: `journal.json`, `journal.json.bak` (previous durable journal),
@@ -94,6 +115,12 @@ Check reports under `build/android-checks/build/reports`, CLI logs under
 checked on an actual device; automated tests are not evidence of those manual
 checks. Product code and tests have different owners under the repository's
 independent verification contract.
+
+The `tooling` module is the verification utility. Running
+`./kotlin.bat run --module tooling` without arguments defaults to a read-only Kotlin
+formatting check. Pass `-- format --write`, `-- lint`, or `-- ui` for the other
+actions. To launch the Android application, run `./kotlin.bat run -m app`
+with `--device-id emulator-NNNN` as shown above.
 
 `./kotlin.bat test` runs the existing 31 core/app JVM tests, with AGP's mockable
 Android jar. The independent Rust harness validates `build/compatibility-roundtrip.json`.
