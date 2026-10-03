@@ -1,0 +1,22 @@
+<?xml version='1.0' encoding='UTF-8' ?>
+<testsuite name="app.stillnote.AdaptiveLayoutTest" tests="14" failures="0" errors="0" skipped="0" time="140.482" timestamp="2026-10-03T06:18:21" hostname="localhost">
+  <properties>
+    <property name="device" value="StillnoteCliApi36_5660(AVD) - 16" />
+    <property name="flavor" value="" />
+    <property name="project" value=":" />
+  </properties>
+  <testcase name="ac11_expandedShortLargeFontSidebarDialogAndBothThemesLocales" classname="app.stillnote.AdaptiveLayoutTest" time="15.603" />
+  <testcase name="ac11_compactShortLargeFontCollectionsDialogAndBothThemesLocales" classname="app.stillnote.AdaptiveLayoutTest" time="9.602" />
+  <testcase name="ac03_ac04_monthCalendarFutureCollectionIndexAndSearchLocation" classname="app.stillnote.StillnoteFlowTest" time="23.061" />
+  <testcase name="ac01_ac02_blankCaptureEditCompleteReopenCancelAndUnicode" classname="app.stillnote.StillnoteFlowTest" time="14.651" />
+  <testcase name="ac10_recreatedViewModelRestoresSelectionAndEditMigrationFromSavedHandle" classname="app.stillnote.StillnoteFlowTest" time="15.146" />
+  <testcase name="ac05_searchAllLogsStatusFilterIncludesOpenEventsAndNotes" classname="app.stillnote.StillnoteFlowTest" time="14.211" />
+  <testcase name="ac09_ac10_liveLanguageThemePreserveDraftAndPersistSettings" classname="app.stillnote.StillnoteFlowTest" time="6.482" />
+  <testcase name="ac10_savedInstanceRestorationRetainsDraftDateFilterAndSearch" classname="app.stillnote.StillnoteFlowTest" time="6.103" />
+  <testcase name="ac11_backClosesTransientUiAndPrimaryTargetsMeet48Dp" classname="app.stillnote.StillnoteFlowTest" time="10.231" />
+  <testcase name="ac08_ac09_corruptSettingsDoesNotBlockJournalCorruptJournalBlocksCapture" classname="app.stillnote.StillnoteFlowTest" time="4.466" />
+  <testcase name="ac08_saveConflictKeepsDraftAndDisplayedModel" classname="app.stillnote.StillnoteFlowTest" time="6.018" />
+  <testcase name="ac10_imeCompositionProtocolDoesNotCaptureUntilFinished" classname="app.stillnote.StillnoteFlowTest" time="2.177" />
+  <testcase name="ac08_corruptJournalShowsRecoveryAndDisablesCapture" classname="app.stillnote.StillnoteFlowTest" time="1.913" />
+  <testcase name="ac06_migrateAndNavigateBothLinksWithFrozenOriginal" classname="app.stillnote.StillnoteFlowTest" time="9.784" />
+</testsuite>

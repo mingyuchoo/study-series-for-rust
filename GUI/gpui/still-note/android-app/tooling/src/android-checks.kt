@@ -67,6 +67,9 @@ fun runAndroidChecks(args: Array<String>) {
         ) {
             "The verification emulator must show the software keyboard with a hardware keyboard attached."
         }
+        adbOutput("-s", serial, "shell", "svc", "power", "stayon", "true")
+        adbOutput("-s", serial, "shell", "input", "keyevent", "KEYCODE_WAKEUP")
+        adbOutput("-s", serial, "shell", "wm", "dismiss-keyguard")
     }
     fun literal(value: Any?): String =
         "\"" +

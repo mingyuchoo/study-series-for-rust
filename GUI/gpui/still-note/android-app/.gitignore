@@ -11,6 +11,7 @@ local.properties
 # Local verification logs, screenshots, and copied build/test artifacts.
 # Curated reports and test fixtures stay visible.
 /.artifacts/
+!/docs/verification/toolchain-migration/unit-tests.log
 
 # Independent Rust compatibility harness build output.
 /scripts/rust-fixture/target/

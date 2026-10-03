@@ -1,0 +1,110 @@
+<?xml version='1.0' encoding='UTF-8' ?>
+<testsuite name="app.stillnote.AdaptiveLayoutTest" tests="14" failures="10" errors="0" skipped="0" time="309.881" timestamp="2026-10-03T06:03:37" hostname="localhost">
+  <properties>
+    <property name="device" value="StillnoteCliApi36_5660(AVD) - 16" />
+    <property name="flavor" value="" />
+    <property name="project" value=":" />
+  </properties>
+  <testcase name="ac11_expandedShortLargeFontSidebarDialogAndBothThemesLocales" classname="app.stillnote.AdaptiveLayoutTest" time="37.474" />
+  <testcase name="ac11_compactShortLargeFontCollectionsDialogAndBothThemesLocales" classname="app.stillnote.AdaptiveLayoutTest" time="18.053" />
+  <testcase name="ac03_ac04_monthCalendarFutureCollectionIndexAndSearchLocation" classname="app.stillnote.StillnoteFlowTest" time="18.42">
+    <failure>androidx.compose.ui.test.ComposeTimeoutException: Condition still not satisfied after 10000 ms
+at androidx.compose.ui.test.AndroidComposeUiTestEnvironment$AndroidComposeUiTestImpl.waitUntil(ComposeUiTest.android.kt:755)
+at androidx.compose.ui.test.junit4.AndroidComposeTestRule.waitUntil(AndroidComposeTestRule.android.kt:362)
+at app.stillnote.StillnoteFlowTest.enter(StillnoteFlowTest.kt:118)
+at app.stillnote.StillnoteFlowTest.enter$default(StillnoteFlowTest.kt:104)
+at app.stillnote.StillnoteFlowTest.ac03_ac04_monthCalendarFutureCollectionIndexAndSearchLocation(StillnoteFlowTest.kt:282)
+</failure>
+  </testcase>
+  <testcase name="ac01_ac02_blankCaptureEditCompleteReopenCancelAndUnicode" classname="app.stillnote.StillnoteFlowTest" time="15.738">
+    <failure>androidx.compose.ui.test.ComposeTimeoutException: Condition still not satisfied after 10000 ms
+at androidx.compose.ui.test.AndroidComposeUiTestEnvironment$AndroidComposeUiTestImpl.waitUntil(ComposeUiTest.android.kt:755)
+at androidx.compose.ui.test.junit4.AndroidComposeTestRule.waitUntil(AndroidComposeTestRule.android.kt:362)
+at app.stillnote.StillnoteFlowTest.enter(StillnoteFlowTest.kt:118)
+at app.stillnote.StillnoteFlowTest.enter$default(StillnoteFlowTest.kt:104)
+at app.stillnote.StillnoteFlowTest.ac01_ac02_blankCaptureEditCompleteReopenCancelAndUnicode(StillnoteFlowTest.kt:249)
+</failure>
+  </testcase>
+  <testcase name="ac10_recreatedViewModelRestoresSelectionAndEditMigrationFromSavedHandle" classname="app.stillnote.StillnoteFlowTest" time="15.278">
+    <failure>androidx.compose.ui.test.ComposeTimeoutException: Condition still not satisfied after 10000 ms
+at androidx.compose.ui.test.AndroidComposeUiTestEnvironment$AndroidComposeUiTestImpl.waitUntil(ComposeUiTest.android.kt:755)
+at androidx.compose.ui.test.junit4.AndroidComposeTestRule.waitUntil(AndroidComposeTestRule.android.kt:362)
+at app.stillnote.StillnoteFlowTest.enter(StillnoteFlowTest.kt:118)
+at app.stillnote.StillnoteFlowTest.enter$default(StillnoteFlowTest.kt:104)
+at app.stillnote.StillnoteFlowTest.ac10_recreatedViewModelRestoresSelectionAndEditMigrationFromSavedHandle(StillnoteFlowTest.kt:542)
+</failure>
+  </testcase>
+  <testcase name="ac05_searchAllLogsStatusFilterIncludesOpenEventsAndNotes" classname="app.stillnote.StillnoteFlowTest" time="14.967">
+    <failure>androidx.compose.ui.test.ComposeTimeoutException: Condition still not satisfied after 10000 ms
+at androidx.compose.ui.test.AndroidComposeUiTestEnvironment$AndroidComposeUiTestImpl.waitUntil(ComposeUiTest.android.kt:755)
+at androidx.compose.ui.test.junit4.AndroidComposeTestRule.waitUntil(AndroidComposeTestRule.android.kt:362)
+at app.stillnote.StillnoteFlowTest.enter(StillnoteFlowTest.kt:118)
+at app.stillnote.StillnoteFlowTest.enter$default(StillnoteFlowTest.kt:104)
+at app.stillnote.StillnoteFlowTest.capture(StillnoteFlowTest.kt:209)
+at app.stillnote.StillnoteFlowTest.capture$default(StillnoteFlowTest.kt:207)
+at app.stillnote.StillnoteFlowTest.ac05_searchAllLogsStatusFilterIncludesOpenEventsAndNotes(StillnoteFlowTest.kt:357)
+</failure>
+  </testcase>
+  <testcase name="ac09_ac10_liveLanguageThemePreserveDraftAndPersistSettings" classname="app.stillnote.StillnoteFlowTest" time="13.897">
+    <failure>androidx.compose.ui.test.ComposeTimeoutException: Condition still not satisfied after 10000 ms
+at androidx.compose.ui.test.AndroidComposeUiTestEnvironment$AndroidComposeUiTestImpl.waitUntil(ComposeUiTest.android.kt:755)
+at androidx.compose.ui.test.junit4.AndroidComposeTestRule.waitUntil(AndroidComposeTestRule.android.kt:362)
+at app.stillnote.StillnoteFlowTest.enter(StillnoteFlowTest.kt:118)
+at app.stillnote.StillnoteFlowTest.enter$default(StillnoteFlowTest.kt:104)
+at app.stillnote.StillnoteFlowTest.ac09_ac10_liveLanguageThemePreserveDraftAndPersistSettings(StillnoteFlowTest.kt:490)
+</failure>
+  </testcase>
+  <testcase name="ac10_savedInstanceRestorationRetainsDraftDateFilterAndSearch" classname="app.stillnote.StillnoteFlowTest" time="14.135">
+    <failure>androidx.compose.ui.test.ComposeTimeoutException: Condition still not satisfied after 10000 ms
+at androidx.compose.ui.test.AndroidComposeUiTestEnvironment$AndroidComposeUiTestImpl.waitUntil(ComposeUiTest.android.kt:755)
+at androidx.compose.ui.test.junit4.AndroidComposeTestRule.waitUntil(AndroidComposeTestRule.android.kt:362)
+at app.stillnote.StillnoteFlowTest.enter(StillnoteFlowTest.kt:118)
+at app.stillnote.StillnoteFlowTest.enter$default(StillnoteFlowTest.kt:104)
+at app.stillnote.StillnoteFlowTest.ac10_savedInstanceRestorationRetainsDraftDateFilterAndSearch(StillnoteFlowTest.kt:521)
+</failure>
+  </testcase>
+  <testcase name="ac11_backClosesTransientUiAndPrimaryTargetsMeet48Dp" classname="app.stillnote.StillnoteFlowTest" time="16.183">
+    <failure>androidx.compose.ui.test.ComposeTimeoutException: Condition still not satisfied after 10000 ms
+at androidx.compose.ui.test.AndroidComposeUiTestEnvironment$AndroidComposeUiTestImpl.waitUntil(ComposeUiTest.android.kt:755)
+at androidx.compose.ui.test.junit4.AndroidComposeTestRule.waitUntil(AndroidComposeTestRule.android.kt:362)
+at app.stillnote.StillnoteFlowTest.enter(StillnoteFlowTest.kt:118)
+at app.stillnote.StillnoteFlowTest.enter$default(StillnoteFlowTest.kt:104)
+at app.stillnote.StillnoteFlowTest.capture(StillnoteFlowTest.kt:209)
+at app.stillnote.StillnoteFlowTest.capture$default(StillnoteFlowTest.kt:207)
+at app.stillnote.StillnoteFlowTest.ac11_backClosesTransientUiAndPrimaryTargetsMeet48Dp(StillnoteFlowTest.kt:620)
+</failure>
+  </testcase>
+  <testcase name="ac08_ac09_corruptSettingsDoesNotBlockJournalCorruptJournalBlocksCapture" classname="app.stillnote.StillnoteFlowTest" time="14.637">
+    <failure>androidx.compose.ui.test.ComposeTimeoutException: Condition still not satisfied after 10000 ms
+at androidx.compose.ui.test.AndroidComposeUiTestEnvironment$AndroidComposeUiTestImpl.waitUntil(ComposeUiTest.android.kt:755)
+at androidx.compose.ui.test.junit4.AndroidComposeTestRule.waitUntil(AndroidComposeTestRule.android.kt:362)
+at app.stillnote.StillnoteFlowTest.enter(StillnoteFlowTest.kt:118)
+at app.stillnote.StillnoteFlowTest.enter$default(StillnoteFlowTest.kt:104)
+at app.stillnote.StillnoteFlowTest.capture(StillnoteFlowTest.kt:209)
+at app.stillnote.StillnoteFlowTest.capture$default(StillnoteFlowTest.kt:207)
+at app.stillnote.StillnoteFlowTest.ac08_ac09_corruptSettingsDoesNotBlockJournalCorruptJournalBlocksCapture(StillnoteFlowTest.kt:470)
+</failure>
+  </testcase>
+  <testcase name="ac08_saveConflictKeepsDraftAndDisplayedModel" classname="app.stillnote.StillnoteFlowTest" time="33.534">
+    <failure>androidx.compose.ui.test.ComposeTimeoutException: Condition still not satisfied after 10000 ms
+at androidx.compose.ui.test.AndroidComposeUiTestEnvironment$AndroidComposeUiTestImpl.waitUntil(ComposeUiTest.android.kt:755)
+at androidx.compose.ui.test.junit4.AndroidComposeTestRule.waitUntil(AndroidComposeTestRule.android.kt:362)
+at app.stillnote.StillnoteFlowTest.enter(StillnoteFlowTest.kt:118)
+at app.stillnote.StillnoteFlowTest.enter$default(StillnoteFlowTest.kt:104)
+at app.stillnote.StillnoteFlowTest.capture(StillnoteFlowTest.kt:209)
+at app.stillnote.StillnoteFlowTest.capture$default(StillnoteFlowTest.kt:207)
+at app.stillnote.StillnoteFlowTest.ac08_saveConflictKeepsDraftAndDisplayedModel(StillnoteFlowTest.kt:456)
+</failure>
+  </testcase>
+  <testcase name="ac10_imeCompositionProtocolDoesNotCaptureUntilFinished" classname="app.stillnote.StillnoteFlowTest" time="5.398" />
+  <testcase name="ac08_corruptJournalShowsRecoveryAndDisablesCapture" classname="app.stillnote.StillnoteFlowTest" time="5.721" />
+  <testcase name="ac06_migrateAndNavigateBothLinksWithFrozenOriginal" classname="app.stillnote.StillnoteFlowTest" time="83.399">
+    <failure>androidx.compose.ui.test.ComposeTimeoutException: Condition still not satisfied after 10000 ms
+at androidx.compose.ui.test.AndroidComposeUiTestEnvironment$AndroidComposeUiTestImpl.waitUntil(ComposeUiTest.android.kt:755)
+at androidx.compose.ui.test.junit4.AndroidComposeTestRule.waitUntil(AndroidComposeTestRule.android.kt:362)
+at app.stillnote.StillnoteFlowTest.enter(StillnoteFlowTest.kt:118)
+at app.stillnote.StillnoteFlowTest.enter$default(StillnoteFlowTest.kt:104)
+at app.stillnote.StillnoteFlowTest.ac06_migrateAndNavigateBothLinksWithFrozenOriginal(StillnoteFlowTest.kt:433)
+</failure>
+  </testcase>
+</testsuite>

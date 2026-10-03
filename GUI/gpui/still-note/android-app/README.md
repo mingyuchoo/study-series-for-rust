@@ -46,6 +46,11 @@ Monthly day tiles open the corresponding Daily log. Search covers every log;
 clearing it restores the selected log. Open includes open events and notes.
 Migration preserves the original, adds a linked open task and freezes the original.
 
+CLI builds are verified independently of an IDE. For IDE integration, follow
+the official [IntelliJ IDEA and Kotlin Toolchain plugin setup](https://kotlin-toolchain.org/latest/getting-started/ide-setup/),
+including its Android plugin instructions. The former Gradle import is no longer
+the project entry point.
+
 ## Data and recovery
 
 Internal app files: `journal.json`, `journal.json.bak` (previous durable journal),
@@ -79,7 +84,8 @@ roundtrip harness and an isolated Android 16 (API 36) emulator for Compose inter
 tests. Set `ANDROID_SERIAL` to its `emulator-NNNN` serial and expose Android SDK
 platform-tools on `PATH`. Enable the software keyboard on that isolated emulator
 with `adb -s emulator-NNNN shell settings put secure show_ime_with_hard_keyboard 1`.
-The scripts reject physical devices and non-API-36 emulators; `ANDROID_HOME` must
+The scripts reject physical devices and non-API-36 emulators. The UI adapter keeps
+the selected emulator awake and dismisses its keyguard before testing; `ANDROID_HOME` must
 point to the installed SDK. All commands propagate failures. Use
 `./scripts/format.ps1 -Write` or `bash scripts/format.sh --write` to format Kotlin.
 Check reports under `build/android-checks/build/reports`, CLI logs under
