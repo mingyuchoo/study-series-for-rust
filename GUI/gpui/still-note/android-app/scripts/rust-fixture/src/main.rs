@@ -1,7 +1,7 @@
 // Import authoritative desktop serialization and validation without building GPUI.
-#[path = "../../../../../../desktop-app/src/model.rs"]
+#[path = "../../../../desktop-app/src/model.rs"]
 mod model;
-#[path = "../../../../../../desktop-app/src/i18n.rs"]
+#[path = "../../../../desktop-app/src/i18n.rs"]
 mod i18n;
 mod settings {
     #[derive(Clone, Copy, PartialEq)]

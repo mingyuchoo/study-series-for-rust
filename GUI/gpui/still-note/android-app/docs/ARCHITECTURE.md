@@ -24,7 +24,7 @@ android-app/
         Repositories.kt          저장소·ID 생성 포트와 경계 오류
         JournalService.kt        초기 로드, 명령 실행·저장, 설정 저장
         Session.kt               저장 성공 후에만 갱신하는 동기식 세션
-  app/src/main/kotlin/app/stillnote/
+  app/src/app/stillnote/
     data/
       JournalCodec.kt            데스크톱 v1 JSON ↔ 도메인 변환
       SettingsCodec.kt           설정 JSON ↔ 도메인 변환
@@ -83,19 +83,24 @@ ViewModel의 디스패처도 주입할 수 있어 테스트에서 실제 파일�
 `core`의 도메인 테스트와 가짜 저장소 기반 유스케이스 테스트,
 `app`의 기존 파일 장애·충돌·JSON 보호 테스트 및 새 ViewModel 테스트를 사용한다.
 화면 테스트는 기존 시나리오를 유지하고 생성 부분만 새 의존성 조립 방식으로 바꿨다.
-검증 스크립트에도 `:core:test`를 추가했다.
+검증 스크립트는 Kotlin CLI로 core/app 테스트를 실행한다.
 
 ```powershell
-./gradlew.bat spotlessCheck :core:test testDebugUnitTest lintDebug assembleDebug
-cargo run --locked --manifest-path app/src/test/rust-fixture/Cargo.toml -- validate app/build/compatibility-roundtrip.json
+./kotlin.bat run -m tooling -- format
+./kotlin.bat build
+./kotlin.bat test
+cargo run --locked --manifest-path scripts/rust-fixture/Cargo.toml -- validate build/compatibility-roundtrip.json
+./kotlin.bat run -m tooling -- lint
 # ANDROID_SERIAL은 격리된 API 36 에뮬레이터를 지정한다.
-./gradlew.bat connectedDebugAndroidTest
+./kotlin.bat run -m tooling -- ui
 ```
 
-`./gradlew.bat :core:test`만으로 Android 장치 없이 핵심 규칙을 검증할 수 있다.
-루트 빌드는 Android 플러그인을 구성하므로 Android SDK가 설치된 개발 환경에서
-실행한다. `docs/verification`의 기존 보고서·manifest는 이전 검증 시점의 기록이며
-현재 변경의 근거는 이번 실행으로 생성된 `core/build` 및 `app/build` 보고서이다.
+`./kotlin.bat test -m core`만으로 Android SDK와 장치 없이 핵심 규칙을 검증할 수 있다.
+앱 빌드에는 Android SDK가 필요하다. `tooling`은 포맷·lint·UI 검증 어댑터를
+제공하는 JVM 모듈이며 제품 코드에서 의존하지 않는다. lint/UI 연결 프로젝트는
+`build/android-checks`에 생성되고, UI 호스트는 CLI가 컴파일한 제품 JAR을 사용한다.
+`docs/verification`의 기존 보고서·manifest는 이전 검증 시점의 기록이며
+전환 검증 결과는 [Toolchain 전환 보고서](verification/toolchain-migration-report.md)에 기록한다.
 이번 실행 요약과 첫 실패·전용 환경 재실행 결과는
 [리팩토링 검증 보고서](verification/refactoring-report.md)에 기록했다.
 

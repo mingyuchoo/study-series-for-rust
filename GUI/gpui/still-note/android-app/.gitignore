@@ -1,4 +1,4 @@
-# Gradle/Kotlin caches and build outputs (app, core, and root project).
+# Kotlin Toolchain and delegated Android build caches/outputs.
 .gradle/
 .kotlin/
 **/build/
@@ -9,10 +9,10 @@ local.properties
 .idea/
 
 # Local verification logs, screenshots, and copied build/test artifacts.
-# Curated reports and fixtures under docs/verification and app/src/test stay visible.
+# Curated reports and test fixtures stay visible.
 /.artifacts/
 
 # Independent Rust compatibility harness build output.
-/app/src/test/rust-fixture/target/
+/scripts/rust-fixture/target/
 # Keep the lockfile: verification invokes Cargo with --locked.
-!app/src/test/rust-fixture/Cargo.lock
+!scripts/rust-fixture/Cargo.lock

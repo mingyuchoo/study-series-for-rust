@@ -4,9 +4,15 @@ if ($env:ANDROID_SERIAL -notmatch '^emulator-\d+$') { throw 'Set ANDROID_SERIAL 
 $qemu = & adb -s $env:ANDROID_SERIAL shell getprop ro.kernel.qemu
 $sdk = & adb -s $env:ANDROID_SERIAL shell getprop ro.build.version.sdk
 if ($qemu.Trim() -ne '1' -or $sdk.Trim() -ne '36') { throw 'Verification requires the isolated Android 16 emulator.' }
-& ./gradlew.bat spotlessCheck lintDebug :core:test testDebugUnitTest assembleDebug
+& ./kotlin.bat run -m tooling -- format
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-& cargo run --locked --manifest-path app/src/test/rust-fixture/Cargo.toml -- validate app/build/compatibility-roundtrip.json
+& ./kotlin.bat build
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-& ./gradlew.bat connectedDebugAndroidTest
+& ./kotlin.bat test
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+& cargo run --locked --manifest-path scripts/rust-fixture/Cargo.toml -- validate build/compatibility-roundtrip.json
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+& ./kotlin.bat run -m tooling -- lint
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+& ./kotlin.bat run -m tooling -- ui
 exit $LASTEXITCODE

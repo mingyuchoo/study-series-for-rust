@@ -1,0 +1,20 @@
+product: jvm/app
+description: Formatting and Android verification adapters for Kotlin Toolchain.
+
+settings:
+  kotlin:
+    version: 2.2.21
+  jvm:
+    jdk:
+      version: 17
+    release: 17
+    mainClass: MainKt
+
+repositories:
+  - https://repo.gradle.org/gradle/libs-releases
+
+dependencies:
+  - com.facebook:ktfmt:0.54
+  - org.gradle:gradle-tooling-api:8.13
+  - org.slf4j:slf4j-simple:1.7.36
+  - org.yaml:snakeyaml:2.4

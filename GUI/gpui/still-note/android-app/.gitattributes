@@ -1,0 +1,4 @@
+# The Windows launcher requires CRLF; shell entry points require LF.
+kotlin.bat text eol=crlf
+kotlin text eol=lf
+scripts/*.sh text eol=lf
