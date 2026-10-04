@@ -14,22 +14,28 @@ shape support and a monochrome layer for themed icons. See
 ## Architecture
 
 The Kotlin/JVM `core` module contains immutable domain rules, explicit commands,
-repository ports and use cases. The Android `app` module supplies file/JSON adapters,
-Compose UI, ViewModel scheduling and dependency composition. See
+repository ports and use cases. The JVM `presentation` module depends only on core
+and supplies pure screen models, state transitions, page projections and contracts.
+The Android `app` module supplies file/JSON adapters, Compose UI, ViewModel scheduling
+and dependency composition. See
 [architecture and refactoring notes](docs/ARCHITECTURE.md) for dependency rules,
 pure/effect boundaries and preserved persistence policies. Run
 `./kotlin.bat test -m core` for the core tests without an emulator or Android SDK.
 
-The ViewModel depends on the `JournalUseCases` inbound port. `StillnoteRoute.kt`
+The ViewModel depends on the `JournalUseCases` inbound port and publishes the result
+of the pure `UiState.reduce` function. `StillnoteRoute.kt`
 connects Android lifecycle, saved state and clock effects to `StillnoteScreen.kt`,
 which receives screen state and event/memory contracts. Search and index queries
-are pure core use cases; `ProtectedFileStore` owns shared file protection and
+are pure core use cases; `LogPageModel` prepares list, calendar and summary data for
+the screen. Role-specific Compose panels emit callbacks and entry intents without
+knowing the ViewModel or stores. `ProtectedFileStore` owns shared file protection and
 durable-baseline handling. `./kotlin.bat run -m tooling -- architecture` checks
 inward dependency rules and is included in the verification scripts.
 
 The Android module uses `app/src`, `app/res`, `app/test`, and `app/testResources`;
-UI tests use `app/instrumentedTest`. The JVM core retains `src/main/kotlin` and
-`src/test/kotlin` through the Maven-like layout. Package names remain
+UI tests use `app/instrumentedTest`. The JVM core and presentation modules use
+`src/main/kotlin` and `src/test/kotlin` through the Maven-like layout. Both can be
+tested without an Android SDK. Package names remain
 `app.stillnote` and its subpackages.
 
 ## Build and run
@@ -59,6 +65,12 @@ positions across navigation and state restoration. Settings, editing and migrati
 disable page swipes; collections remain accessible through the menu/sidebar.
 Monthly day tiles open the corresponding Daily log. Search covers every log;
 clearing it restores the selected log. Open includes open events and notes.
+Daily logs and collections place entry capture before search and status filters,
+which sit directly above the entry list. Monthly logs show the calendar before
+capture. Future logs start with the entry form collapsed; Add entry opens it,
+collapsing preserves the draft, and a successful save closes it. Index starts
+with search and navigation links. Date and empty-entry errors appear beside their
+fields; entry counts and the symbol guide remain below the list.
 Migration preserves the original, adds a linked open task and freezes the original.
 
 CLI builds are verified independently of an IDE. For IDE integration, follow
@@ -152,12 +164,12 @@ formatting check. Pass `-- format --write`, `-- architecture`, `-- lint`, or `--
 actions. To launch the Android application, run `./kotlin.bat run -m app`
 with `--device-id emulator-NNNN` as shown above.
 
-`./kotlin.bat test` runs 35 core/app JVM tests, with AGP's mockable
+`./kotlin.bat test` runs 45 core/presentation/app JVM tests, with AGP's mockable
 Android jar. The independent Rust harness validates `build/compatibility-roundtrip.json`.
 `./kotlin.bat run -m tooling -- lint` checks the app sources. The `ui` command first
 installs and launches the actual CLI APK on the selected emulator, then runs the
-existing 14 Compose tests in `app.stillnote.verification`. This separate test host
-uses the CLI's app/core JARs and app resources, adds the Compose test Activity,
+22 Compose tests in `app.stillnote.verification`. This separate test host
+uses the CLI's app/core/presentation JARs and app resources, adds the Compose test Activity,
 and never recompiles production Kotlin. It does not modify production source or
 the production manifest. UI results are under `build/android-checks/build/outputs/androidTest-results`.
 

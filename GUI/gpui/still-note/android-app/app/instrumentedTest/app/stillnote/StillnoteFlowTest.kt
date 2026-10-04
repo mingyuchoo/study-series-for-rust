@@ -178,6 +178,23 @@ class StillnoteFlowTest {
     }
 
     @Test
+    fun futureCaptureReturnsToListAfterSuccessfulSave() {
+        start(excludeNativeIme = true)
+        click("nav-Future")
+        compose.onNodeWithTag("draft").assertDoesNotExist()
+        val id = capture("Future plan")
+        assertEquals(Log.Future, vm.state.value.journal.entry(id).log)
+        compose.onNodeWithTag("draft").assertDoesNotExist()
+        visibleNode("entry-$id").assertIsDisplayed()
+        click("future-capture-toggle")
+        visibleNode("draft")
+            .assert(
+                SemanticsMatcher.expectValue(SemanticsProperties.EditableText, AnnotatedString(""))
+            )
+        assertEquals("", vm.recalled("draft"))
+    }
+
+    @Test
     fun ac10_imeCompositionProtocolDoesNotCaptureUntilFinished() {
         start(excludeNativeIme = true)
         visibleNode("draft").performClick()
@@ -221,6 +238,8 @@ class StillnoteFlowTest {
     }
 
     private fun capture(text: String, kind: Kind = Kind.Task): UUID {
+        if (vm.recalled("log") == "Future" && vm.recalled("future-capture", "false") != "true")
+            click("future-capture-toggle")
         click("kind-$kind")
         enter("draft", text)
         compose
@@ -244,11 +263,19 @@ class StillnoteFlowTest {
             )
         }
         settled()
-        compose
-            .onNodeWithTag("draft")
-            .assert(
-                SemanticsMatcher.expectValue(SemanticsProperties.EditableText, AnnotatedString(""))
-            )
+        if (vm.recalled("log") == "Future") {
+            compose.onNodeWithTag("draft").assertDoesNotExist()
+            assertEquals("", vm.recalled("draft"))
+        } else {
+            compose
+                .onNodeWithTag("draft")
+                .assert(
+                    SemanticsMatcher.expectValue(
+                        SemanticsProperties.EditableText,
+                        AnnotatedString(""),
+                    )
+                )
+        }
         return vm.state.value.journal.entries.last().id
     }
 

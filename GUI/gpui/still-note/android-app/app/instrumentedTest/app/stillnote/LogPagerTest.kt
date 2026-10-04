@@ -204,6 +204,24 @@ class LogPagerTest {
     }
 
     @Test
+    fun futureEntryFormIsOptionalAndRetainsDraftAcrossCollapseAndRestoration() {
+        val restoration = start()
+        compose.onNodeWithTag("nav-Future").performClick()
+        compose.onNodeWithTag("draft").assertDoesNotExist()
+        compose.onNodeWithTag("search").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithTag("future-capture-toggle").performScrollTo().performClick()
+        compose.onNodeWithTag("draft").performScrollTo().performTextReplacement("Future plan")
+        compose.onNodeWithTag("future-capture-toggle").performScrollTo().performClick()
+        compose.onNodeWithTag("draft").assertDoesNotExist()
+        restoration.emulateSavedInstanceStateRestore()
+        compose.onNodeWithTag("draft").assertDoesNotExist()
+        compose.onNodeWithTag("future-capture-toggle").performScrollTo().performClick()
+        compose.onNodeWithTag("draft").performScrollTo().assertTextContains("Future plan")
+        restoration.emulateSavedInstanceStateRestore()
+        compose.onNodeWithTag("draft").performScrollTo().assertTextContains("Future plan")
+    }
+
+    @Test
     fun monthlyDayAndIndexLocationOpenTheCorrectDailyDate() {
         start(Journal(entries = listOf(Entry(entryId, today, Log.Daily, Kind.Task, text = "Task"))))
         compose.onNodeWithTag("nav-Monthly").performClick()

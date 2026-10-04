@@ -26,14 +26,7 @@ class JournalViewModel(
         viewModelScope.launch {
             lock.withLock {
                 val loaded = withContext(ioDispatcher) { service.load() }
-                mutable.value =
-                    UiState(
-                        journal = loaded.journal,
-                        settings = loaded.settings,
-                        loading = false,
-                        blocked = loaded.blocked,
-                        error = loaded.error,
-                    )
+                mutable.value = mutable.value.reduce(UiTransition.Loaded(loaded))
             }
         }
     }
@@ -45,39 +38,31 @@ class JournalViewModel(
     fun recalled(key: String, default: String = ""): String = savedState[key] ?: default
 
     fun dismissError() {
-        mutable.value = mutable.value.copy(error = null)
+        mutable.value = mutable.value.reduce(UiTransition.ErrorDismissed)
     }
 
     fun report(error: String) {
-        mutable.value = mutable.value.copy(error = error)
+        mutable.value = mutable.value.reduce(UiTransition.ErrorReported(error))
     }
 
     fun execute(command: JournalCommand, onSuccess: () -> Unit = {}) {
         viewModelScope.launch {
             lock.withLock {
                 if (mutable.value.blocked || mutable.value.loading) return@withLock
-                mutable.value = mutable.value.copy(busy = true)
+                mutable.value = mutable.value.reduce(UiTransition.CommandStarted)
                 try {
                     val next =
                         withContext(ioDispatcher) {
                             service.execute(mutable.value.journal, command)
                         }
-                    mutable.value = mutable.value.copy(journal = next, busy = false, error = null)
+                    mutable.value = mutable.value.reduce(UiTransition.CommandCommitted(next))
                     onSuccess()
                 } catch (e: kotlinx.coroutines.CancellationException) {
-                    mutable.value = mutable.value.copy(busy = false)
+                    mutable.value = mutable.value.reduce(UiTransition.CommandCancelled)
                     throw e
                 } catch (e: Exception) {
                     mutable.value =
-                        mutable.value.copy(
-                            busy = false,
-                            error =
-                                when (e) {
-                                    is DomainException -> e.code
-                                    is RepositoryException -> e.code
-                                    else -> "journal_save"
-                                },
-                        )
+                        mutable.value.reduce(UiTransition.CommandFailed(commandErrorCode(e)))
                 }
             }
         }
@@ -86,7 +71,7 @@ class JournalViewModel(
     fun settings(settings: Settings) {
         viewModelScope.launch {
             lock.withLock {
-                mutable.value = mutable.value.copy(settings = settings)
+                mutable.value = mutable.value.reduce(UiTransition.SettingsSelected(settings))
                 try {
                     withContext(ioDispatcher) { service.saveSettings(settings) }
                 } catch (e: RepositoryException) {

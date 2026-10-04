@@ -78,7 +78,10 @@ fun runAndroidChecks(args: Array<String>) {
     fun path(value: String) = literal(File(root, value).invariantSeparatorsPath)
     val mainJar = File(root, "build/tasks/_app_jarAndroidDebug/app-jvm.jar")
     val coreJar = File(root, "build/tasks/_core_jarJvm/core-jvm.jar")
-    require(mainJar.isFile && coreJar.isFile) { "Run kotlin build first." }
+    val presentationJar = File(root, "build/tasks/_presentation_jarJvm/presentation-jvm.jar")
+    require(mainJar.isFile && coreJar.isFile && presentationJar.isFile) {
+        "Run kotlin build first."
+    }
     val bridge = File(root, "build/android-checks").apply { mkdirs() }
     if (ui) {
         val serial = System.getenv("ANDROID_SERIAL")
@@ -165,7 +168,7 @@ android {
     lint { checkReleaseBuilds = false }
 }
 dependencies {
-    implementation(files(${literal(mainJar.invariantSeparatorsPath)}, ${literal(coreJar.invariantSeparatorsPath)}))
+    implementation(files(${literal(mainJar.invariantSeparatorsPath)}, ${literal(coreJar.invariantSeparatorsPath)}, ${literal(presentationJar.invariantSeparatorsPath)}))
     $dependencies
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:${serialization["version"]}")
     androidTestImplementation(platform(${literal(bom)}))

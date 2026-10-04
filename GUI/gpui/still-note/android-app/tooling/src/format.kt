@@ -8,7 +8,15 @@ fun runFormat(args: Array<String>) {
         "Usage: kotlin run -m tooling -- format [--write]"
     }
     val write = args.isNotEmpty()
-    val paths = listOf("app/src", "app/test", "app/instrumentedTest", "core/src", "tooling/src")
+    val paths =
+        listOf(
+            "app/src",
+            "app/test",
+            "app/instrumentedTest",
+            "core/src",
+            "presentation/src",
+            "tooling/src",
+        )
     var failures = 0
     for (path in paths) {
         File(root, path)

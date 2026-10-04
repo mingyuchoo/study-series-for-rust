@@ -28,6 +28,7 @@ settings:
 
 dependencies:
   - //core
+  - //presentation
   - bom: androidx.compose:compose-bom:2025.10.01
   - androidx.activity:activity-compose:1.11.0
   - androidx.compose.material3:material3
