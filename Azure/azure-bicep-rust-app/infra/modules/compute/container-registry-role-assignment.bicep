@@ -17,7 +17,7 @@ param roleDefinitionId string = '7f951dda-4ed3-4680-a7ca-43fe172d538d' // AcrPul
 ////////////////////////////////////////////////////////////////////////////////
 
 // Container Registry 리소스 참조 (registryName이 제공된 경우)
-resource containerRegistry 'Microsoft.ContainerRegistry/registries@2025-03-01-preview' existing = {
+resource containerRegistry 'Microsoft.ContainerRegistry/registries@2025-11-01' existing = {
   name: registryName
 }
 

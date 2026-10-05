@@ -12,7 +12,7 @@ Rust 기반 Clean Architecture 원칙을 적용한 TODO 애플리케이션입니
 - JSON 직렬화/역직렬화
 - UUID 기반 엔티티 식별
 - 생성/수정 날짜 추적
-- OpenAPI 3.0 스펙 지원
+- OpenAPI 3.1 스펙 지원
 
 ## 아키텍처
 
@@ -29,16 +29,16 @@ Clean Architecture 원칙에 따른 4개 계층:
 
 | 패키지 | 버전 | 설명 |
 |--------|------|------|
-| `actix-web` | 4.9.0 | 웹 프레임워크 |
-| `actix-files` | 0.6.6 | 정적 파일 서빙 |
-| `sqlx` | 0.7 | SQLite 데이터베이스 |
-| `utoipa` | 4.2 | OpenAPI 문서 생성 |
-| `utoipa-swagger-ui` | 6.0 | Swagger UI |
-| `serde` / `serde_json` | 1.0 | JSON 직렬화 |
-| `uuid` | 1.0 | UUID 생성 |
-| `chrono` | 0.4 | 날짜/시간 처리 |
-| `clap` | 4.5.20 | CLI 인자 파싱 |
-| `tokio` | 1.0 | 비동기 런타임 |
+| `actix-web` | 4.15.0 | 웹 프레임워크 |
+| `actix-files` | 0.7.0 | 정적 파일 서빙 |
+| `sqlx` | 0.9.0 | SQLite 데이터베이스 |
+| `utoipa` | 6.0.0 | OpenAPI 문서 생성 |
+| `utoipa-swagger-ui` | 10.0.1 | Swagger UI |
+| `serde` / `serde_json` | 1.0.229 / 1.0.151 | JSON 직렬화 |
+| `uuid` | 1.27.0 | UUID 생성 |
+| `chrono` | 0.4.45 | 날짜/시간 처리 |
+| `clap` | 4.6.7 | CLI 인자 파싱 |
+| `tokio` | 1.53.2 | 비동기 런타임 |
 
 ## API 문서
 
@@ -58,7 +58,7 @@ Clean Architecture 원칙에 따른 4개 계층:
 
 ### 사전 요구사항
 
-- Rust (최신 안정 버전)
+- Rust 1.99.0 (`rust-toolchain.toml`에 고정)
 - Cargo 패키지 관리자
 
 ### 설치 및 실행

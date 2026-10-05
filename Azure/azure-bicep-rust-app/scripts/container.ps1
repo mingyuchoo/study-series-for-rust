@@ -4,6 +4,9 @@ param(
     [string]$Command = "help"
 )
 
+$ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot 'common.ps1')
+
 # 색상 함수
 function Write-ColorOutput {
     param(
@@ -23,11 +26,20 @@ function Write-ColorOutput {
 }
 
 # Docker Compose 파일 경로
-$DockerComposeFile = "docker/docker-compose.yml"
+function Invoke-Compose {
+    $commandArguments = @($args)
+    $composeCmd = Get-ComposeCommand
+    if ($composeCmd -eq 'docker compose') {
+        & docker compose -f $DockerComposeFile @commandArguments
+    } else {
+        & docker-compose -f $DockerComposeFile @commandArguments
+    }
+    if ($LASTEXITCODE -ne 0) { throw "Docker Compose failed with exit code $LASTEXITCODE" }
+}
 
 # 도움말 함수
 function Show-Help {
-    Write-ColorOutput "사용법: .\container.ps1 [COMMAND]" "Blue"
+    Write-ColorOutput "사용법: ./scripts/container.ps1 [COMMAND]" "Blue"
     Write-Host ""
     Write-ColorOutput "Commands:" "Yellow"
     Write-Host "  up, start     - 컨테이너 시작"
@@ -41,9 +53,9 @@ function Show-Help {
     Write-Host "  help          - 도움말 표시"
     Write-Host ""
     Write-ColorOutput "Examples:" "Yellow"
-    Write-Host "  .\container.ps1 up         # 컨테이너 시작"
-    Write-Host "  .\container.ps1 down       # 컨테이너 중지"
-    Write-Host "  .\container.ps1 logs       # 로그 보기"
+    Write-Host "  ./scripts/container.ps1 up         # 컨테이너 시작"
+    Write-Host "  ./scripts/container.ps1 down       # 컨테이너 중지"
+    Write-Host "  ./scripts/container.ps1 logs       # 로그 보기"
 }
 
 # Docker와 Docker Compose 설치 확인
@@ -98,10 +110,11 @@ function Start-Containers {
     # 프론트엔드 빌드
     Write-ColorOutput "📦 프론트엔드를 빌드합니다..." "Yellow"
     
-    if (Test-Path "frontend/package.json") {
-        Push-Location frontend
+    if (Test-Path (Join-Path $FrontendDirectory 'package.json')) {
+        Push-Location -LiteralPath $FrontendDirectory
         try {
-            npm run build:backend
+            Invoke-Pnpm install --frozen-lockfile
+            Invoke-Pnpm run build:backend
             if ($LASTEXITCODE -ne 0) {
                 Write-ColorOutput "❌ 프론트엔드 빌드에 실패했습니다." "Red"
                 exit 1
@@ -117,11 +130,15 @@ function Start-Containers {
     }
     
     # Docker 네트워크 생성 (존재하지 않는 경우)
-    docker network create docker-link 2>$null
+    & docker network inspect docker-link *> $null
+    if ($LASTEXITCODE -ne 0) {
+        & docker network create docker-link
+        if ($LASTEXITCODE -ne 0) { throw 'Failed to create Docker network' }
+    }
     
     # 컨테이너 시작
     $composeCmd = Get-ComposeCommand
-    Invoke-Expression "$composeCmd -f $DockerComposeFile up -d"
+    Invoke-Compose up -d
     
     if ($LASTEXITCODE -eq 0) {
         Write-ColorOutput "✅ 컨테이너가 성공적으로 시작되었습니다." "Green"
@@ -138,7 +155,7 @@ function Stop-Containers {
     Write-ColorOutput "🛑 컨테이너를 중지합니다..." "Yellow"
     
     $composeCmd = Get-ComposeCommand
-    Invoke-Expression "$composeCmd -f $DockerComposeFile down"
+    Invoke-Compose down
     
     if ($LASTEXITCODE -eq 0) {
         Write-ColorOutput "✅ 컨테이너가 성공적으로 중지되었습니다." "Green"
@@ -161,7 +178,7 @@ function Show-Logs {
     Write-ColorOutput "📋 컨테이너 로그를 표시합니다..." "Blue"
     
     $composeCmd = Get-ComposeCommand
-    Invoke-Expression "$composeCmd -f $DockerComposeFile logs -f"
+    Invoke-Compose logs -f
 }
 
 # 상태 확인
@@ -169,7 +186,7 @@ function Show-Status {
     Write-ColorOutput "📊 컨테이너 상태:" "Blue"
     
     $composeCmd = Get-ComposeCommand
-    Invoke-Expression "$composeCmd -f $DockerComposeFile ps"
+    Invoke-Compose ps
 }
 
 # 이미지 빌드
@@ -178,9 +195,10 @@ function Build-Images {
     
     # 프론트엔드 빌드
     Write-ColorOutput "📦 프론트엔드를 빌드합니다..." "Yellow"
-    Push-Location frontend
+    Push-Location -LiteralPath $FrontendDirectory
     try {
-        npm run build:backend
+        Invoke-Pnpm install --frozen-lockfile
+        Invoke-Pnpm run build:backend
     }
     finally {
         Pop-Location
@@ -188,7 +206,7 @@ function Build-Images {
     
     # Docker 이미지 빌드
     $composeCmd = Get-ComposeCommand
-    Invoke-Expression "$composeCmd -f $DockerComposeFile build"
+    Invoke-Compose build
     
     if ($LASTEXITCODE -eq 0) {
         Write-ColorOutput "✅ 이미지 빌드가 완료되었습니다." "Green"

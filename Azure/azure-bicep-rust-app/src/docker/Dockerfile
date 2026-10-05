@@ -1,5 +1,5 @@
-# Use rust:alpine3.22 as base image
-FROM rust:alpine3.22
+# Use rust:1.99.0-alpine3.24 as base image
+FROM rust:1.99.0-alpine3.24
 
 # Install necessary packages for building
 RUN apk add --no-cache \
@@ -11,10 +11,10 @@ RUN apk add --no-cache \
 WORKDIR /app
 
 # Copy the backend source code
-COPY ../backend .
+COPY backend .
 
 # Build the application in release mode
-RUN cargo build --release
+RUN cargo build --release --locked
 
 # Expose the default port
 EXPOSE 8080

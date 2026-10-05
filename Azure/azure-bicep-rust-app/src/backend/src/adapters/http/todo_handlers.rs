@@ -1,5 +1,5 @@
 use crate::application::use_cases::TodoUseCases;
-use crate::domain::entities::{CreateTodoRequest, UpdateTodoRequest};
+use crate::domain::entities::{CreateTodoRequest, ErrorResponse, Todo, UpdateTodoRequest};
 use actix_web::{HttpResponse, Responder, Result, delete, get, post, put, web};
 use serde_json::json;
 use std::sync::Arc;

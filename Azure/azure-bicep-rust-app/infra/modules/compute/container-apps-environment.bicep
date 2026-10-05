@@ -21,12 +21,12 @@ param logAnalyticsWorkspaceName string
 
 
 // Log Analytics Workspace 리소스 참조
-resource logAnalyticsWorkspace 'Microsoft.OperationalInsights/workspaces@2025-02-01' existing = {
+resource logAnalyticsWorkspace 'Microsoft.OperationalInsights/workspaces@2026-03-01' existing = {
   name: logAnalyticsWorkspaceName
 }
 
 
-resource containerAppsEnvironment 'Microsoft.App/managedEnvironments@2025-01-01' = {
+resource containerAppsEnvironment 'Microsoft.App/managedEnvironments@2026-07-01' = {
   name: name
   location: location
   tags: tags

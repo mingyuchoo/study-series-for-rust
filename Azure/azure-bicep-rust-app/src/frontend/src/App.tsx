@@ -1,6 +1,4 @@
-import { useState, useEffect } from 'react'
-import reactLogo from './assets/react.svg'
-import viteLogo from '/vite.svg'
+import { createSignal, For, onCleanup, onMount } from 'solid-js'
 import './App.css'
 
 interface Todo {
@@ -18,10 +16,10 @@ interface CreateTodo {
 }
 
 function App() {
-  const [todos, setTodos] = useState<Todo[]>([])
-  const [loading, setLoading] = useState(false)
-  const [newTodo, setNewTodo] = useState<CreateTodo>({ title: '', description: '' })
-  const [editingTodo, setEditingTodo] = useState<Todo | null>(null)
+  const [todos, setTodos] = createSignal<Todo[]>([])
+  const [loading, setLoading] = createSignal(true)
+  const [newTodo, setNewTodo] = createSignal<CreateTodo>({ title: '', description: '' })
+  const [editingTodo, setEditingTodo] = createSignal<Todo | null>(null)
 
   const fetchTodos = async () => {
     setLoading(true)
@@ -37,7 +35,7 @@ function App() {
   }
 
   const createTodo = async () => {
-    if (!newTodo.title.trim()) return
+    if (!newTodo().title.trim()) return
 
     try {
       const response = await fetch('/api/todos', {
@@ -45,7 +43,7 @@ function App() {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(newTodo),
+        body: JSON.stringify(newTodo()),
       })
 
       if (response.ok) {
@@ -94,50 +92,62 @@ function App() {
     updateTodo(todo.id, { completed: !todo.completed })
   }
 
-  useEffect(() => {
-    fetchTodos()
-  }, [])
+  onMount(() => {
+    const controller = new AbortController()
+    fetch('/api/todos', { signal: controller.signal })
+      .then(response => response.json())
+      .then(data => {
+        if (!controller.signal.aborted) setTodos(data)
+      })
+      .catch(error => {
+        if (!controller.signal.aborted) console.error('Failed to fetch todos:', error)
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setLoading(false)
+      })
+    onCleanup(() => controller.abort())
+  })
 
   return (
     <>
       <div>
         <a href="https://vite.dev" target="_blank">
-          <img src={viteLogo} className="logo" alt="Vite logo" />
+          <img src="/vite.svg" class="logo" alt="Vite logo" />
         </a>
-        <a href="https://react.dev" target="_blank">
-          <img src={reactLogo} className="logo react" alt="React logo" />
+        <a href="https://www.solidjs.com" target="_blank">
+          <span class="solid-brand">SolidJS</span>
         </a>
       </div>
       <h1>TODO Manager</h1>
 
-      <div className="card">
+      <div class="card">
         <h2>Add New TODO</h2>
-        <div style={{ marginBottom: '1rem' }}>
+        <div style={{ 'margin-bottom': '1rem' }}>
           <input
             type="text"
             placeholder="Todo title"
-            value={newTodo.title}
-            onChange={(e) => setNewTodo({ ...newTodo, title: e.target.value })}
+            value={newTodo().title}
+            onInput={(e) => setNewTodo({ ...newTodo(), title: e.currentTarget.value })}
             style={{
-              marginRight: '0.5rem',
+              'margin-right': '0.5rem',
               padding: '0.5rem',
-              backgroundColor: '#1a1a1a',
+              'background-color': '#1a1a1a',
               border: '1px solid #404040',
-              borderRadius: '4px',
+              'border-radius': '4px',
               color: 'rgba(255, 255, 255, 0.87)'
             }}
           />
           <input
             type="text"
             placeholder="Description (optional)"
-            value={newTodo.description}
-            onChange={(e) => setNewTodo({ ...newTodo, description: e.target.value })}
+            value={newTodo().description}
+            onInput={(e) => setNewTodo({ ...newTodo(), description: e.currentTarget.value })}
             style={{
-              marginRight: '0.5rem',
+              'margin-right': '0.5rem',
               padding: '0.5rem',
-              backgroundColor: '#1a1a1a',
+              'background-color': '#1a1a1a',
               border: '1px solid #404040',
-              borderRadius: '4px',
+              'border-radius': '4px',
               color: 'rgba(255, 255, 255, 0.87)'
             }}
           />
@@ -145,85 +155,85 @@ function App() {
         </div>
       </div>
 
-      <div className="card">
+      <div class="card">
         <h2>TODO List</h2>
-        {loading ? (
+        {loading() ? (
           <p>Loading...</p>
-        ) : todos.length > 0 ? (
+        ) : todos().length > 0 ? (
           <div>
-            {todos.map(todo => (
-              <div key={todo.id} style={{
+            <For each={todos()}>{todo => (
+              <div style={{
                 border: '1px solid #404040',
                 margin: '0.5rem 0',
                 padding: '1rem',
-                borderRadius: '8px',
-                backgroundColor: todo.completed ? '#1a2e1a' : '#2a2a2a',
-                boxShadow: '0 2px 4px rgba(0, 0, 0, 0.3)'
+                'border-radius': '8px',
+                'background-color': todo.completed ? '#1a2e1a' : '#2a2a2a',
+                'box-shadow': '0 2px 4px rgba(0, 0, 0, 0.3)'
               }}>
-                {editingTodo?.id === todo.id ? (
+                {editingTodo()?.id === todo.id ? (
                   <div>
                     <input
                       type="text"
-                      value={editingTodo.title}
-                      onChange={(e) => setEditingTodo({ ...editingTodo, title: e.target.value })}
+                      value={editingTodo()!.title}
+                      onInput={(e) => setEditingTodo({ ...editingTodo()!, title: e.currentTarget.value })}
                       style={{
-                        marginRight: '0.5rem',
+                        'margin-right': '0.5rem',
                         padding: '0.5rem',
-                        backgroundColor: '#1a1a1a',
+                        'background-color': '#1a1a1a',
                         border: '1px solid #404040',
-                        borderRadius: '4px',
+                        'border-radius': '4px',
                         color: 'rgba(255, 255, 255, 0.87)'
                       }}
                     />
                     <input
                       type="text"
-                      value={editingTodo.description || ''}
-                      onChange={(e) => setEditingTodo({ ...editingTodo, description: e.target.value })}
+                      value={editingTodo()!.description || ''}
+                      onInput={(e) => setEditingTodo({ ...editingTodo()!, description: e.currentTarget.value })}
                       style={{
-                        marginRight: '0.5rem',
+                        'margin-right': '0.5rem',
                         padding: '0.5rem',
-                        backgroundColor: '#1a1a1a',
+                        'background-color': '#1a1a1a',
                         border: '1px solid #404040',
-                        borderRadius: '4px',
+                        'border-radius': '4px',
                         color: 'rgba(255, 255, 255, 0.87)'
                       }}
                     />
                     <button onClick={() => updateTodo(todo.id, {
-                      title: editingTodo.title,
-                      description: editingTodo.description
+                      title: editingTodo()!.title,
+                      description: editingTodo()!.description
                     })}>
                       Save
                     </button>
-                    <button onClick={() => setEditingTodo(null)} style={{ marginLeft: '0.5rem' }}>
+                    <button onClick={() => setEditingTodo(null)} style={{ 'margin-left': '0.5rem' }}>
                       Cancel
                     </button>
                   </div>
                 ) : (
                   <div>
                     <h3 style={{
-                      textDecoration: todo.completed ? 'line-through' : 'none',
+                      'text-decoration': todo.completed ? 'line-through' : 'none',
                       margin: '0 0 0.5rem 0'
                     }}>
                       {todo.title}
                     </h3>
                     {todo.description && (
                       <p style={{
-                        textDecoration: todo.completed ? 'line-through' : 'none',
+                        'text-decoration': todo.completed ? 'line-through' : 'none',
                         margin: '0 0 0.5rem 0',
                         color: todo.completed ? '#888' : '#b8b8b8'
                       }}>
                         {todo.description}
                       </p>
                     )}
-                    <div style={{ fontSize: '0.8rem', color: '#888', marginBottom: '0.5rem' }}>
+                    <div style={{ 'font-size': '0.8rem', color: '#888', 'margin-bottom': '0.5rem' }}>
                       Created: {new Date(todo.created_at).toLocaleString()}
                     </div>
                     <div>
                       <button
                         onClick={() => toggleComplete(todo)}
                         style={{
-                          marginRight: '0.5rem',
-                          backgroundColor: todo.completed ? '#2d5a2d' : '#4a4a4a',
+                          'margin-right': '0.5rem',
+                          'background-color': todo.completed ? '#2d5a2d' : '#4a4a4a',
                           border: '1px solid #555',
                           color: 'rgba(255, 255, 255, 0.87)'
                         }}
@@ -233,8 +243,8 @@ function App() {
                       <button
                         onClick={() => setEditingTodo(todo)}
                         style={{
-                          marginRight: '0.5rem',
-                          backgroundColor: '#3a5998',
+                          'margin-right': '0.5rem',
+                          'background-color': '#3a5998',
                           border: '1px solid #555',
                           color: 'rgba(255, 255, 255, 0.87)'
                         }}
@@ -244,7 +254,7 @@ function App() {
                       <button
                         onClick={() => deleteTodo(todo.id)}
                         style={{
-                          backgroundColor: '#8b2635',
+                          'background-color': '#8b2635',
                           border: '1px solid #555',
                           color: 'rgba(255, 255, 255, 0.87)'
                         }}
@@ -255,8 +265,8 @@ function App() {
                   </div>
                 )}
               </div>
-            ))}
-            <button onClick={fetchTodos} style={{ marginTop: '1rem' }}>
+            )}</For>
+            <button onClick={fetchTodos} style={{ 'margin-top': '1rem' }}>
               Refresh TODOs
             </button>
           </div>
@@ -265,8 +275,8 @@ function App() {
         )}
       </div>
 
-      <p className="read-the-docs">
-        Click on the Vite and React logos to learn more
+      <p class="read-the-docs">
+        Click on the Vite and SolidJS logos to learn more
       </p>
     </>
   )

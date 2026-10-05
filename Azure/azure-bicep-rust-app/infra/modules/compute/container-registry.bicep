@@ -15,7 +15,7 @@ param tags object = {}
 ////////////////////////////////////////////////////////////////////////////////
 // Resources
 ////////////////////////////////////////////////////////////////////////////////
-resource containerRegistry 'Microsoft.ContainerRegistry/registries@2025-03-01-preview' = {
+resource containerRegistry 'Microsoft.ContainerRegistry/registries@2025-11-01' = {
   name: name
   location: location
   tags: tags

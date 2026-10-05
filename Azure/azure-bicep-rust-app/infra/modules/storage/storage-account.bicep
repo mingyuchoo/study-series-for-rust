@@ -39,7 +39,7 @@ param deleteRetentionPolicy object = {}
 ////////////////////////////////////////////////////////////////////////////////
 // Resource
 ////////////////////////////////////////////////////////////////////////////////
-resource storageAccount 'Microsoft.Storage/storageAccounts@2024-01-01' = {
+resource storageAccount 'Microsoft.Storage/storageAccounts@2026-06-01' = {
   name: name
   location: location
   tags: tags

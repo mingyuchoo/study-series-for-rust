@@ -1,4 +1,5 @@
-#!/bin/bash
+#!/usr/bin/env bash
+source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/common.sh"
 
 # 색상 정의
 RED='\033[0;31m'
@@ -8,7 +9,6 @@ BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
 # Docker Compose 파일 경로
-DOCKER_COMPOSE_FILE="docker/docker-compose.yml"
 
 # 도움말 함수
 show_help() {
@@ -59,9 +59,10 @@ start_containers() {
     
     # 프론트엔드 빌드
     echo -e "${YELLOW}📦 프론트엔드를 빌드합니다...${NC}"
-    cd frontend
+    cd -- "$FRONTEND_DIR"
     if [ -f "package.json" ]; then
-        npm run build:backend
+        run_pnpm install --frozen-lockfile
+        run_pnpm run build:backend
         if [ $? -ne 0 ]; then
             echo -e "${RED}❌ 프론트엔드 빌드에 실패했습니다.${NC}"
             exit 1
@@ -73,10 +74,12 @@ start_containers() {
     cd ..
     
     # Docker 네트워크 생성 (존재하지 않는 경우)
-    docker network create docker-link 2>/dev/null || true
+    if ! docker network inspect docker-link >/dev/null 2>&1; then
+        docker network create docker-link
+    fi
     
     # 컨테이너 시작
-    $COMPOSE_CMD -f $DOCKER_COMPOSE_FILE up -d
+    $COMPOSE_CMD -f "$DOCKER_COMPOSE_FILE" up -d
     
     if [ $? -eq 0 ]; then
         echo -e "${GREEN}✅ 컨테이너가 성공적으로 시작되었습니다.${NC}"
@@ -90,7 +93,7 @@ start_containers() {
 # 컨테이너 중지
 stop_containers() {
     echo -e "${YELLOW}🛑 컨테이너를 중지합니다...${NC}"
-    $COMPOSE_CMD -f $DOCKER_COMPOSE_FILE down
+    $COMPOSE_CMD -f "$DOCKER_COMPOSE_FILE" down
     
     if [ $? -eq 0 ]; then
         echo -e "${GREEN}✅ 컨테이너가 성공적으로 중지되었습니다.${NC}"
@@ -110,13 +113,13 @@ restart_containers() {
 # 로그 보기
 show_logs() {
     echo -e "${BLUE}📋 컨테이너 로그를 표시합니다...${NC}"
-    $COMPOSE_CMD -f $DOCKER_COMPOSE_FILE logs -f
+    $COMPOSE_CMD -f "$DOCKER_COMPOSE_FILE" logs -f
 }
 
 # 상태 확인
 show_status() {
     echo -e "${BLUE}📊 컨테이너 상태:${NC}"
-    $COMPOSE_CMD -f $DOCKER_COMPOSE_FILE ps
+    $COMPOSE_CMD -f "$DOCKER_COMPOSE_FILE" ps
 }
 
 # 이미지 빌드
@@ -125,12 +128,13 @@ build_images() {
     
     # 프론트엔드 빌드
     echo -e "${YELLOW}📦 프론트엔드를 빌드합니다...${NC}"
-    cd frontend
-    npm run build:backend
+    cd -- "$FRONTEND_DIR"
+    run_pnpm install --frozen-lockfile
+    run_pnpm run build:backend
     cd ..
     
     # Docker 이미지 빌드
-    $COMPOSE_CMD -f $DOCKER_COMPOSE_FILE build
+    $COMPOSE_CMD -f "$DOCKER_COMPOSE_FILE" build
     
     if [ $? -eq 0 ]; then
         echo -e "${GREEN}✅ 이미지 빌드가 완료되었습니다.${NC}"
@@ -169,6 +173,11 @@ clean_docker() {
 
 # 메인 로직
 main() {
+    case "${1:-help}" in
+        help|--help|-h) show_help; return ;;
+        up|start|down|stop|restart|logs|status|build|rebuild|clean) ;;
+        *) show_help >&2; echo "Unknown command: $1" >&2; return 1 ;;
+    esac
     check_docker
     COMPOSE_CMD=$(get_compose_cmd)
     

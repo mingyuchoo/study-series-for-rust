@@ -16,7 +16,7 @@ param tags object = {}
 // Resources
 ////////////////////////////////////////////////////////////////////////////////
 
-resource logAnalyticsWorkspace 'Microsoft.OperationalInsights/workspaces@2025-02-01' = {
+resource logAnalyticsWorkspace 'Microsoft.OperationalInsights/workspaces@2026-03-01' = {
   name: name
   location: location
   tags: tags

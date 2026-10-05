@@ -34,7 +34,7 @@ var tags = {
 ////////////////////////////////////////////////////////////////////////////////
 
 // Resource Group
-resource rg 'Microsoft.Resources/resourceGroups@2023-07-01' = {
+resource rg 'Microsoft.Resources/resourceGroups@2025-04-01' = {
   name: '${abbrs.resourcesResourceGroups}${environmentName}'
   location: location
   tags: tags

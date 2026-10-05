@@ -29,12 +29,12 @@ param registryName string
 ////////////////////////////////////////////////////////////////////////////////
 
 // Container Registry 리소스 참조 (registryName이 제공된 경우)
-resource containerRegistry 'Microsoft.ContainerRegistry/registries@2025-03-01-preview' existing = {
+resource containerRegistry 'Microsoft.ContainerRegistry/registries@2025-11-01' existing = {
   name: registryName
 }
 
 // Container App Environment 리소스 참조
-resource containerAppsEnvironment 'Microsoft.App/managedEnvironments@2025-01-01' existing = {
+resource containerAppsEnvironment 'Microsoft.App/managedEnvironments@2026-07-01' existing = {
   name: environmentName
 }
 
@@ -43,7 +43,7 @@ resource containerAppsEnvironment 'Microsoft.App/managedEnvironments@2025-01-01'
 //   name: keyVaultName
 // }
 
-resource containerApp 'Microsoft.App/containerapps@2025-01-01' = {
+resource containerApp 'Microsoft.App/containerapps@2026-07-01' = {
   // dependsOn: [
   //   keyVault  // Key Vault가 먼저 생성되어야 함
   // ]

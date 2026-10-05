@@ -20,7 +20,7 @@ param projectName string
 ////////////////////////////////////////////////////////////////////////////////
 
 // Azure AI Foundry
-resource aiFoundry 'Microsoft.CognitiveServices/accounts@2024-12-01-preview' = {
+resource aiFoundry 'Microsoft.CognitiveServices/accounts@2026-07-01' = {
   name: name
   location: location
   tags: tags
@@ -49,7 +49,7 @@ resource aiFoundry 'Microsoft.CognitiveServices/accounts@2024-12-01-preview' = {
 }
 
 // Azure AI Foundry Project
-resource aiFoundryProject 'Microsoft.CognitiveServices/accounts/projects@2024-12-01-preview' = {
+resource aiFoundryProject 'Microsoft.CognitiveServices/accounts/projects@2026-07-01' = {
   parent: aiFoundry
   name: projectName
   location: location
@@ -62,7 +62,7 @@ resource aiFoundryProject 'Microsoft.CognitiveServices/accounts/projects@2024-12
   }
 }
 
-resource modelDeployment_gpt_4_1 'Microsoft.CognitiveServices/accounts/deployments@2024-12-01-preview' = {
+resource modelDeployment_gpt_4_1 'Microsoft.CognitiveServices/accounts/deployments@2026-07-01' = {
   dependsOn: [
     aiFoundryProject
   ]
@@ -84,7 +84,7 @@ resource modelDeployment_gpt_4_1 'Microsoft.CognitiveServices/accounts/deploymen
   }
 }
 
-resource modelDeployment_gpt_4_1_mini 'Microsoft.CognitiveServices/accounts/deployments@2024-12-01-preview' = {
+resource modelDeployment_gpt_4_1_mini 'Microsoft.CognitiveServices/accounts/deployments@2026-07-01' = {
   dependsOn: [
     modelDeployment_gpt_4_1
   ]
@@ -106,7 +106,7 @@ resource modelDeployment_gpt_4_1_mini 'Microsoft.CognitiveServices/accounts/depl
   }
 }
 
-resource modelDeployment_text_embedding_3_large 'Microsoft.CognitiveServices/accounts/deployments@2024-12-01-preview' = {
+resource modelDeployment_text_embedding_3_large 'Microsoft.CognitiveServices/accounts/deployments@2026-07-01' = {
   dependsOn: [
     modelDeployment_gpt_4_1_mini
   ]

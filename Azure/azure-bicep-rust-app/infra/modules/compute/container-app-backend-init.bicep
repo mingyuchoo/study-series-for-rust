@@ -20,11 +20,11 @@ param environmentName string
 ////////////////////////////////////////////////////////////////////////////////
 
 // Container App Environment 리소스 참조
-resource containerAppsEnvironment 'Microsoft.App/managedEnvironments@2025-01-01' existing = {
+resource containerAppsEnvironment 'Microsoft.App/managedEnvironments@2026-07-01' existing = {
   name: environmentName
 }
 
-resource containerApp 'Microsoft.App/containerapps@2025-01-01' = {
+resource containerApp 'Microsoft.App/containerapps@2026-07-01' = {
   name: name
   location: location
   tags: union(tags, { 'azd-service-name': 'backend' })
