@@ -1,5 +1,5 @@
 <component name="ProjectRunConfigurationManager">
-  <configuration name="Stillnote Android" type="AndroidRunConfigurationType" factoryName="Android App" activateToolWindowBeforeRun="false">
+  <configuration default="false" name="Stillnote Android" type="AndroidRunConfigurationType" factoryName="Android App" activateToolWindowBeforeRun="false">
     <module name="app.main" />
     <option name="ANDROID_RUN_CONFIGURATION_SCHEMA_VERSION" value="1" />
     <option name="DEPLOY" value="true" />
@@ -63,6 +63,7 @@
     <option name="SKIP_ACTIVITY_VALIDATION" value="false" />
     <method v="2">
       <option name="RunConfigurationTask" enabled="true" run_configuration_name="Stillnote build" run_configuration_type="Amper.Run" />
+      <option name="Amper.Android.Build.BeforeRunTask" enabled="true" />
     </method>
   </configuration>
 </component>
