@@ -104,7 +104,7 @@ impl AddressBook {
                         self.addresses = addresses;
                         self.error_message = None;
                     },
-                    | Err(error) => self.error_message = Some(error.to_string()),
+                    | Err(error) => self.error_message = Some(error),
                 }
                 Task::none()
             },
@@ -116,6 +116,14 @@ impl AddressBook {
                 } else {
                     focus_next()
                 },
+            | Message::LanguageSelected(language) => {
+                self.language = language;
+                Task::none()
+            },
+            | Message::ThemeSelected(mode) => {
+                self.theme_mode = mode;
+                Task::none()
+            },
         }
     }
 
@@ -171,6 +179,8 @@ pub(crate) mod tests {
             address_input: String::new(),
             editing_id: None,
             error_message: None,
+            language: Default::default(),
+            theme_mode: Default::default(),
         }
     }
 
@@ -240,8 +250,37 @@ pub(crate) mod tests {
 
         let error = AppError::Validation(ValidationError::EmptyName);
         drop(app.update(Message::AddressesLoaded(Err(error))));
-        assert_eq!(app.error_message.as_deref(), Some("name must not be empty"));
+        assert_eq!(app.error_message, Some(AppError::Validation(ValidationError::EmptyName)));
         assert_eq!(app.addresses.len(), 1);
+    }
+
+    #[test]
+    fn preferences_change_without_losing_contact_edit_or_error() {
+        use crate::{i18n::Language,
+                    theme::ThemeMode};
+        let mut app = app();
+        let contact = address(Some(7));
+        app.addresses = vec![contact.clone()];
+        drop(app.update(Message::EditAddress(contact.clone())));
+        app.error_message = Some(AppError::Validation(ValidationError::EmptyName));
+
+        for language in Language::ALL {
+            drop(app.update(Message::LanguageSelected(language)));
+            assert_eq!(app.title(), language.strings().window_title);
+            for mode in ThemeMode::ALL {
+                drop(app.update(Message::ThemeSelected(mode)));
+                assert_eq!(app.theme(), mode.to_theme());
+                assert_eq!(app.language, language);
+                assert_eq!(app.editing_id, Some(7));
+                assert_eq!(app.name_input, contact.name);
+                assert_eq!(app.phone_input, contact.phone);
+                assert_eq!(app.email_input, contact.email);
+                assert_eq!(app.address_input, contact.address);
+                assert_eq!(app.addresses, vec![contact.clone()]);
+                assert_eq!(app.error_message, Some(AppError::Validation(ValidationError::EmptyName)));
+                drop(app.view());
+            }
+        }
     }
 
     #[test]

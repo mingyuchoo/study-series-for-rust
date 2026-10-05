@@ -8,6 +8,7 @@
 //! - `theme` — DESIGN.md 디자인 토큰과 위젯 스타일
 
 mod app;
+mod i18n;
 mod message;
 mod theme;
 mod update;
@@ -17,10 +18,17 @@ use app::AddressBook;
 
 fn main() -> iced::Result {
     iced::application(AddressBook::new, AddressBook::update, AddressBook::view)
+        .title(AddressBook::title)
         .subscription(AddressBook::subscription)
-        .title("Address Book")
+        .window(iced::window::Settings {
+            size: iced::Size::new(980.0, 900.0),
+            min_size: Some(iced::Size::new(640.0, 500.0)),
+            position: iced::window::Position::Centered,
+            ..Default::default()
+        })
+        .font(include_bytes!("../fonts/NotoSansKR-Regular.ttf").as_slice())
         .default_font(theme::REGULAR)
-        .theme(iced::Theme::Light)
+        .theme(AddressBook::theme)
         .style(theme::application)
         .run()
 }

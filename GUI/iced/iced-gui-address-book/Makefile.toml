@@ -72,7 +72,7 @@
     mkdir -p dist
     cp target/release/presentation dist/
     cp addresses.db dist/ 2>/dev/null || true
-    cp -r presentation/fonts dist/ 2>/dev/null || true
+    cp -r crates/presentation/fonts dist/ 2>/dev/null || true
     echo "패키지가 dist/ 디렉토리에 생성되었습니다"
   '''
   workspace = false

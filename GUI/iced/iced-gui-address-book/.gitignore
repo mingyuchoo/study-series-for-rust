@@ -1,0 +1,2 @@
+# Keep resolved dependencies reproducible for this desktop application.
+!Cargo.lock

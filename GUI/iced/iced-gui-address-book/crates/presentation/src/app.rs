@@ -1,9 +1,13 @@
 //! 애플리케이션 상태와 합성 루트(composition root).
 
-use crate::message::Message;
-use application::usecases::AddressUseCases;
+use crate::{i18n::Language,
+            message::Message,
+            theme::ThemeMode};
+use application::{error::AppError,
+                  usecases::AddressUseCases};
 use domain::entities::Address;
-use iced::Task;
+use iced::{Task,
+           Theme};
 use infrastructure::database::SqliteAddressRepository;
 use std::sync::Arc;
 
@@ -23,7 +27,11 @@ pub struct AddressBook {
     /// 편집 중인 주소의 `id`. `None` 이면 "추가" 모드.
     pub(crate) editing_id: Option<i64>,
     /// 마지막으로 발생한 에러 메시지(있으면 화면에 배너로 표시).
-    pub(crate) error_message: Option<String>,
+    pub(crate) error_message: Option<AppError>,
+    /// 현재 UI 표시 언어(한국어/영어 토글).
+    pub(crate) language: Language,
+    /// 사용자가 고른 테마 모드(시스템/라이트/다크 토글).
+    pub(crate) theme_mode: ThemeMode,
 }
 
 impl AddressBook {
@@ -45,10 +53,18 @@ impl AddressBook {
                 address_input: String::new(),
                 editing_id: None,
                 error_message: None,
+                language: Language::default(),
+                theme_mode: ThemeMode::default(),
             },
             Task::done(Message::LoadAddresses),
         )
     }
+
+    /// 현재 테마 모드에 해당하는 iced 테마. `None` 이면 시스템 테마를 따른다.
+    pub(crate) fn theme(&self) -> Option<Theme> { self.theme_mode.to_theme() }
+
+    /// 현재 언어의 윈도우 제목.
+    pub(crate) fn title(&self) -> String { self.language.strings().window_title.to_string() }
 
     /// 입력 폼의 네 필드를 모두 비운다.
     ///
