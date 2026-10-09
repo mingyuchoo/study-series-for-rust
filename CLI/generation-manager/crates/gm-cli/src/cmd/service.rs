@@ -2,14 +2,13 @@ use crate::{cmd::Project,
             ui};
 use anyhow::{Result,
              bail};
-use gm_core::run::RunSource;
-use gm_runner::supervisor::Supervisor;
+use gm_application::start_service;
 use std::{process::ExitCode,
           time::Duration};
 
 pub fn status() -> Result<ExitCode> {
     let project = Project::open()?;
-    let supervisor = Supervisor::new(project.store.layout());
+    let supervisor = project.supervisor();
 
     ui::heading(&format!("service for project {}", project.config.project.name));
     match supervisor.running() {
@@ -26,10 +25,9 @@ pub fn status() -> Result<ExitCode> {
 
 pub fn start() -> Result<ExitCode> {
     let project = Project::open()?;
-    let _lock = project.store.lock()?;
+    let lock = project.store.lock()?;
 
-    let entry = project.store.current()?;
-    let supervisor = Supervisor::new(project.store.layout());
+    let supervisor = project.supervisor();
     if let Some(state) = supervisor.running() {
         bail!(
             "already running: {} (pid {}) — use `gm service restart`, or `gm service stop` first",
@@ -38,15 +36,9 @@ pub fn start() -> Result<ExitCode> {
         );
     }
 
-    let state = supervisor.start_detached(
-        &project.config.run,
-        &entry.payload(),
-        RunSource::Generation {
-            id: entry.meta.id,
-        },
-    )?;
-
-    println!("{} started generation {} (pid {})", ui::OK, entry.meta.id, state.pid);
+    let repository = project.store.repository(&lock)?;
+    let started = start_service(&project.config, &repository, &supervisor, false)?;
+    println!("{} started {} (pid {})", ui::OK, started.state.source, started.state.pid);
     Ok(ExitCode::SUCCESS)
 }
 
@@ -54,7 +46,7 @@ pub fn stop() -> Result<ExitCode> {
     let project = Project::open()?;
     let _lock = project.store.lock()?;
 
-    let supervisor = Supervisor::new(project.store.layout());
+    let supervisor = project.supervisor();
     let timeout = Duration::from_secs(project.config.run.stop_timeout_secs);
     let state = supervisor.stop(timeout)?;
 
@@ -64,32 +56,21 @@ pub fn stop() -> Result<ExitCode> {
 
 pub fn restart() -> Result<ExitCode> {
     let project = Project::open()?;
-    let _lock = project.store.lock()?;
-
-    let entry = project.store.current()?;
-    let supervisor = Supervisor::new(project.store.layout());
-    let timeout = Duration::from_secs(project.config.run.stop_timeout_secs);
-    if let Some(stopped) = supervisor.stop_if_running(timeout)?
+    let lock = project.store.lock()?;
+    let repository = project.store.repository(&lock)?;
+    let started = start_service(&project.config, &repository, &project.supervisor(), true)?;
+    if let Some(stopped) = started.displaced
         && stopped.source.is_dev()
     {
         println!("  {} stopping {} to take the service slot", ui::ARROW, stopped.source);
     }
-
-    let state = supervisor.start_detached(
-        &project.config.run,
-        &entry.payload(),
-        RunSource::Generation {
-            id: entry.meta.id,
-        },
-    )?;
-
-    println!("{} restarted generation {} (pid {})", ui::OK, entry.meta.id, state.pid);
+    println!("{} restarted {} (pid {})", ui::OK, started.state.source, started.state.pid);
     Ok(ExitCode::SUCCESS)
 }
 
 pub fn logs(lines: usize) -> Result<ExitCode> {
     let project = Project::open()?;
-    let supervisor = Supervisor::new(project.store.layout());
+    let supervisor = project.supervisor();
     let tail = supervisor.tail(lines)?;
 
     if tail.trim().is_empty() {

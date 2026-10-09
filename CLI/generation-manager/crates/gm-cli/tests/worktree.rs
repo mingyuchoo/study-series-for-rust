@@ -53,7 +53,7 @@ fn rust_preset_runs_the_binary_at_its_preserved_artifact_path() {
     use std::os::unix::fs::PermissionsExt;
     std::fs::set_permissions(fixture.path("target/release/app"), std::fs::Permissions::from_mode(0o755)).unwrap();
     fixture.gm_ok(&["generation", "build"]);
-    let config = gm_core::Config::parse(&fixture.read("generation-manager.toml")).unwrap();
+    let config = gm_store::parse_config(&fixture.read("generation-manager.toml")).unwrap();
     let output = std::process::Command::new("sh")
         .args(["-c", &config.run.cmd])
         .current_dir(fixture.generation_payload(1))

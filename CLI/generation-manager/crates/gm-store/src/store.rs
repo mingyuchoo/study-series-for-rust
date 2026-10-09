@@ -70,6 +70,18 @@ impl Store {
         }
     }
 
+    pub fn list_worktrees(&self) -> Result<Vec<(String, PathBuf)>> {
+        let dir = self.layout.worktrees();
+        let mut entries = Vec::new();
+        for entry in fs::read_dir(&dir).ctx(format!("reading {}", dir.display()))? {
+            let entry = entry.ctx("reading worktree entry")?;
+            if entry.file_type().ctx("reading worktree type")?.is_dir() {
+                entries.push((entry.file_name().to_string_lossy().into_owned(), entry.path()));
+            }
+        }
+        Ok(entries)
+    }
+
     // ---------------------------------------------------------------- reading
 
     /// Reserve published numbers even when their metadata cannot be read.
@@ -398,4 +410,17 @@ pub fn write_atomic(path: &Path, contents: &[u8]) -> Result<()> {
             let _ = fs::remove_file(&temporary);
         })
         .ctx(format!("replacing {}", path.display()))
+}
+
+impl gm_application::WorktreeRepository for StoreRepository<'_> {
+    fn project_root(&self) -> &Path { self.store.layout.project_root() }
+
+    fn locate(&self, name: &str) -> gm_application::PortResult<gm_application::WorktreeLocation> {
+        self.store.ensure_locked(self.lock)?;
+        let path = self.store.layout.worktree(name)?;
+        Ok(gm_application::WorktreeLocation {
+            exists: path.exists(),
+            path,
+        })
+    }
 }

@@ -49,6 +49,23 @@ pub trait SourceControl {
     fn is_dirty(&self, cwd: &Path) -> bool;
 }
 
+pub trait WorktreeRepository {
+    fn project_root(&self) -> &Path;
+    fn locate(&self, name: &str) -> PortResult<WorktreeLocation>;
+}
+
+pub struct WorktreeLocation {
+    pub path: PathBuf,
+    pub exists: bool,
+}
+
+pub trait WorktreeControl {
+    fn is_repo(&self, root: &Path) -> bool;
+    fn add(&self, root: &Path, path: &Path, name: &str, base: Option<&str>) -> PortResult<()>;
+    fn remove(&self, root: &Path, path: &Path, force: bool) -> PortResult<()>;
+    fn prune(&self, root: &Path);
+}
+
 pub trait ArtifactCollector {
     fn collect(&self, source: &Path, includes: &[PathBuf], destination: &Path) -> PortResult<Vec<PathBuf>>;
 }
@@ -56,6 +73,26 @@ pub trait ArtifactCollector {
 pub trait ServiceRuntime {
     fn stop_if_running(&self, timeout: Duration) -> PortResult<Option<RunState>>;
     fn start_detached(&self, run: &RunStage, cwd: &Path, source: RunSource) -> PortResult<RunState>;
+}
+
+/// Persist the service slot. Completion must clear it only while holding the
+/// project lock and only if it still belongs to the completed run.
+/// Callers hold the project lock for write/clear; clear_if_matches acquires it.
+pub trait RunStateRepository: Send + Sync {
+    fn read(&self) -> Option<RunState>;
+    fn write(&self, state: &RunState) -> PortResult<()>;
+    fn clear(&self);
+    fn clear_if_matches(&self, state: &RunState) -> PortResult<()>;
+}
+
+pub trait ForegroundProcess {
+    fn wait(self) -> PortResult<i32>;
+}
+
+pub trait DevelopmentRuntime: ServiceRuntime {
+    type Foreground: ForegroundProcess;
+
+    fn spawn_foreground(&self, run: &RunStage, cwd: &Path, source: RunSource) -> PortResult<Self::Foreground>;
 }
 
 pub trait HealthVerifier {

@@ -182,10 +182,14 @@ mod tests {
     struct Runtime {
         fail_for: Option<GenerationId>,
         starts: RefCell<Vec<GenerationId>>,
+        stops: Cell<usize>,
     }
 
     impl ServiceRuntime for Runtime {
-        fn stop_if_running(&self, _timeout: Duration) -> PortResult<Option<RunState>> { Ok(None) }
+        fn stop_if_running(&self, _timeout: Duration) -> PortResult<Option<RunState>> {
+            self.stops.set(self.stops.get() + 1);
+            Ok(None)
+        }
 
         fn start_detached(&self, _run: &gm_core::RunStage, _cwd: &Path, source: RunSource) -> PortResult<RunState> {
             let RunSource::Generation {
@@ -274,6 +278,7 @@ mod tests {
         let runtime = Runtime {
             fail_for: None,
             starts: RefCell::new(Vec::new()),
+            stops: Cell::new(0),
         };
         let result = activate_generation(
             GenerationId(2),
@@ -305,6 +310,7 @@ mod tests {
         let runtime = Runtime {
             fail_for: None,
             starts: RefCell::new(Vec::new()),
+            stops: Cell::new(0),
         };
         let result = activate_generation(
             GenerationId(2),
@@ -342,6 +348,7 @@ mod tests {
             let runtime = Runtime {
                 fail_for: None,
                 starts: RefCell::new(Vec::new()),
+                stops: Cell::new(0),
             };
             let result = activate_generation(
                 GenerationId(2),
@@ -374,6 +381,7 @@ mod tests {
         let runtime = Runtime {
             fail_for: Some(GenerationId(2)),
             starts: RefCell::new(Vec::new()),
+            stops: Cell::new(0),
         };
         activate_generation(
             GenerationId(2),
@@ -388,5 +396,36 @@ mod tests {
         )
         .unwrap();
         assert_eq!(repository.current.get(), None);
+    }
+    #[test]
+    fn service_start_and_restart_do_not_change_the_activation_pointer() {
+        let repository = repository(Some(GenerationId(1)));
+        let runtime = Runtime {
+            fail_for: None,
+            starts: RefCell::new(Vec::new()),
+            stops: Cell::new(0),
+        };
+        let config = Preset::Generic.template("app");
+        let started = crate::start_service(&config, &repository, &runtime, false).unwrap();
+        assert_eq!(started.state.pid, 1);
+        assert_eq!(runtime.stops.get(), 0);
+        crate::start_service(&config, &repository, &runtime, true).unwrap();
+        assert_eq!(runtime.stops.get(), 1);
+        assert_eq!(repository.current.get(), Some(GenerationId(1)));
+        assert!(repository.switches.borrow().is_empty());
+        assert!(repository.statuses.borrow().is_empty());
+    }
+
+    #[test]
+    fn service_restart_checks_the_payload_before_stopping_the_existing_run() {
+        let repository = repository(Some(GenerationId(99)));
+        let runtime = Runtime {
+            fail_for: None,
+            starts: RefCell::new(Vec::new()),
+            stops: Cell::new(0),
+        };
+        assert!(crate::start_service(&Preset::Generic.template("app"), &repository, &runtime, true).is_err());
+        assert_eq!(runtime.stops.get(), 0);
+        assert!(runtime.starts.borrow().is_empty());
     }
 }

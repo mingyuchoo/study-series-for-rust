@@ -1,9 +1,9 @@
 use crate::ui;
 use anyhow::{Result,
              bail};
-use gm_core::config::{MANIFEST,
-                      Preset};
-use gm_store::{detect_preset,
+use gm_core::config::Preset;
+use gm_store::{MANIFEST,
+               detect_preset,
                save_config};
 use std::{process::ExitCode,
           str::FromStr};

@@ -3,6 +3,7 @@
 //! selection, and GC never eating something you still need.
 
 use chrono::Utc;
+use gm_application::RunStateRepository;
 use gm_core::generation::{Generation,
                           GenerationId,
                           GenerationStatus};
@@ -58,6 +59,48 @@ fn generations_are_numbered_from_one() {
     assert_eq!(add_generation(&store, &lock, "aaaaaaa"), GenerationId(1));
     assert_eq!(add_generation(&store, &lock, "bbbbbbb"), GenerationId(2));
     assert_eq!(store.list().unwrap().len(), 2);
+}
+
+#[test]
+fn completed_run_cleanup_waits_for_the_lock_and_preserves_a_replacement() {
+    let temp = TempProject::new();
+    let store = Store::open(Layout::new(&temp.0)).unwrap();
+    let state = gm_store::FileRunState::new(store.layout().clone());
+    let first = gm_core::RunState {
+        source: gm_core::RunSource::Worktree {
+            name: "first".into(),
+        },
+        pid: 10,
+        process_start: Some("first-process".into()),
+        started_at: Utc::now(),
+        detached: false,
+    };
+    state.write(&first).unwrap();
+    let lock = store.lock().unwrap();
+    let cleanup = state.clone();
+    let completed = first.clone();
+    let (tx, rx) = std::sync::mpsc::channel();
+    let thread = std::thread::spawn(move || {
+        tx.send("started").unwrap();
+        cleanup.clear_if_matches(&completed).unwrap();
+        tx.send("finished").unwrap();
+    });
+    assert_eq!(rx.recv().unwrap(), "started");
+    assert!(rx.recv_timeout(std::time::Duration::from_millis(30)).is_err());
+    // Reused PIDs also require the process identity and run timestamp to match.
+    let second = gm_core::RunState {
+        process_start: Some("replacement-process".into()),
+        ..first.clone()
+    };
+    state.write(&second).unwrap();
+    drop(lock);
+    assert_eq!(rx.recv_timeout(std::time::Duration::from_secs(2)).unwrap(), "finished");
+    thread.join().unwrap();
+    assert_eq!(state.read().unwrap().process_start, second.process_start);
+    state.clear_if_matches(&second).unwrap();
+    assert!(state.read().is_none());
+    std::fs::create_dir(store.layout().run_state()).unwrap();
+    assert!(state.write(&first).is_err());
 }
 
 #[test]

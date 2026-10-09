@@ -250,17 +250,66 @@ unlink와 symlink 사이에 활성 세대가 없는 구간이 생기므로 쓰�
 
 ## 크레이트 구성
 
-`gm-core`와 `gm-application`이 안쪽 계층을 이루고, 파일 시스템과 프로세스를
-다루는 어댑터가 바깥에서 애플리케이션 포트를 구현합니다. 의존성은 안쪽을 향하며
-순환하지 않습니다.
+하나의 Cargo Workspace에서 도메인, 애플리케이션, 어댑터, CLI를 각각 독립된
+크레이트로 관리합니다. 순수한 계산은 `gm-core`에, 실행 순서는 `gm-application`에,
+실제 부수효과는 `gm-store`와 `gm-runner`에 있습니다. CLI가 구체적인 구현을
+선택해 연결합니다.
 
 | 크레이트 | 역할 |
 | --- | --- |
-| `gm-core` | 도메인 타입, 설정 검증, 세대 번호와 롤백 및 GC 순수 정책. I/O 없음 |
-| `gm-application` | 빌드와 활성화 유스케이스, 외부 기능을 위한 역할별 포트 |
-| `gm-store` | 설정 파일 어댑터, 세대 저장소, 원자적 전환, GC, 파일 잠금 |
-| `gm-runner` | 셸과 Git 및 프로세스, 산출물 수집, supervisor, 헬스체크 어댑터 |
-| `gm-cli` | 인자 파싱, 어댑터 조립, 결과 출력 |
+| `gm-core` | 도메인 타입, 설정 검증, 프리셋, 세대 번호·롤백·GC 정책. I/O와 TOML 의존성 없음 |
+| `gm-application` | 빌드·활성화·서비스 시작/재시작·worktree 생성/제거/실행 유스케이스와 포트 |
+| `gm-store` | TOML/JSON, 프로젝트 발견과 경로, 세대·실행 상태 저장, 원자적 전환, 파일 잠금 |
+| `gm-runner` | 셸·Git·프로세스·터미널·시계·산출물 복사·네트워크 헬스체크 어댑터 |
+| `gm-cli` | 인자 파싱, 잠금 범위, 어댑터 조립, 출력과 종료 코드 |
+
+화살표는 Cargo 의존 방향입니다. 어댑터끼리는 의존하지 않으며, 안쪽 계층은
+바깥 계층을 참조하지 않습니다.
+
+```mermaid
+flowchart TD
+    cli[gm-cli] --> app[gm-application]
+    cli --> store[gm-store]
+    cli --> runner[gm-runner]
+    cli --> core[gm-core]
+    store --> app
+    runner --> app
+    app --> core
+    store --> core
+    runner --> core
+```
+
+```text
+crates/
+├── gm-core/src/          config, generation, run, policy
+├── gm-application/src/   ports, build, activate, service, worktree
+├── gm-store/src/         project, layout, lock, store, run_state
+├── gm-runner/src/        exec, git, artifacts, supervisor, process, health, clock
+└── gm-cli/src/           main, ui, cmd/composition, 각 명령의 입출력
+```
+
+`gm-core`는 파일 존재 여부도 직접 확인하지 않습니다. 예를 들어 프리셋 선택은
+어댑터가 수집한 `DetectedFiles` 값으로 계산합니다. `gm-application`은 순수 함수만
+모아 둔 계층은 아니며, 부수효과를 포트로 요청하는 유스케이스 계층입니다. 실제
+파일·프로세스·네트워크·현재 시각 구현을 포함하지 않으므로 가짜 포트로 실행
+순서와 실패 처리를 검사할 수 있습니다.
+
+저장과 실행의 경계는 `RunStateRepository`입니다. `Supervisor`는 JSON이나 `.gm`
+경로, 파일 잠금 구현을 알지 못합니다. `FileRunState`가 상태를 원자적으로 저장하고,
+완료된 전경 실행의 상태를 지울 때 잠금을 획득해 PID·프로세스 식별자·시작 시각이
+모두 일치하는지 확인합니다. CLI는 실행 슬롯 기록 후 잠금을 해제하고 전경 실행을
+기다리므로 다른 명령이 슬롯을 인계받을 수 있습니다.
+
+조립 지점은 `gm-cli/src/cmd/composition.rs`입니다. 빌드·활성화에는 잠금을 보유한
+`StoreRepository`와 실행 어댑터를 전달하고, supervisor에는 `FileRunState`를 주입합니다.
+새 정책은 도메인이나 애플리케이션에, 외부 시스템 구현은 어댑터에 추가하세요.
+`tests/architecture.rs`가 Workspace의 의존 방향을 검사합니다.
+
+CLI 명령, 매니페스트 및 `.gm` 저장 형식은 유지되어 데이터 마이그레이션이 필요하지
+않습니다. 라이브러리를 직접 호출하는 코드는 바뀐 API를 적용해야 합니다.
+`Config::parse`/`to_toml`은 `gm-store::parse_config`/`render_config`로 옮겼고,
+`gm-runner::Pipeline`은 제거했습니다. 빌드·활성화는 애플리케이션 함수를 호출하고,
+`Supervisor::new`에는 실행 상태 저장 포트와 로그 경로를 전달합니다.
 
 ## 설계상의 선택과 한계
 
@@ -291,10 +340,11 @@ cargo test --workspace
 
 | 대상 | 내용 |
 | --- | --- |
-| `gm-core` | worktree 경로 판별, 세대 번호, 롤백 및 GC 정책 |
-| `gm-application` | 가짜 포트를 사용한 정상 활성화와 자동 롤백 정책 |
-| `gm-store` | 원자적 전환, GC 실행, 잠금과 잠금 소유권 검사 |
-| `gm-runner` | 헬스체크 URL 파싱 |
+| `gm-core` | 설정·이름 검증, 프리셋 선택, 세대 번호, 롤백 및 GC 정책 |
+| `gm-application` | 가짜 포트로 활성화·롤백, 서비스 재시작, worktree 정책과 실패 시 실행 순서 검사 |
+| `gm-store` | 설정 변환, worktree 경로 판별, 원자적 전환, GC, 잠금 및 교체된 실행 상태 보존 |
+| `gm-runner` | HTTP/명령 프로브 제한 시간, 프로세스 소유권과 자식 정리, 전경 실행 슬롯 인계 |
+| `tests/architecture.rs` | Cargo 의존 방향과 어댑터 간 의존 금지 |
 | `tests/worktree.rs` | `project init`, `worktree create/list/remove`, worktree 안에서의 발견 동작 |
 | `tests/dev_run.rs` | `worktree run` — 전경 실행, 종료 코드, 빌드 단계, 대상 자동 선택, 슬롯 인계 |
 | `tests/lifecycle.rs` | `generation build/list/activate/rollback/history/prune` |

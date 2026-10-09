@@ -1,11 +1,10 @@
 use crate::{cmd::Project,
             ui};
 use anyhow::Result;
+use gm_application::Activation;
 use gm_core::generation::{GenerationId,
                           GenerationStatus};
-use gm_runner::{Activation,
-                Pipeline,
-                artifacts::dir_size};
+use gm_runner::artifacts::dir_size;
 use gm_store::ProjectLock;
 use std::process::ExitCode;
 
@@ -26,8 +25,7 @@ pub fn build(from: Option<&str>, note: Option<String>, activate_after: bool) -> 
         | Some(name) => println!("building from worktree `{name}` ({})", source.display()),
         | None => println!("building from project root ({})", source.display()),
     }
-    let pipeline = Pipeline::new(&project.store, &project.config);
-    let entry = pipeline.build(&source, selected.as_deref(), note, &lock)?;
+    let entry = project.build(&source, selected.as_deref(), note, &lock)?;
 
     println!();
     println!(
@@ -77,11 +75,9 @@ pub fn rollback(target: Option<u64>) -> Result<ExitCode> {
 }
 
 fn activate(project: &Project, id: GenerationId, reason: &str, lock: &ProjectLock) -> Result<ExitCode> {
-    let pipeline = Pipeline::new(&project.store, &project.config);
-
     // Taking the slot back from a development run is legitimate, but silently
     // killing someone's `gm worktree run` is not.
-    if let Some(state) = pipeline.supervisor().running()
+    if let Some(state) = project.supervisor().running()
         && state.source.is_dev()
     {
         println!("  {} stopping {} to take the service slot", ui::ARROW, state.source);
@@ -89,7 +85,7 @@ fn activate(project: &Project, id: GenerationId, reason: &str, lock: &ProjectLoc
 
     println!("activating generation {id}…");
 
-    match pipeline.activate(id, reason, lock)? {
+    match project.activate(id, reason, lock)? {
         | Activation::Healthy {
             id,
             pid,

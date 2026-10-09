@@ -74,3 +74,13 @@ impl gm_application::SourceControl for GitSourceControl {
 
     fn is_dirty(&self, cwd: &Path) -> bool { is_dirty(cwd) }
 }
+
+impl gm_application::WorktreeControl for GitSourceControl {
+    fn is_repo(&self, root: &Path) -> bool { is_repo(root) }
+
+    fn add(&self, root: &Path, path: &Path, name: &str, base: Option<&str>) -> gm_application::PortResult<()> { Ok(worktree_add(root, path, name, base)?) }
+
+    fn remove(&self, root: &Path, path: &Path, force: bool) -> gm_application::PortResult<()> { Ok(worktree_remove(root, path, force)?) }
+
+    fn prune(&self, root: &Path) { worktree_prune(root); }
+}

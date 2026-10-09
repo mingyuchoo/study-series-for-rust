@@ -28,13 +28,7 @@ pub enum Error {
     },
 
     #[error(transparent)]
-    Json(#[from] serde_json::Error),
-
-    #[error(transparent)]
-    Store(#[from] gm_store::Error),
-
-    #[error(transparent)]
-    Application(#[from] gm_application::Error),
+    Repository(gm_application::BoxError),
 }
 
 pub trait IoContext<T> {

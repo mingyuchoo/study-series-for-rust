@@ -1,7 +1,7 @@
 //! Domain types shared across the workspace.
 //!
-//! This crate is deliberately I/O-free apart from (de)serialization: it owns
-//! the vocabulary (`Config`, `Generation`, `GenerationId`) and nothing else.
+//! This crate owns domain types, validation and pure selection policies.
+//! It performs no I/O and knows no storage paths or serialization formats.
 
 pub mod config;
 pub mod error;

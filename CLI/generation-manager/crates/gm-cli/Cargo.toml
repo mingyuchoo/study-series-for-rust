@@ -11,6 +11,7 @@ name = "gm"
 path = "src/main.rs"
 
 [dependencies]
+gm-application.workspace = true
 gm-core.workspace = true
 gm-store.workspace = true
 gm-runner.workspace = true

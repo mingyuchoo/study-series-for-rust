@@ -7,6 +7,8 @@ mod activate;
 mod build;
 mod error;
 mod ports;
+mod service;
+mod worktree;
 
 pub use activate::{Activation,
                    activate_generation};
@@ -18,10 +20,23 @@ pub use error::{BoxError,
                 Result};
 pub use ports::{ArtifactCollector,
                 Clock,
+                DevelopmentRuntime,
+                ForegroundProcess,
                 GenerationRepository,
                 HealthVerifier,
+                RunStateRepository,
                 ServiceRuntime,
                 SourceControl,
                 StageExecutor,
                 StagedGeneration,
-                StoredGeneration};
+                StoredGeneration,
+                WorktreeControl,
+                WorktreeLocation,
+                WorktreeRepository};
+pub use service::{StartedService,
+                  start_service};
+pub use worktree::{RunWorktree,
+                   WorktreeRun,
+                   create_worktree,
+                   remove_worktree,
+                   run_worktree};

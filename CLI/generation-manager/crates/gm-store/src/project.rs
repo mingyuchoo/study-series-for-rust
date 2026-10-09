@@ -1,11 +1,11 @@
-use crate::error::{Error,
-                   IoContext,
-                   Result};
+use crate::{error::{Error,
+                    IoContext,
+                    Result},
+            layout::{MANIFEST,
+                     worktree_context}};
 use gm_core::{Config,
               DetectedFiles,
-              Preset,
-              config::{MANIFEST,
-                       worktree_context}};
+              Preset};
 use std::path::{Path,
                 PathBuf};
 
@@ -44,11 +44,11 @@ pub fn discover_project(start: &Path) -> Result<Discovery> {
 
 pub fn load_config(path: &Path) -> Result<Config> {
     let text = std::fs::read_to_string(path).ctx(format!("reading {}", path.display()))?;
-    Config::parse(&text).map_err(Error::from)
+    parse_config(&text)
 }
 
 pub fn save_config(config: &Config, path: &Path) -> Result<()> {
-    let text = config.to_toml()?;
+    let text = render_config(config)?;
     std::fs::write(path, text).ctx(format!("writing {}", path.display()))
 }
 
@@ -60,4 +60,31 @@ pub fn detect_preset(directory: &Path) -> Preset {
         pyproject_toml: directory.join("pyproject.toml").is_file(),
         requirements_txt: directory.join("requirements.txt").is_file(),
     })
+}
+
+/// TOML belongs to this adapter; the domain validates the decoded value.
+pub fn parse_config(text: &str) -> Result<Config> {
+    let config: Config = toml::from_str(text).map_err(|error| gm_core::Error::Config(error.to_string()))?;
+    config.validate()?;
+    Ok(config)
+}
+
+pub fn render_config(config: &Config) -> Result<String> {
+    config.validate()?;
+    toml::to_string_pretty(config).map_err(|error| gm_core::Error::Config(error.to_string()).into())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn configuration_roundtrips_and_is_validated_at_the_boundary() {
+        let rendered = render_config(&Preset::Rust.template("demo")).unwrap();
+        let parsed = parse_config(&rendered).unwrap();
+        assert_eq!(parsed.project.name, "demo");
+        assert_eq!(parsed.run.cmd, "./target/release/demo");
+        assert!(parse_config(&rendered.replace("./target/release/demo", "")).is_err());
+        assert!(parse_config("invalid toml").is_err());
+    }
 }

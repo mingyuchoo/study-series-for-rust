@@ -3,15 +3,7 @@ use crate::error::{Error,
 use serde::{Deserialize,
             Serialize};
 use std::{collections::BTreeMap,
-          path::{Path,
-                 PathBuf}};
-
-/// Name of the per-project manifest.
-pub const MANIFEST: &str = "generation-manager.toml";
-/// Directory holding all tool-managed state, relative to the project root.
-pub const STATE_DIR: &str = ".gm";
-/// Directory holding development worktrees, relative to [`STATE_DIR`].
-pub const WORKTREES: &str = "worktrees";
+          path::PathBuf};
 
 pub fn validate_worktree_name(name: &str) -> Result<()> {
     if name.is_empty() || name == "." || name == ".." || name.contains(['/', '\\']) {
@@ -104,38 +96,7 @@ impl HealthCheck {
     pub fn is_configured(&self) -> bool { self.http.is_some() || self.tcp.is_some() || self.cmd.is_some() }
 }
 
-/// Recognise `<root>/.gm/worktrees/<name>/...`, innermost match first.
-pub fn worktree_context(start: &Path) -> Option<(PathBuf, String)> {
-    for dir in start.ancestors() {
-        let parent = dir.parent()?;
-        if parent.file_name()?.to_str()? != WORKTREES {
-            continue;
-        }
-        let state = parent.parent()?;
-        if state.file_name()?.to_str()? != STATE_DIR {
-            continue;
-        }
-        let root = state.parent()?;
-        let name = dir.file_name()?.to_str()?.to_string();
-        return Some((root.to_path_buf(), name));
-    }
-    None
-}
-
 impl Config {
-    /// Parse and validate a manifest without performing any I/O.
-    pub fn parse(text: &str) -> Result<Config> {
-        let config: Config = toml::from_str(text).map_err(|error| Error::Config(error.to_string()))?;
-        config.validate()?;
-        Ok(config)
-    }
-
-    /// Render a manifest without performing any I/O.
-    pub fn to_toml(&self) -> Result<String> {
-        self.validate()?;
-        toml::to_string_pretty(self).map_err(|error| Error::Config(error.to_string()))
-    }
-
     pub fn validate(&self) -> Result<()> {
         if self.project.name.trim().is_empty() {
             return Err(Error::Config("project.name must not be empty".into()));
@@ -272,59 +233,9 @@ pub struct DetectedFiles {
 
 #[cfg(test)]
 mod tests {
-    use super::{Config,
-                DetectedFiles,
-                Preset,
-                worktree_context};
-    use std::path::{Path,
-                    PathBuf};
-
-    fn context(path: &str) -> Option<(PathBuf, String)> { worktree_context(Path::new(path)) }
-
-    #[test]
-    fn recognises_a_managed_worktree() {
-        let (root, name) = context("/srv/demo/.gm/worktrees/add-cache").unwrap();
-        assert_eq!(root, Path::new("/srv/demo"));
-        assert_eq!(name, "add-cache");
-    }
-
-    #[test]
-    fn recognises_a_subdirectory_of_a_worktree() {
-        let (root, name) = context("/srv/demo/.gm/worktrees/add-cache/src/api").unwrap();
-        assert_eq!(root, Path::new("/srv/demo"));
-        assert_eq!(name, "add-cache");
-    }
-
-    #[test]
-    fn ignores_the_project_root_and_the_state_dir() {
-        assert!(context("/srv/demo").is_none());
-        assert!(context("/srv/demo/.gm").is_none());
-        assert!(context("/srv/demo/.gm/store/0001-abc").is_none());
-        // The worktrees directory itself is not a worktree.
-        assert!(context("/srv/demo/.gm/worktrees").is_none());
-    }
-
-    #[test]
-    fn ignores_a_lookalike_path_outside_the_state_dir() {
-        assert!(context("/srv/demo/worktrees/add-cache").is_none());
-        assert!(context("/srv/demo/other/worktrees/add-cache").is_none());
-    }
-
-    #[test]
-    fn picks_the_innermost_worktree_when_nested() {
-        let (root, name) = context("/srv/demo/.gm/worktrees/outer/.gm/worktrees/inner/src").unwrap();
-        assert_eq!(root, Path::new("/srv/demo/.gm/worktrees/outer"));
-        assert_eq!(name, "inner");
-    }
-
-    #[test]
-    fn parses_and_validates_configuration_without_io() {
-        let rendered = Preset::Rust.template("demo").to_toml().unwrap();
-        let parsed = Config::parse(&rendered).unwrap();
-
-        assert_eq!(parsed.project.name, "demo");
-        assert_eq!(parsed.run.cmd, "./target/release/demo");
-    }
+    use super::{DetectedFiles,
+                Preset};
+    use std::path::PathBuf;
 
     #[test]
     fn rejects_an_artifact_path_that_escapes_the_build_directory() {

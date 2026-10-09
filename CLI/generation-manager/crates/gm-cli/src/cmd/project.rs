@@ -1,14 +1,13 @@
 use crate::{cmd::Project,
             ui};
 use anyhow::Result;
-use gm_runner::supervisor::Supervisor;
 use std::process::ExitCode;
 
 /// Show a project-wide overview. Service-only inspection lives under
 /// `gm service status`.
 pub fn status() -> Result<ExitCode> {
     let project = Project::open()?;
-    let supervisor = Supervisor::new(project.store.layout());
+    let supervisor = project.supervisor();
 
     ui::heading(&format!("project {}", project.config.project.name));
     ui::field("root", project.root.display());

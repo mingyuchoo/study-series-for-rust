@@ -1,6 +1,4 @@
-use gm_core::{config::{STATE_DIR,
-                       WORKTREES},
-              generation::GenerationId};
+use gm_core::generation::GenerationId;
 use std::path::{Path,
                 PathBuf};
 
@@ -20,7 +18,7 @@ impl Layout {
     /// The directory containing `generation-manager.toml`.
     pub fn project_root(&self) -> &Path { &self.root }
 
-    pub fn manifest(&self) -> PathBuf { self.root.join(gm_core::config::MANIFEST) }
+    pub fn manifest(&self) -> PathBuf { self.root.join(MANIFEST) }
 
     /// `.gm` — all tool-managed state.
     pub fn state(&self) -> PathBuf { self.root.join(STATE_DIR) }
@@ -58,4 +56,71 @@ impl Layout {
     pub fn generation_payload(dir: &Path) -> PathBuf { dir.join("root") }
 
     pub fn generation_meta(dir: &Path) -> PathBuf { dir.join("meta.json") }
+}
+
+/// Name of the per-project manifest.
+pub const MANIFEST: &str = "generation-manager.toml";
+/// Directory holding all tool-managed state, relative to the project root.
+pub const STATE_DIR: &str = ".gm";
+/// Directory holding development worktrees, relative to [`STATE_DIR`].
+pub const WORKTREES: &str = "worktrees";
+
+/// Recognise `<root>/.gm/worktrees/<name>/...`, innermost match first.
+pub fn worktree_context(start: &Path) -> Option<(PathBuf, String)> {
+    for dir in start.ancestors() {
+        let parent = dir.parent()?;
+        if parent.file_name()?.to_str()? != WORKTREES {
+            continue;
+        }
+        let state = parent.parent()?;
+        if state.file_name()?.to_str()? != STATE_DIR {
+            continue;
+        }
+        let root = state.parent()?;
+        let name = dir.file_name()?.to_str()?.to_string();
+        return Some((root.to_path_buf(), name));
+    }
+    None
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    fn context(path: &str) -> Option<(PathBuf, String)> { worktree_context(Path::new(path)) }
+
+    #[test]
+    fn recognises_a_managed_worktree() {
+        let (root, name) = context("/srv/demo/.gm/worktrees/add-cache").unwrap();
+        assert_eq!(root, Path::new("/srv/demo"));
+        assert_eq!(name, "add-cache");
+    }
+
+    #[test]
+    fn recognises_a_subdirectory_of_a_worktree() {
+        let (root, name) = context("/srv/demo/.gm/worktrees/add-cache/src/api").unwrap();
+        assert_eq!(root, Path::new("/srv/demo"));
+        assert_eq!(name, "add-cache");
+    }
+
+    #[test]
+    fn ignores_the_project_root_and_the_state_dir() {
+        assert!(context("/srv/demo").is_none());
+        assert!(context("/srv/demo/.gm").is_none());
+        assert!(context("/srv/demo/.gm/store/0001-abc").is_none());
+        // The worktrees directory itself is not a worktree.
+        assert!(context("/srv/demo/.gm/worktrees").is_none());
+    }
+
+    #[test]
+    fn ignores_a_lookalike_path_outside_the_state_dir() {
+        assert!(context("/srv/demo/worktrees/add-cache").is_none());
+        assert!(context("/srv/demo/other/worktrees/add-cache").is_none());
+    }
+
+    #[test]
+    fn picks_the_innermost_worktree_when_nested() {
+        let (root, name) = context("/srv/demo/.gm/worktrees/outer/.gm/worktrees/inner/src").unwrap();
+        assert_eq!(root, Path::new("/srv/demo/.gm/worktrees/outer"));
+        assert_eq!(name, "inner");
+    }
 }

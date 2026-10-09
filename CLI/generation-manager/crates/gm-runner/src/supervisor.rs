@@ -4,10 +4,12 @@ use crate::{error::{Error,
             process::{self,
                       Process}};
 use chrono::Utc;
+use gm_application::{DevelopmentRuntime,
+                     ForegroundProcess,
+                     RunStateRepository};
 use gm_core::{config::RunStage,
               run::{RunSource,
                     RunState}};
-use gm_store::Layout;
 use std::{fs::{File,
                OpenOptions},
           os::unix::process::{CommandExt,
@@ -17,6 +19,7 @@ use std::{fs::{File,
           process::{Child,
                     Command,
                     Stdio},
+          sync::Arc,
           time::{Duration,
                  Instant}};
 
@@ -30,11 +33,10 @@ use std::{fs::{File,
 /// The scope is deliberate: one process, one state file, one log file. A
 /// multi-service or reboot-surviving setup belongs to systemd, and this type is
 /// the seam where such a backend would slot in.
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct Supervisor {
-    state_file: PathBuf,
+    state: Arc<dyn RunStateRepository>,
     log_file: PathBuf,
-    lock_file: PathBuf,
 }
 
 impl gm_application::ServiceRuntime for Supervisor {
@@ -52,11 +54,10 @@ pub enum ServiceStatus {
 }
 
 impl Supervisor {
-    pub fn new(layout: &Layout) -> Supervisor {
+    pub fn new(state: impl RunStateRepository + 'static, log_file: PathBuf) -> Supervisor {
         Supervisor {
-            state_file: layout.run_state(),
-            log_file: layout.log_file(),
-            lock_file: layout.lock_file(),
+            state: Arc::new(state),
+            log_file,
         }
     }
 
@@ -78,15 +79,9 @@ impl Supervisor {
         }
     }
 
-    fn read_state(&self) -> Option<RunState> {
-        let text = std::fs::read_to_string(&self.state_file).ok()?;
-        serde_json::from_str(&text).ok()
-    }
+    fn read_state(&self) -> Option<RunState> { self.state.read() }
 
-    fn write_state(&self, state: &RunState) -> Result<()> {
-        let text = serde_json::to_string_pretty(state)?;
-        Ok(gm_store::write_atomic(&self.state_file, text.as_bytes())?)
-    }
+    fn write_state(&self, state: &RunState) -> Result<()> { self.state.write(state).map_err(Error::Repository) }
 
     fn record_child(&self, child: &mut Child, state: &RunState) -> Result<()> {
         let recorded = Process::open(state).and_then(|process| process.signal(0)).and_then(|_| self.write_state(state));
@@ -97,7 +92,7 @@ impl Supervisor {
         Ok(())
     }
 
-    fn clear_state(&self) { let _ = std::fs::remove_file(&self.state_file); }
+    fn clear_state(&self) { self.state.clear(); }
 
     fn ensure_slot_free(&self) -> Result<()> {
         match self.status() {
@@ -244,7 +239,6 @@ impl Supervisor {
 }
 
 /// A foreground service that has taken the slot but not yet exited.
-#[derive(Debug)]
 pub struct ForegroundRun {
     child: Child,
     supervisor: Supervisor,
@@ -261,14 +255,7 @@ impl ForegroundRun {
         if let Some(group) = self.terminal_group {
             set_terminal_group(group)?;
         }
-        let _lock = gm_store::ProjectLock::acquire_wait(&self.supervisor.lock_file)?;
-        if let Some(current) = self.supervisor.read_state()
-            && current.pid == self.state.pid
-            && current.process_start == self.state.process_start
-            && current.started_at == self.state.started_at
-        {
-            self.supervisor.clear_state();
-        }
+        self.supervisor.state.clear_if_matches(&self.state).map_err(Error::Repository)?;
         Ok(status.code().unwrap_or_else(|| 128 + status.signal().unwrap_or(0)))
     }
 }
@@ -311,28 +298,70 @@ fn set_terminal_group(group: i32) -> Result<()> {
     Ok(())
 }
 
+impl DevelopmentRuntime for Supervisor {
+    type Foreground = ForegroundRun;
+
+    fn spawn_foreground(&self, run: &RunStage, cwd: &Path, source: RunSource) -> gm_application::PortResult<ForegroundRun> {
+        Ok(Supervisor::spawn_foreground(self, run, cwd, source)?)
+    }
+}
+
+impl ForegroundProcess for ForegroundRun {
+    fn wait(self) -> gm_application::PortResult<i32> { Ok(ForegroundRun::wait(self)?) }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use gm_core::GenerationId;
-    use gm_store::Store;
+    use std::sync::Mutex;
+
+    #[derive(Clone, Default)]
+    struct MemoryState(Arc<Mutex<(Option<RunState>, bool)>>);
+    impl RunStateRepository for MemoryState {
+        fn read(&self) -> Option<RunState> { self.0.lock().unwrap().0.clone() }
+
+        fn write(&self, state: &RunState) -> gm_application::PortResult<()> {
+            let mut slot = self.0.lock().unwrap();
+            if slot.1 {
+                return Err(std::io::Error::other("injected state write failure").into());
+            }
+            slot.0 = Some(state.clone());
+            Ok(())
+        }
+
+        fn clear(&self) { self.0.lock().unwrap().0 = None; }
+
+        fn clear_if_matches(&self, state: &RunState) -> gm_application::PortResult<()> {
+            let mut slot = self.0.lock().unwrap();
+            if slot
+                .0
+                .as_ref()
+                .is_some_and(|current| current.pid == state.pid && current.process_start == state.process_start && current.started_at == state.started_at)
+            {
+                slot.0 = None;
+            }
+            Ok(())
+        }
+    }
     use std::sync::atomic::{AtomicU32,
                             Ordering};
 
     static COUNTER: AtomicU32 = AtomicU32::new(0);
     struct Fixture {
         root: PathBuf,
-        store: Store,
+        state: MemoryState,
         supervisor: Supervisor,
     }
     impl Fixture {
         fn new() -> Self {
             let root = std::env::temp_dir().join(format!("gm-supervisor-{}-{}", std::process::id(), COUNTER.fetch_add(1, Ordering::Relaxed)));
-            let store = Store::open(Layout::new(&root)).unwrap();
-            let supervisor = Supervisor::new(store.layout());
+            std::fs::create_dir_all(&root).unwrap();
+            let state = MemoryState::default();
+            let supervisor = Supervisor::new(state.clone(), root.join("service.log"));
             Self {
                 root,
-                store,
+                state,
                 supervisor,
             }
         }
@@ -365,7 +394,6 @@ mod tests {
             "sh -c 'trap \"\" TERM; echo $$ > child.pid; exec sleep 30' & wait",
         ] {
             let fixture = Fixture::new();
-            let _lock = fixture.store.lock().unwrap();
             fixture
                 .supervisor
                 .start_detached(&fixture.run(command), &fixture.root, fixture.source())
@@ -390,14 +418,12 @@ mod tests {
     fn an_old_foreground_waiter_does_not_clear_a_replacement_run() {
         let fixture = Fixture::new();
         let first = {
-            let _lock = fixture.store.lock().unwrap();
             fixture
                 .supervisor
                 .spawn_foreground(&fixture.run("exec sleep 30"), &fixture.root, fixture.source())
                 .unwrap()
         };
         let second = {
-            let _lock = fixture.store.lock().unwrap();
             fixture.supervisor.stop(Duration::ZERO).unwrap();
             fixture
                 .supervisor
@@ -415,7 +441,7 @@ mod tests {
     #[test]
     fn a_failed_state_write_terminates_and_reaps_the_child() {
         let fixture = Fixture::new();
-        std::fs::create_dir(&fixture.supervisor.state_file).unwrap();
+        fixture.state.0.lock().unwrap().1 = true;
         let mut child = Command::new("sh").args(["-c", "exec sleep 30"]).process_group(0).spawn().unwrap();
         let state = RunState {
             source: fixture.source(),

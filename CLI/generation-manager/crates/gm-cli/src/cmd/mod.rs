@@ -1,3 +1,4 @@
+mod composition;
 mod dev;
 mod init;
 mod lifecycle;
