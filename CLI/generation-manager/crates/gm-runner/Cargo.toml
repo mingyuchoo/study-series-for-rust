@@ -3,6 +3,7 @@ name = "gm-runner"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+repository.workspace = true
 
 [dependencies]
 gm-application.workspace = true

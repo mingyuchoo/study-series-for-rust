@@ -35,6 +35,32 @@ cargo build --release          # target/release/gm
 cargo install --path crates/gm-cli
 ```
 
+## 개발 스크립트
+
+포맷팅 → 린팅(경고도 오류 처리) → 워크스페이스 빌드 → 테스트 → `gm` 실행을
+순서대로 수행합니다. 실패한 단계에서 즉시 중단하고 해당 종료 코드를 반환합니다.
+포맷팅은 소스 파일을 수정합니다.
+
+```bash
+bash scripts/run.sh                         # 마지막에 gm --help 실행
+bash scripts/run.sh project status          # gm에 인자 전달
+bash scripts/tests/run.sh                   # 스크립트 동작 검증
+```
+
+```powershell
+./scripts/run.ps1
+./scripts/run.ps1 project status
+./scripts/tests/run.ps1                     # 전체 실행 및 경고 없음 검증
+```
+
+어느 디렉토리에서 호출해도 이 프로젝트 루트에서 실행합니다. 다른 프로젝트를
+대상으로 하려면 `-C <DIR>`을 전달하세요.
+
+Windows에서는 `run.ps1`이 기본 WSL 배포판의 Bash로 `run.sh`를 실행합니다.
+WSL 안에 Rust와 git이 설치되어 있어야 하며, `rust-toolchain.toml`에 지정된
+nightly 툴체인과 rustfmt/clippy를 사용합니다. Linux/macOS의 PowerShell에서도
+같은 Bash 스크립트를 실행합니다.
+
 ## 빠른 시작
 
 ```bash
