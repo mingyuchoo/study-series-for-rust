@@ -335,7 +335,7 @@ mod tests {
 
     #[test]
     fn bookkeeping_failures_do_not_prevent_restoring_the_service() {
-        for (fail_switch, fail_status) in [(true, false), (false, true)] {
+        for (fail_switch, fail_status, fail_health) in [(true, false, false), (false, true, true), (false, true, false)] {
             let mut repository = repository(Some(GenerationId(1)));
             repository.fail_switch = fail_switch;
             repository.fail_status = fail_status;
@@ -350,7 +350,7 @@ mod tests {
                 &repository,
                 &runtime,
                 &Health {
-                    fail_for: Some(PathBuf::from("/generation/2")),
+                    fail_for: fail_health.then(|| PathBuf::from("/generation/2")),
                 },
                 &FixedClock,
             )

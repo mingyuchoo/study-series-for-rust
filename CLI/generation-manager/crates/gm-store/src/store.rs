@@ -72,8 +72,7 @@ impl Store {
 
     // ---------------------------------------------------------------- reading
 
-    /// All generations, ordered oldest first. Unreadable entries are skipped so
-    /// one corrupt directory cannot break `gm generation list`.
+    /// Reserve published numbers even when their metadata cannot be read.
     fn generation_ids(&self) -> Result<Vec<GenerationId>> {
         let generations = self.layout.generations();
         let mut ids = Vec::new();
@@ -92,6 +91,8 @@ impl Store {
         Ok(ids)
     }
 
+    /// All generations, ordered oldest first. Unreadable entries are skipped so
+    /// one corrupt directory cannot break `gm generation list`.
     pub fn list(&self) -> Result<Vec<GenerationEntry>> {
         let ids = self.generation_ids()?;
         let mut out = Vec::with_capacity(ids.len());
@@ -238,9 +239,6 @@ impl Store {
     pub fn switch_at(&self, lock: &ProjectLock, id: GenerationId, reason: &str, at: chrono::DateTime<Utc>) -> Result<()> {
         self.ensure_locked(lock)?;
         let previous = self.current_id()?;
-        // Fail before touching anything if the target is not a real generation.
-        self.get(id)?;
-
         self.replace_current(Some(id))?;
         self.append_history(&SwitchEvent {
             at,
