@@ -29,7 +29,10 @@ impl Layout {
 
     pub fn worktrees(&self) -> PathBuf { self.state().join(WORKTREES) }
 
-    pub fn worktree(&self, name: &str) -> PathBuf { self.worktrees().join(name) }
+    pub fn worktree(&self, name: &str) -> crate::Result<PathBuf> {
+        gm_core::config::validate_worktree_name(name)?;
+        Ok(self.worktrees().join(name))
+    }
 
     pub fn store(&self) -> PathBuf { self.state().join("store") }
 

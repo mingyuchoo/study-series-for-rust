@@ -34,6 +34,8 @@ pub trait GenerationRepository {
     fn commit(&self, staged: StagedGeneration, generation: Generation) -> PortResult<StoredGeneration>;
     fn set_status(&self, id: GenerationId, status: GenerationStatus) -> PortResult<()>;
     fn switch(&self, id: GenerationId, reason: &str, at: DateTime<Utc>) -> PortResult<()>;
+    /// Restore the pointer even when audit logging is unavailable.
+    fn restore(&self, id: Option<GenerationId>) -> PortResult<()>;
 }
 
 pub trait StageExecutor {

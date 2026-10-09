@@ -10,6 +10,9 @@ pub enum Error {
     #[error("generation {0} does not exist")]
     NoSuchGeneration(u64),
 
+    #[error("generation {0} is already published")]
+    GenerationExists(u64),
+
     #[error("no generation is currently active")]
     NoCurrentGeneration,
 

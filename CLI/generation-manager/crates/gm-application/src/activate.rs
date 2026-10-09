@@ -37,39 +37,52 @@ pub fn activate_generation(
     config.validate()?;
     let entry = Error::port("loading target generation", repository.get(id))?;
     let previous = Error::port("reading active generation", repository.current_id())?;
+    let restored = activation_restore_target(previous, id);
+    let previous_entry = restored
+        .map(|previous| Error::port("loading previous generation", repository.get(previous)))
+        .transpose()?;
     let timeout = Duration::from_secs(config.run.stop_timeout_secs);
 
     Error::port("stopping running service", runtime.stop_if_running(timeout))?;
-    Error::port("switching active generation", repository.switch(id, reason, clock.now()))?;
-
-    let source = RunSource::Generation {
-        id,
-    };
-    let failure = match runtime.start_detached(&config.run, &entry.payload, source) {
-        | Ok(state) => match health.verify(&config.health, &entry.payload) {
-            | Ok(()) => {
-                Error::port("marking generation healthy", repository.set_status(id, GenerationStatus::Healthy))?;
-                return Ok(Activation::Healthy {
+    let attempt = (|| -> Result<_> {
+        Error::port("switching active generation", repository.switch(id, reason, clock.now()))?;
+        let state = Error::port(
+            "starting generation",
+            runtime.start_detached(
+                &config.run,
+                &entry.payload,
+                RunSource::Generation {
                     id,
-                    pid: state.pid,
-                });
-            },
-            | Err(error) => error.to_string(),
-        },
+                },
+            ),
+        )?;
+        Error::port("checking generation health", health.verify(&config.health, &entry.payload))?;
+        Error::port("marking generation healthy", repository.set_status(id, GenerationStatus::Healthy))?;
+        Ok(state)
+    })();
+    let mut failure = match attempt {
+        | Ok(state) =>
+            return Ok(Activation::Healthy {
+                id,
+                pid: state.pid,
+            }),
         | Err(error) => error.to_string(),
     };
 
-    Error::port("marking generation rejected", repository.set_status(id, GenerationStatus::Rejected))?;
-    Error::port("stopping rejected generation", runtime.stop_if_running(timeout))?;
+    if let Err(error) = repository.set_status(id, GenerationStatus::Rejected) {
+        failure.push_str(&format!("; marking rejected failed: {error}"));
+    }
+    if let Err(error) = runtime.stop_if_running(timeout) {
+        failure.push_str(&format!("; stopping rejected generation failed: {error}"));
+    }
 
-    let restored = activation_restore_target(previous, id);
-    let restored_healthy = if let Some(previous) = restored {
-        Error::port(
-            "restoring previous generation",
-            repository.switch(previous, "auto-rollback after failed health check", clock.now()),
-        )?;
-        let previous_entry = Error::port("loading previous generation", repository.get(previous))?;
-        runtime
+    let restored_healthy = if let Some(previous_entry) = previous_entry {
+        let previous = previous_entry.meta.id;
+        if let Err(error) = repository.switch(previous, "auto-rollback after failed health check", clock.now()) {
+            failure.push_str(&format!("; recording rollback failed: {error}"));
+            Error::port("restoring previous pointer", repository.restore(Some(previous)))?;
+        }
+        match runtime
             .start_detached(
                 &config.run,
                 &previous_entry.payload,
@@ -77,9 +90,16 @@ pub fn activate_generation(
                     id: previous,
                 },
             )
-            .is_ok()
-            && health.verify(&config.health, &previous_entry.payload).is_ok()
+            .and_then(|_| health.verify(&config.health, &previous_entry.payload))
+        {
+            | Ok(()) => true,
+            | Err(error) => {
+                failure.push_str(&format!("; restarting previous generation failed: {error}"));
+                false
+            },
+        }
     } else {
+        Error::port("clearing rejected pointer", repository.restore(None))?;
         false
     };
 
@@ -121,6 +141,8 @@ mod tests {
         current: Cell<Option<GenerationId>>,
         statuses: RefCell<Vec<(GenerationId, GenerationStatus)>>,
         switches: RefCell<Vec<GenerationId>>,
+        fail_switch: bool,
+        fail_status: bool,
     }
 
     impl GenerationRepository for Repository {
@@ -135,6 +157,9 @@ mod tests {
         fn commit(&self, _staged: StagedGeneration, _generation: Generation) -> PortResult<StoredGeneration> { Err(failure("unused")) }
 
         fn set_status(&self, id: GenerationId, status: GenerationStatus) -> PortResult<()> {
+            if self.fail_status {
+                return Err(failure("status write failed"));
+            }
             self.statuses.borrow_mut().push((id, status));
             Ok(())
         }
@@ -142,6 +167,14 @@ mod tests {
         fn switch(&self, id: GenerationId, _reason: &str, _at: DateTime<Utc>) -> PortResult<()> {
             self.current.set(Some(id));
             self.switches.borrow_mut().push(id);
+            if self.fail_switch {
+                return Err(failure("history write failed"));
+            }
+            Ok(())
+        }
+
+        fn restore(&self, id: Option<GenerationId>) -> PortResult<()> {
+            self.current.set(id);
             Ok(())
         }
     }
@@ -170,6 +203,7 @@ mod tests {
                     id,
                 },
                 pid: id.0 as i32,
+                process_start: None,
                 started_at: fixed_time(),
                 detached: true,
             })
@@ -229,6 +263,8 @@ mod tests {
             current: Cell::new(current),
             statuses: RefCell::new(Vec::new()),
             switches: RefCell::new(Vec::new()),
+            fail_switch: false,
+            fail_status: false,
         }
     }
 
@@ -295,5 +331,62 @@ mod tests {
         assert_eq!(repository.current.get(), Some(GenerationId(1)));
         assert_eq!(*repository.switches.borrow(), vec![GenerationId(2), GenerationId(1)]);
         assert_eq!(*repository.statuses.borrow(), vec![(GenerationId(2), GenerationStatus::Rejected)]);
+    }
+
+    #[test]
+    fn bookkeeping_failures_do_not_prevent_restoring_the_service() {
+        for (fail_switch, fail_status) in [(true, false), (false, true)] {
+            let mut repository = repository(Some(GenerationId(1)));
+            repository.fail_switch = fail_switch;
+            repository.fail_status = fail_status;
+            let runtime = Runtime {
+                fail_for: None,
+                starts: RefCell::new(Vec::new()),
+            };
+            let result = activate_generation(
+                GenerationId(2),
+                "test",
+                &Preset::Generic.template("app"),
+                &repository,
+                &runtime,
+                &Health {
+                    fail_for: Some(PathBuf::from("/generation/2")),
+                },
+                &FixedClock,
+            )
+            .unwrap();
+            assert!(matches!(
+                result,
+                Activation::RolledBack {
+                    restored: Some(GenerationId(1)),
+                    restored_healthy: true,
+                    ..
+                }
+            ));
+            assert_eq!(repository.current.get(), Some(GenerationId(1)));
+            assert_eq!(runtime.starts.borrow().last(), Some(&GenerationId(1)));
+        }
+    }
+
+    #[test]
+    fn failed_first_activation_clears_the_rejected_pointer() {
+        let repository = repository(None);
+        let runtime = Runtime {
+            fail_for: Some(GenerationId(2)),
+            starts: RefCell::new(Vec::new()),
+        };
+        activate_generation(
+            GenerationId(2),
+            "test",
+            &Preset::Generic.template("app"),
+            &repository,
+            &runtime,
+            &Health {
+                fail_for: None,
+            },
+            &FixedClock,
+        )
+        .unwrap();
+        assert_eq!(repository.current.get(), None);
     }
 }

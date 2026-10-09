@@ -233,3 +233,66 @@ fn a_note_is_stored_with_the_generation() {
     let listed = stdout(&fixture.gm_ok(&["generation", "list"]));
     assert!(listed.contains("tuned the cache"), "generations: {listed}");
 }
+
+#[test]
+fn a_history_write_failure_restores_the_previous_service() {
+    let fixture = project();
+    fixture.gm_ok(&["generation", "build", "--activate"]);
+    fixture.gm_ok(&["generation", "build"]);
+    std::fs::remove_file(fixture.path(".gm/history.jsonl")).unwrap();
+    std::fs::create_dir(fixture.path(".gm/history.jsonl")).unwrap();
+
+    let failed = fixture.gm(&["generation", "activate", "2"]);
+    assert!(!failed.status.success());
+    assert_eq!(
+        std::fs::read_link(fixture.path(".gm/current")).unwrap(),
+        std::path::Path::new("generations/0001")
+    );
+    assert_eq!(
+        fixture.run_state().unwrap().source,
+        RunSource::Generation {
+            id: GenerationId(1)
+        }
+    );
+    assert!(stderr(&failed).contains("which is live again"));
+}
+
+#[test]
+fn artifact_symlinks_are_frozen_as_independent_files() {
+    let fixture = Fixture::with(Manifest::new("true").artifacts(&["linked"]));
+    fixture.write("original", "old");
+    std::os::unix::fs::symlink(fixture.path("original"), fixture.path("linked")).unwrap();
+    fixture.gm_ok(&["generation", "build"]);
+    fixture.write("original", "new");
+    let frozen = fixture.generation_payload(1).join("linked");
+    assert!(!frozen.is_symlink());
+    assert_eq!(std::fs::read_to_string(frozen).unwrap(), "old");
+}
+
+#[test]
+fn artifact_symlinks_cannot_escape_or_form_directory_cycles() {
+    let outside = Fixture::bare();
+    outside.write("secret", "secret");
+    for cycle in [false, true] {
+        let fixture = Fixture::with(Manifest::new("true").artifacts(&["linked"]));
+        fixture.write("tree/file", "content");
+        if cycle {
+            std::os::unix::fs::symlink(fixture.path("tree"), fixture.path("tree/back")).unwrap();
+        }
+        let target = if cycle { fixture.path("tree") } else { outside.path("secret") };
+        std::os::unix::fs::symlink(target, fixture.path("linked")).unwrap();
+        let failed = fixture.gm(&["generation", "build"]);
+        assert!(!failed.status.success());
+        assert!(stderr(&failed).contains(if cycle { "directory cycle" } else { "escapes the build directory" }));
+        assert!(!fixture.path(".gm/generations/0001").exists());
+    }
+}
+
+#[test]
+fn copying_the_project_root_cannot_copy_the_store_into_itself() {
+    let fixture = Fixture::with(Manifest::new("true").artifacts(&["."]));
+    let failed = fixture.gm(&["generation", "build"]);
+    assert!(!failed.status.success());
+    assert!(stderr(&failed).contains("overlaps the generation destination"));
+    assert_eq!(std::fs::read_dir(fixture.path(".gm/store")).unwrap().count(), 0);
+}

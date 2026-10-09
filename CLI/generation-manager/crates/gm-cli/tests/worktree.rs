@@ -41,6 +41,29 @@ fn init_accepts_an_explicit_preset_and_name() {
 }
 
 #[test]
+fn rust_preset_runs_the_binary_at_its_preserved_artifact_path() {
+    let fixture = Fixture::bare();
+    fixture.gm_ok(&["project", "init", "--preset", "rust", "--name", "app"]);
+    let manifest = fixture
+        .read("generation-manager.toml")
+        .replace("cargo build --release", "")
+        .replace("cargo test", "");
+    fixture.write("generation-manager.toml", &manifest);
+    fixture.write("target/release/app", "#!/bin/sh\necho preset-ok\n");
+    use std::os::unix::fs::PermissionsExt;
+    std::fs::set_permissions(fixture.path("target/release/app"), std::fs::Permissions::from_mode(0o755)).unwrap();
+    fixture.gm_ok(&["generation", "build"]);
+    let config = gm_core::Config::parse(&fixture.read("generation-manager.toml")).unwrap();
+    let output = std::process::Command::new("sh")
+        .args(["-c", &config.run.cmd])
+        .current_dir(fixture.generation_payload(1))
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    assert!(stdout(&output).contains("preset-ok"));
+}
+
+#[test]
 fn init_rejects_an_unknown_preset() {
     let fixture = Fixture::bare();
 
@@ -87,6 +110,22 @@ fn worktree_create_rejects_a_name_already_in_use() {
 
     assert!(!output.status.success());
     assert!(stderr(&output).contains("worktree `add-cache` already exists"), "stderr: {}", stderr(&output));
+}
+
+#[test]
+fn all_worktree_targets_reject_names_with_path_components() {
+    let fixture = repo();
+    for args in [
+        vec!["worktree", "create", "feature/cache"],
+        vec!["worktree", "remove", "feature/cache", "--force"],
+        vec!["worktree", "run", "feature/cache", "--no-build"],
+        vec!["generation", "build", "feature/cache"],
+    ] {
+        let output = fixture.gm(&args);
+        assert!(!output.status.success());
+        assert!(stderr(&output).contains("single directory name"), "{}", stderr(&output));
+    }
+    assert!(!fixture.path(".gm/worktrees/feature").exists());
 }
 
 #[test]

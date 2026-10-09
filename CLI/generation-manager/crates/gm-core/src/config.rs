@@ -13,6 +13,13 @@ pub const STATE_DIR: &str = ".gm";
 /// Directory holding development worktrees, relative to [`STATE_DIR`].
 pub const WORKTREES: &str = "worktrees";
 
+pub fn validate_worktree_name(name: &str) -> Result<()> {
+    if name.is_empty() || name == "." || name == ".." || name.contains(['/', '\\']) {
+        return Err(Error::Config("worktree name must be a single directory name".into()));
+    }
+    Ok(())
+}
+
 /// The declarative project manifest.
 ///
 /// Everything language-specific lives in shell commands, so the tool stays
@@ -197,7 +204,7 @@ impl Preset {
                 "cargo build --release".to_string(),
                 "cargo test".to_string(),
                 vec![PathBuf::from(format!("target/release/{name}"))],
-                format!("./{name}"),
+                format!("./target/release/{name}"),
             ),
             | Preset::Node => (
                 "npm ci && npm run build".to_string(),
@@ -316,7 +323,7 @@ mod tests {
         let parsed = Config::parse(&rendered).unwrap();
 
         assert_eq!(parsed.project.name, "demo");
-        assert_eq!(parsed.run.cmd, "./demo");
+        assert_eq!(parsed.run.cmd, "./target/release/demo");
     }
 
     #[test]
@@ -335,5 +342,13 @@ mod tests {
         });
 
         assert_eq!(preset, Preset::Node);
+    }
+
+    #[test]
+    fn worktree_names_cannot_select_parent_or_nested_directories() {
+        for name in ["", ".", "..", "feature/cache", "../outside", "/tmp/outside", "feature\\cache"] {
+            assert!(super::validate_worktree_name(name).is_err(), "accepted {name:?}");
+        }
+        assert!(super::validate_worktree_name("add-cache").is_ok());
     }
 }

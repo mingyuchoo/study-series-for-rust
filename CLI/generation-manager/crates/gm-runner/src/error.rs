@@ -17,6 +17,9 @@ pub enum Error {
     #[error("the service is already running (pid {0})")]
     AlreadyRunning(i32),
 
+    #[error("cannot verify ownership of pid {0}; stop the old service manually before removing its state file")]
+    UnverifiedProcess(i32),
+
     #[error("{context}: {source}")]
     Io {
         context: String,

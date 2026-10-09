@@ -49,7 +49,7 @@ impl Project {
 
     /// Resolve a worktree name to its path, failing if it does not exist.
     pub fn worktree_path(&self, name: &str) -> Result<PathBuf> {
-        let path = self.store.layout().worktree(name);
+        let path = self.store.layout().worktree(name)?;
         if !path.is_dir() {
             bail!("worktree `{name}` does not exist (see `gm worktree list`)");
         }

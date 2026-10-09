@@ -42,6 +42,9 @@ impl RunSource {
 pub struct RunState {
     pub source: RunSource,
     pub pid: i32,
+    /// Kernel start identity; absent in state written by older versions.
+    #[serde(default)]
+    pub process_start: Option<String>,
     pub started_at: DateTime<Utc>,
     /// False while a foreground `gm worktree run` owns the terminal.
     #[serde(default)]

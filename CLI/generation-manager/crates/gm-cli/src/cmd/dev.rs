@@ -18,7 +18,7 @@ pub fn new(name: &str, base: Option<&str>) -> Result<ExitCode> {
         bail!("{} is not a git repository", project.root.display());
     }
 
-    let path = project.store.layout().worktree(name);
+    let path = project.store.layout().worktree(name)?;
     if path.exists() {
         bail!("worktree `{name}` already exists at {}", path.display());
     }
@@ -49,7 +49,7 @@ pub fn run(from: Option<&str>, no_build: bool, detach: bool) -> Result<ExitCode>
 
     let lock = project.store.lock()?;
     let pipeline = Pipeline::new(&project.store, &project.config);
-    displace(&pipeline, Duration::from_secs(project.config.run.stop_timeout_secs));
+    displace(&pipeline, Duration::from_secs(project.config.run.stop_timeout_secs))?;
 
     println!("running worktree `{name}` from {}", path.display());
     if detach {
@@ -76,18 +76,19 @@ pub fn run(from: Option<&str>, no_build: bool, detach: bool) -> Result<ExitCode>
             if let Ok(Some(id)) = project.store.current_id() {
                 println!("  service slot is free — `gm service start` runs generation {id} again");
             }
-            if code == 0 { Ok(ExitCode::SUCCESS) } else { Ok(ExitCode::FAILURE) }
+            Ok(ExitCode::from(code as u8))
         },
     }
 }
 
 /// Report taking the service slot from whatever held it.
-fn displace(pipeline: &Pipeline<'_>, timeout: Duration) {
+fn displace(pipeline: &Pipeline<'_>, timeout: Duration) -> Result<()> {
     let supervisor = pipeline.supervisor();
     if let Some(state) = supervisor.running() {
         println!("  {} stopping {} to take the service slot", ui::ARROW, state.source);
     }
-    let _ = supervisor.stop_if_running(timeout);
+    supervisor.stop_if_running(timeout)?;
+    Ok(())
 }
 
 pub fn list() -> Result<ExitCode> {
@@ -129,7 +130,7 @@ pub fn remove(name: &str, force: bool) -> Result<ExitCode> {
     let project = Project::open()?;
     let _lock = project.store.lock()?;
 
-    let path = project.store.layout().worktree(name);
+    let path = project.store.layout().worktree(name)?;
     if !path.exists() {
         bail!("worktree `{name}` does not exist");
     }

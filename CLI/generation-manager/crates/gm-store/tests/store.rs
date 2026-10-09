@@ -61,6 +61,40 @@ fn generations_are_numbered_from_one() {
 }
 
 #[test]
+fn unreadable_generations_still_reserve_their_number() {
+    let temp = TempProject::new();
+    let store = Store::open(Layout::new(&temp.0)).unwrap();
+    let lock = store.lock().unwrap();
+    add_generation(&store, &lock, "aaaaaaa");
+    let second = add_generation(&store, &lock, "bbbbbbb");
+    let original = store.get(second).unwrap().dir;
+    std::fs::write(Layout::generation_meta(&original), "invalid JSON").unwrap();
+
+    assert_eq!(add_generation(&store, &lock, "bbbbbbb"), GenerationId(3));
+    assert_eq!(std::fs::read_to_string(original.join("root/marker")).unwrap(), "bbbbbbb");
+    assert_eq!(std::fs::read_to_string(Layout::generation_meta(&original)).unwrap(), "invalid JSON");
+}
+
+#[test]
+fn commit_cannot_replace_a_published_generation() {
+    let temp = TempProject::new();
+    let store = Store::open(Layout::new(&temp.0)).unwrap();
+    let lock = store.lock().unwrap();
+    let id = add_generation(&store, &lock, "aaaaaaa");
+    let entry = store.get(id).unwrap();
+    let mut meta = entry.meta.clone();
+    meta.note = Some("replacement".into());
+    let staged = gm_store::StagedGeneration {
+        id,
+        payload: entry.payload(),
+        dir: entry.dir,
+    };
+
+    assert!(store.commit(&lock, staged, meta).is_err());
+    assert_eq!(store.get(id).unwrap().meta.note, None);
+}
+
+#[test]
 fn nothing_is_active_before_the_first_switch() {
     let temp = TempProject::new();
     let store = Store::open(Layout::new(&temp.0)).unwrap();

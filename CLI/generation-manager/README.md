@@ -22,6 +22,8 @@ NixOS의 세대/롤백 모델을 일반 프로젝트에 옮긴 것입니다. 다
 
 - **Unix 계열 전용.** 프로세스 분리에 `setsid(2)`, 세대 전환에 심볼릭 링크와
   `rename(2)`을 씁니다. Windows는 지원하지 않습니다.
+- 프로세스 소유권 확인은 Linux와 macOS를 지원합니다. Linux에서는 PID 재사용으로
+  다른 프로세스를 종료하지 않도록 `pidfd`를 사용하며 **커널 6.9 이상**이 필요합니다.
 - **git.** `gm worktree *` 명령이 `git worktree`를 직접 호출합니다. 그 외 명령은
   git 없이도 동작합니다.
 - **Rust 2024 edition** 지원 툴체인.
@@ -75,6 +77,9 @@ gm generation prune --keep 5              # 오래된 세대 정리
 | `gm service start` / `stop` / `restart` | 활성 세대의 프로세스 제어 |
 | `gm service logs [-n N]` | 서비스 로그 꼬리 (기본 40줄) |
 
+worktree 이름은 단일 디렉토리 이름이어야 합니다. `feature/cache`처럼 경로 구분자를
+포함하는 이름은 생성·실행·빌드·제거 명령에서 거부합니다.
+
 **종료 코드.** 검증에 실패해 자동 롤백된 `gm generation activate`와
 `gm generation build --activate`는 `1`을 반환합니다. `gm worktree run`은
 실행한 코드의 종료 코드를 그대로 전달합니다.
@@ -116,6 +121,11 @@ gm generation build   # 이 worktree를 빌드 (대상 인자 불필요)
 
 슬롯을 뺏을 때는 양쪽 모두 무엇을 밀어냈는지 출력합니다.
 
+실행 상태에는 PID와 커널의 프로세스 시작 식별자를 함께 기록합니다. 이전 버전이
+만든 상태 파일에 시작 식별자가 없으면 해당 PID를 종료하지 않습니다. 업그레이드
+전에 기존 서비스를 종료하세요. 이미 업그레이드했다면 실제 기존 서비스를 직접
+종료한 뒤 `.gm/run/state.json`을 제거하고 다시 시작하세요.
+
 ```
 $ gm generation activate 1
   → stopping worktree `add-cache` (dev, unverified) to take the service slot
@@ -141,7 +151,7 @@ cmd = "cargo test"                             # 생략하거나 비우면 건�
 include = ["target/release/demo", "config"]    # 세대로 동결할 경로
 
 [run]
-cmd = "./demo"
+cmd = "./target/release/demo"
 env = { RUST_LOG = "info" }                    # 선택
 stop_timeout_secs = 10                         # SIGTERM 후 SIGKILL까지 대기 (기본 10)
 
@@ -164,6 +174,9 @@ payload는 **빌드 디렉토리의 상대 경로 구조를 그대로 복사**�
 
 `artifacts.include`의 항목도 빌드 디렉토리 기준 상대 경로여야 하며, `..`로
 바깥을 가리킬 수 없습니다.
+
+심볼릭 링크는 빌드 디렉토리 내부의 대상을 실제 파일로 복사합니다. 외부를 가리키는
+링크, 디렉토리 순환, 저장 목적지를 포함하는 경로(`include = ["."]` 등)는 거부합니다.
 
 ### 헬스체크
 

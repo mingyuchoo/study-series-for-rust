@@ -8,6 +8,7 @@ pub mod exec;
 pub mod git;
 pub mod health;
 pub mod pipeline;
+mod process;
 pub mod supervisor;
 
 pub use gm_application::Activation;

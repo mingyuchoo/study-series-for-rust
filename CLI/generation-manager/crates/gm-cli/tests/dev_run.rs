@@ -44,7 +44,15 @@ fn reports_the_exit_code_of_the_code_it_ran() {
     let output = fixture.gm(&["worktree", "run", WORKTREE]);
 
     assert!(!output.status.success());
+    assert_eq!(output.status.code(), Some(7));
     assert!(stderr(&output).contains("exited with code 7"), "stderr: {}", stderr(&output));
+}
+
+#[test]
+fn forwards_signal_termination_as_a_shell_exit_code() {
+    let fixture = project("kill -TERM $$");
+    let output = fixture.gm(&["worktree", "run", WORKTREE, "--no-build"]);
+    assert_eq!(output.status.code(), Some(143));
 }
 
 #[test]
@@ -126,8 +134,8 @@ fn a_detached_run_records_the_worktree_as_the_running_source() {
     assert!(state.detached);
     assert!(state.source.is_dev());
 
-    // `gm project status` names the source rather than only reporting that a pid
-    // exists.
+    // `gm project status` names the source rather than only reporting that a
+    // pid exists.
     let status = stdout(&fixture.gm(&["project", "status"]));
     assert!(status.contains("worktree `add-cache` (dev, unverified)"), "status: {status}");
 

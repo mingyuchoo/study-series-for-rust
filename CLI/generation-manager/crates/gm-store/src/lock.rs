@@ -20,6 +20,20 @@ pub struct ProjectLock {
 impl ProjectLock {
     /// Fail immediately if another process holds the lock.
     pub(crate) fn acquire(path: &Path) -> Result<ProjectLock> {
+        let lock = Self::open(path)?;
+        lock._file.try_lock_exclusive().map_err(|_| Error::Locked(path.to_path_buf()))?;
+        Ok(lock)
+    }
+
+    /// Wait for a mutating command before releasing a completed foreground
+    /// slot.
+    pub fn acquire_wait(path: &Path) -> Result<ProjectLock> {
+        let lock = Self::open(path)?;
+        lock._file.lock_exclusive().ctx(format!("locking {}", path.display()))?;
+        Ok(lock)
+    }
+
+    fn open(path: &Path) -> Result<ProjectLock> {
         let file = OpenOptions::new()
             .create(true)
             .read(true)
@@ -27,7 +41,6 @@ impl ProjectLock {
             .truncate(false)
             .open(path)
             .ctx(format!("opening lock file {}", path.display()))?;
-        file.try_lock_exclusive().map_err(|_| Error::Locked(path.to_path_buf()))?;
         Ok(ProjectLock {
             _file: file,
             path: path.to_path_buf(),

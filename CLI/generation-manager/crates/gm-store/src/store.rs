@@ -74,7 +74,7 @@ impl Store {
 
     /// All generations, ordered oldest first. Unreadable entries are skipped so
     /// one corrupt directory cannot break `gm generation list`.
-    pub fn list(&self) -> Result<Vec<GenerationEntry>> {
+    fn generation_ids(&self) -> Result<Vec<GenerationId>> {
         let generations = self.layout.generations();
         let mut ids = Vec::new();
         for entry in fs::read_dir(&generations).ctx(format!("reading {}", generations.display()))? {
@@ -89,7 +89,11 @@ impl Store {
             ids.push(GenerationId(number));
         }
         ids.sort();
+        Ok(ids)
+    }
 
+    pub fn list(&self) -> Result<Vec<GenerationEntry>> {
+        let ids = self.generation_ids()?;
         let mut out = Vec::with_capacity(ids.len());
         for id in ids {
             if let Ok(entry) = self.get(id) {
@@ -153,7 +157,7 @@ impl Store {
     // ---------------------------------------------------------------- writing
 
     fn next_id(&self) -> Result<GenerationId> {
-        let ids: Vec<_> = self.list()?.into_iter().map(|entry| entry.meta.id).collect();
+        let ids = self.generation_ids()?;
         Ok(next_generation_id(&ids))
     }
 
@@ -180,12 +184,20 @@ impl Store {
     /// Write the metadata and publish `generations/NNNN`.
     pub fn commit(&self, lock: &ProjectLock, staged: StagedGeneration, meta: Generation) -> Result<GenerationEntry> {
         self.ensure_locked(lock)?;
+        let link = self.layout.generation_link(staged.id);
+        match fs::symlink_metadata(&link) {
+            | Ok(_) => return Err(Error::GenerationExists(staged.id.0)),
+            | Err(error) if error.kind() == std::io::ErrorKind::NotFound => {},
+            | Err(error) =>
+                return Err(Error::Io {
+                    context: format!("checking {}", link.display()),
+                    source: error,
+                }),
+        }
         let meta_path = Layout::generation_meta(&staged.dir);
         let text = serde_json::to_string_pretty(&meta)?;
         write_atomic(&meta_path, text.as_bytes())?;
 
-        let link = self.layout.generation_link(staged.id);
-        let _ = fs::remove_file(&link);
         let relative = Path::new("..").join("store").join(staged.dir.file_name().unwrap_or_default());
         symlink(&relative, &link).ctx(format!("linking {}", link.display()))?;
 
@@ -229,6 +241,28 @@ impl Store {
         // Fail before touching anything if the target is not a real generation.
         self.get(id)?;
 
+        self.replace_current(Some(id))?;
+        self.append_history(&SwitchEvent {
+            at,
+            from: previous,
+            to: id,
+            reason: reason.to_string(),
+        })
+    }
+
+    fn replace_current(&self, id: Option<GenerationId>) -> Result<()> {
+        let Some(id) = id else {
+            return match fs::remove_file(self.layout.current_link()) {
+                | Ok(()) => Ok(()),
+                | Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+                | Err(error) => Err(Error::Io {
+                    context: "clearing active generation".into(),
+                    source: error,
+                }),
+            };
+        };
+        self.get(id)?;
+
         let current = self.layout.current_link();
         let temp = self.layout.state().join(format!(".current.tmp.{}", std::process::id()));
         let _ = fs::remove_file(&temp);
@@ -239,14 +273,7 @@ impl Store {
             .inspect_err(|_| {
                 let _ = fs::remove_file(&temp);
             })
-            .ctx(format!("activating generation {id}"))?;
-
-        self.append_history(&SwitchEvent {
-            at,
-            from: previous,
-            to: id,
-            reason: reason.to_string(),
-        })
+            .ctx(format!("activating generation {id}"))
     }
 
     fn append_history(&self, event: &SwitchEvent) -> Result<()> {
@@ -347,6 +374,11 @@ impl gm_application::GenerationRepository for StoreRepository<'_> {
     fn switch(&self, id: GenerationId, reason: &str, at: chrono::DateTime<Utc>) -> gm_application::PortResult<()> {
         Ok(self.store.switch_at(self.lock, id, reason, at)?)
     }
+
+    fn restore(&self, id: Option<GenerationId>) -> gm_application::PortResult<()> {
+        self.store.ensure_locked(self.lock)?;
+        Ok(self.store.replace_current(id)?)
+    }
 }
 
 /// A generation directory that exists on disk but is not yet numbered.
@@ -357,7 +389,7 @@ pub struct StagedGeneration {
     pub payload: PathBuf,
 }
 
-fn write_atomic(path: &Path, contents: &[u8]) -> Result<()> {
+pub fn write_atomic(path: &Path, contents: &[u8]) -> Result<()> {
     let parent = path.parent().unwrap_or(Path::new("."));
     let name = path.file_name().unwrap_or_default().to_string_lossy();
     let temporary = parent.join(format!(".{name}.tmp.{}", std::process::id()));

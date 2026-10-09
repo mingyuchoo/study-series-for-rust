@@ -24,4 +24,5 @@ pub use project::{Discovery,
 pub use store::{GenerationEntry,
                 StagedGeneration,
                 Store,
-                StoreRepository};
+                StoreRepository,
+                write_atomic};
