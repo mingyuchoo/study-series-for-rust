@@ -6,3 +6,7 @@ members = [
     "crates/p2p_gui",
 ]
 resolver = "2"
+
+[patch.crates-io]
+block = { path = "vendor/block" }
+proc-macro-error2 = { path = "vendor/proc-macro-error2" }
