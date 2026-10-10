@@ -6,7 +6,7 @@ edition = "2021"
 [dependencies]
 p2p_core = { path = "../p2p_core" }
 p2p_app = { path = "../p2p_app" }
-gpui = "0.2.2"
+gpui = { version = "0.2.2", features = ["runtime_shaders"] }
 async-channel = "2"
 chrono = { version = "0.4", default-features = false, features = ["clock"] }
 unicode-segmentation = "1.13"
