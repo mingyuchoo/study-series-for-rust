@@ -167,8 +167,8 @@ fn caption_button(id: &'static str, icon: &'static str, area: WindowControlArea,
         .child(icon)
 }
 
-/// 입력창을 둘러싸는 테두리 상자
-fn input_frame(input: Entity<TextInput>) -> Div { div().w_full().rounded_md().overflow_hidden().bg(rgb(SURFACE)).child(input) }
+/// Flex로 입력 뷰의 상대 너비를 계산해 클릭 영역이 0으로 줄어들지 않게 한다.
+fn input_frame(input: Entity<TextInput>) -> Div { div().flex().w_full().rounded_md().overflow_hidden().bg(rgb(SURFACE)).child(input) }
 
 fn field_label(text: &'static str) -> impl IntoElement { div().text_sm().text_color(rgb(MUTED)).child(text) }
 

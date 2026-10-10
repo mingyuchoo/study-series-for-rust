@@ -40,8 +40,7 @@ pub struct AppRoot {
     pub(crate) port_input: Entity<TextInput>,
     pub(crate) setup_error: Option<String>,
     pub(crate) chat: Option<ChatState>,
-    /// 노드 세션의 소유권을 main과 공유한다. 창을 닫은 뒤 main에서 `shutdown`을
-    /// 호출하기 위함이다.
+    /// 노드 세션의 소유권을 main의 앱 종료 콜백과 공유한다.
     session_slot: Rc<RefCell<Option<NodeSession>>>,
 }
 
