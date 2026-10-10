@@ -1,0 +1,10 @@
+[package]
+name = "p2p_infra"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+p2p_core = { path = "../p2p_core" }
+tokio = { version = "1.38", features = ["full"] }
+socket2 = { version = "0.5", features = ["all"] }
+async-trait = "0.1"

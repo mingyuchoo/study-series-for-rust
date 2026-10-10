@@ -1,0 +1,12 @@
+[package]
+name = "p2p_gui"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+p2p_core = { path = "../p2p_core" }
+p2p_app = { path = "../p2p_app" }
+gpui = "0.2.2"
+async-channel = "2"
+chrono = { version = "0.4", default-features = false, features = ["clock"] }
+unicode-segmentation = "1.13"

@@ -1,0 +1,8 @@
+[workspace]
+members = [
+    "crates/p2p_core",
+    "crates/p2p_infra",
+    "crates/p2p_app",
+    "crates/p2p_gui",
+]
+resolver = "2"

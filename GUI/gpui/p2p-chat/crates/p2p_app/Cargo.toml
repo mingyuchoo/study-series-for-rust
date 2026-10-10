@@ -1,0 +1,11 @@
+[package]
+name = "p2p_app"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+p2p_core = { path = "../p2p_core" }
+p2p_infra = { path = "../p2p_infra" }
+tokio = { version = "1.38", features = ["rt", "macros", "sync", "time"] }
+async-channel = "2"
+uuid = { version = "1.8", features = ["v4"] }
