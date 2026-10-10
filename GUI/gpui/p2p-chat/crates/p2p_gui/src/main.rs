@@ -17,6 +17,7 @@ use gpui::{App,
            WindowBounds,
            WindowOptions,
            actions,
+           point,
            px,
            size};
 use p2p_app::NodeSession;
@@ -49,9 +50,9 @@ fn main() {
                         window_min_size: Some(size(px(640.), px(420.))),
                         titlebar: Some(TitlebarOptions {
                             title: Some("P2P Chat".into()),
-                            // 시스템 제목 표시줄을 숨기고, view.rs의 titlebar()가 gpui로 그린 제목 표시줄을 대신 쓴다.
+                            // macOS의 기본 창 버튼은 투명 제목 표시줄에서도 남는다.
                             appears_transparent: true,
-                            ..Default::default()
+                            traffic_light_position: Some(point(px(12.), px(9.))),
                         }),
                         ..Default::default()
                     },

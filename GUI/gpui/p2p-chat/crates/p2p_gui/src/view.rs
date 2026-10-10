@@ -115,9 +115,8 @@ impl AppRoot {
     }
 }
 
-/// gpui로 그린 제목 표시줄. 빈 영역은 `Drag`로 지정해 창을 끌 수 있게 하고,
-/// 캡션 버튼은 `WindowControlArea`로 지정해 Windows가 기본 버튼과 똑같이
-/// 처리하게 한다(Windows 11 스냅 레이아웃 포함).
+/// macOS는 기본 창 버튼 공간을 남기고, Windows는 `WindowControlArea`로
+/// 캡션 버튼을 처리한다(Windows 11 스냅 레이아웃 포함).
 fn titlebar(is_maximized: bool) -> impl IntoElement {
     let max_icon = if is_maximized { "\u{E923}" } else { "\u{E922}" };
     div()
@@ -125,6 +124,7 @@ fn titlebar(is_maximized: bool) -> impl IntoElement {
         .items_center()
         .w_full()
         .h(px(TITLEBAR_HEIGHT))
+        .flex_shrink_0()
         .bg(rgb(PANEL))
         .border_b_1()
         .border_color(rgb(SURFACE))
@@ -135,14 +135,18 @@ fn titlebar(is_maximized: bool) -> impl IntoElement {
                 .flex_1()
                 .h_full()
                 .px_3()
+                .when(cfg!(target_os = "macos"), |title| title.pl(px(80.)))
                 .text_sm()
                 .text_color(rgb(MUTED))
                 .window_control_area(WindowControlArea::Drag)
                 .child("P2P Chat"),
         )
-        .child(caption_button("titlebar-min", "\u{E921}", WindowControlArea::Min, SURFACE, TEXT))
-        .child(caption_button("titlebar-max", max_icon, WindowControlArea::Max, SURFACE, TEXT))
-        .child(caption_button("titlebar-close", "\u{E8BB}", WindowControlArea::Close, CLOSE_HOVER, WHITE))
+        .when(cfg!(target_os = "windows"), |titlebar| {
+            titlebar
+                .child(caption_button("titlebar-min", "\u{E921}", WindowControlArea::Min, SURFACE, TEXT))
+                .child(caption_button("titlebar-max", max_icon, WindowControlArea::Max, SURFACE, TEXT))
+                .child(caption_button("titlebar-close", "\u{E8BB}", WindowControlArea::Close, CLOSE_HOVER, WHITE))
+        })
 }
 
 /// 제목 표시줄의 최소화·최대화·닫기 버튼. 클릭 동작은 gpui가 아니라 Windows가
