@@ -58,6 +58,7 @@ Desktop.ini
 *.log
 *.tmp
 *.bak
+*.stderr
 
 # graft's local graph cache — regenerable, not committed (run `graft build`).
 /graft/
