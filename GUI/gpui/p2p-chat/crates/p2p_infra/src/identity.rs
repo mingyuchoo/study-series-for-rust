@@ -1,10 +1,10 @@
+use crate::{protocol::fingerprint,
+            quic::SERVER_NAME};
 use rustls::pki_types::{CertificateDer,
                         PrivateKeyDer,
                         PrivatePkcs8KeyDer};
 use serde::{Deserialize,
             Serialize};
-use sha2::{Digest,
-           Sha256};
 use std::{collections::BTreeMap,
           fs,
           io::{self,
@@ -32,7 +32,7 @@ impl Identity {
         let stored: StoredIdentity = match fs::read(&path) {
             | Ok(bytes) => serde_json::from_slice(&bytes).map_err(io::Error::other)?,
             | Err(error) if error.kind() == io::ErrorKind::NotFound => {
-                let generated = rcgen::generate_simple_self_signed(vec![super::SERVER_NAME.into()]).map_err(io::Error::other)?;
+                let generated = rcgen::generate_simple_self_signed(vec![SERVER_NAME.into()]).map_err(io::Error::other)?;
                 let stored = StoredIdentity {
                     certificate: generated.cert.der().to_vec(),
                     private_key: generated.signing_key.serialize_der(),
@@ -49,8 +49,6 @@ impl Identity {
         })
     }
 }
-
-pub(crate) fn fingerprint(certificate: &[u8]) -> String { format!("{:x}", Sha256::digest(certificate)) }
 
 pub(crate) struct TrustStore {
     path: PathBuf,

@@ -1,4 +1,8 @@
 use super::*;
+use crate::quic::{SERVER_NAME,
+                  client_config};
+use p2p_core::MAX_DATAGRAM_BYTES;
+use std::time::Duration;
 use tempfile::TempDir;
 
 struct TestNode {

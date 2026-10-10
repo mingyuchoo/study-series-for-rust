@@ -36,7 +36,10 @@ p2p-chat/
     │       └── tests.rs             # 시간/네트워크 대기 없는 테스트
     ├── p2p_infra/                   # UDP 발견 + QUIC 전송 구현
     │   └── src/
-    │       ├── lib.rs               # 발견, 상호 TLS, 프레임/ACK, NetworkError
+    │       ├── lib.rs               # 어댑터 조립, 공개 API, NetworkError
+    │       ├── protocol.rs          # 순수한 발견 규약/채팅 검증, 인증서 지문
+    │       ├── discovery.rs         # UDP 멀티캐스트 발견과 피어 갱신
+    │       ├── quic.rs              # 상호 TLS, 연결 재사용, 프레임/ACK I/O
     │       ├── identity.rs          # 키·인증서 저장과 인증서 지문 고정
     │       └── tests.rs             # 실제 QUIC, 인증 거부, 프레임/타임아웃
     ├── p2p_runtime/                 # 실행 부수효과와 의존성 조립
@@ -69,6 +72,14 @@ p2p-chat/
 의존하지 않는다. JSON 직렬화는 I/O가 없는 순수한 변환이므로 `message.rs`에
 격리했고, CHAT JSON과 4096바이트 제한을 유지한다. 발견 메시지는 프로토콜 버전과 인증서를 추가한 HELLO/GOODBYE JSON이다.
 I/O 오류는 `NetworkError`와 `StartError`로 바깥 계층이 소유한다.
+
+인프라 안에서도 순수한 전송 규약과 부수효과를 분리한다. `protocol.rs`는 입력
+바이트와 인증된 노드 ID만 받아 발견 데이터/채팅을 변환·검증하고 인증서의
+지문을 계산한다. 소켓, 파일, 현재 시각, 비동기 런타임을 사용하지 않으므로
+네트워크 없이 경계값을 테스트할 수 있다. UDP 처리는 `discovery.rs`, QUIC
+연결과 스트림 처리는 `quic.rs`, 파일 저장은 `identity.rs`가 맡는다. 이 모듈은
+크레이트 밖에 노출하지 않고 기존 `QuicNetworkAdapter`와 `NetworkPort`로만
+연결한다. 발견과 QUIC이 공유하는 피어/신뢰 상태의 소유권도 어댑터에 유지한다.
 
 - `Node::receive`와 `Node::expire`는 호출자가 전달한 시각으로만 상태를 바꾼다.
   피어 테이블은 ID 순서로 조회/만료되어 결과 순서도 결정적이다.
@@ -144,7 +155,11 @@ cargo clippy --workspace --all-targets -- -D warnings
   잘못된 JSON 거부.
 - `p2p_app`: 공통 설정 검증, 자기 메시지 무시, 피어 갱신/퇴장, 주입한 시각과
   타임아웃 경계, 전송 대상과 부분 성공/전체 실패.
-- `p2p_infra`: 실제 상호 TLS 연결, 양방향 한글 채팅·순서·연결 재사용, 잘못된 서버/클라이언트 인증서, 발신자 위조·과대 프레임, UDP 채팅 거부, 타임아웃, 키·지문 저장을 검증한다.
+- `p2p_infra`: 순수한 프로토콜 테스트로 발견 JSON 규약, 버전·인증서·크기 제한,
+  프레임 길이 경계값, 인증된 채팅 발신자와 빈 메시지 거부를 검증한다. 실제
+  네트워크 테스트는 상호 TLS 연결, 양방향 한글 채팅·순서·연결 재사용, 잘못된
+  서버/클라이언트 인증서, 발신자 위조·과대 프레임, UDP 채팅 거부, 타임아웃,
+  키·지문 저장을 검증한다.
 - `p2p_runtime`: 가짜 `NetworkPort`로 채널/전송/종료 흐름과 느린 peer 중 수신·발견·타이머 처리, 종료 시 전송 취소를 검증하고,
   시작 시 잘못된 설정과 포트 충돌도 확인한다.
 - `p2p_runtime/tests/two_nodes.rs`: 실제 두 노드가 멀티캐스트로 발견하고
