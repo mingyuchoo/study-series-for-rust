@@ -108,7 +108,7 @@ fn expiration_uses_injected_time_and_hello_refreshes_deadline() {
 fn chat_validation_preserves_errors_and_prepares_all_targets() {
     let mut node = node();
     assert_eq!(node.prepare_chat(" \n ").unwrap_err(), "빈 메시지는 보낼 수 없습니다.");
-    assert_eq!(node.prepare_chat("hi").unwrap_err(), "연결된 피어가 없습니다.");
+    assert_eq!(node.prepare_chat("hi").unwrap_err(), "발견된 피어가 없습니다.");
     assert!(node.prepare_chat(&"가".repeat(MAX_DATAGRAM_BYTES)).unwrap_err().contains("Message too large"));
     let now = Instant::now();
     discover(&mut node, now);

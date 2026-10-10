@@ -82,7 +82,7 @@ impl AppRoot {
                 .child(div().text_sm().text_color(rgb(MUTED)).child("같은 네트워크의 피어를 자동으로 찾습니다."))
                 .child(field_label("닉네임"))
                 .child(input_frame(self.nickname_input.clone()))
-                .child(field_label("수신 포트 (UDP)"))
+                .child(field_label("채팅 포트 (QUIC)"))
                 .child(input_frame(self.port_input.clone()))
                 .children(error)
                 .child(start),
@@ -196,7 +196,7 @@ fn header(chat: &ChatState) -> impl IntoElement {
         .border_b_1()
         .border_color(rgb(SURFACE))
         .child(div().text_lg().child("채팅"))
-        .child(div().text_xs().text_color(rgb(MUTED)).child(format!("UDP {}", chat.listen_port)))
+        .child(div().text_xs().text_color(rgb(MUTED)).child(format!("QUIC {}", chat.listen_port)))
 }
 
 /// 왼쪽 사이드바: 발견된 피어 목록과 내 정보

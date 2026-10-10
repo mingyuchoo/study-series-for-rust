@@ -5,7 +5,7 @@ use std::{net::SocketAddr,
 /// UI → 노드 명령
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum NodeCommand {
-    /// 연결된 모든 피어에게 채팅 메시지 전송
+    /// 발견된 모든 피어에게 채팅 메시지 전송
     SendChat(String),
     /// GOODBYE를 보내고 종료
     Shutdown,

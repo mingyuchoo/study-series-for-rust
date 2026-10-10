@@ -123,7 +123,7 @@ impl AppRoot {
         if chat.model.stopped {
             chat.model.error = Some("노드가 종료되어 메시지를 보낼 수 없습니다.".into());
         } else if chat.model.peers.is_empty() {
-            chat.model.error = Some("연결된 피어가 없습니다. 상대가 같은 네트워크에서 실행 중인지 확인하세요.".into());
+            chat.model.error = Some("발견된 피어가 없습니다. 상대가 같은 네트워크에서 실행 중인지 확인하세요.".into());
         } else {
             chat.model.error = None;
             let _ = chat.commands.try_send(NodeCommand::SendChat(text));

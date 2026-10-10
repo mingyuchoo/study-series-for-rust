@@ -10,3 +10,12 @@ tokio.workspace = true
 socket2.workspace = true
 async-trait.workspace = true
 thiserror.workspace = true
+quinn.workspace = true
+rustls.workspace = true
+rcgen.workspace = true
+sha2.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true

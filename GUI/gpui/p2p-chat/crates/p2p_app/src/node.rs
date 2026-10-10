@@ -104,7 +104,7 @@ impl Node {
         message.encode().map_err(|error| error.to_string())?;
         let targets: Vec<SocketAddr> = self.peers.get_all().into_iter().map(|peer| peer.endpoint).collect();
         if targets.is_empty() {
-            return Err("연결된 피어가 없습니다.".into());
+            return Err("발견된 피어가 없습니다.".into());
         }
         Ok(ChatDispatch {
             message,

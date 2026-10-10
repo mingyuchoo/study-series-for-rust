@@ -9,8 +9,9 @@ p2p_app.workspace = true
 p2p_infra.workspace = true
 tokio.workspace = true
 async-channel.workspace = true
-uuid.workspace = true
+dirs.workspace = true
 thiserror.workspace = true
 
 [dev-dependencies]
 async-trait.workspace = true
+tempfile.workspace = true

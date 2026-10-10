@@ -12,7 +12,7 @@ pub enum MessageError {
     MessageTooLarge { size: usize, max: usize },
 }
 
-/// UDP 데이터그램 한 개의 최대 크기. 수신 버퍼 크기와 같아야 한다.
+/// JSON 메시지와 발견 데이터그램의 최대 크기. QUIC 프레임에도 적용한다.
 pub const MAX_DATAGRAM_BYTES: usize = 4096;
 
 /// 피어 간 주고받는 P2P 프로토콜 메시지 규약
@@ -22,7 +22,7 @@ pub enum Message {
     /// 피어 검색 및 닉네임 알림 브로드캐스트
     #[serde(rename = "HELLO")]
     Hello { node_id: String, nickname: String, listen_port: u16 },
-    /// 피어 간 직접 메시지 전송 (1:1 또는 멀티캐스트)
+    /// 인증된 QUIC 스트림으로 피어에게 보내는 채팅
     #[serde(rename = "CHAT")]
     Chat { node_id: String, nickname: String, content: String },
     /// 정상 종료 알림
@@ -54,7 +54,7 @@ impl Message {
         }
     }
 
-    /// 와이어 포맷(JSON 바이트)으로 직렬화한다. 데이터그램 한도를 넘으면
+    /// 와이어 포맷(JSON 바이트)으로 직렬화한다. 메시지 한도를 넘으면
     /// 실패한다.
     pub fn encode(&self) -> Result<Vec<u8>, MessageError> {
         let bytes = serde_json::to_vec(self)?;
