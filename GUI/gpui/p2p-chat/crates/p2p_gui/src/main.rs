@@ -4,6 +4,7 @@
 //! 채팅한다.
 
 mod app;
+mod model;
 mod text_input;
 mod view;
 
@@ -20,7 +21,7 @@ use gpui::{App,
            point,
            px,
            size};
-use p2p_app::NodeSession;
+use p2p_runtime::NodeSession;
 use std::{cell::RefCell,
           rc::Rc};
 

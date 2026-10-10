@@ -1,6 +1,7 @@
 //! 앱 상태와 동작: 설정 입력 → 노드 시작 → 채팅.
 
-use crate::text_input::TextInput;
+use crate::{model::Conversation,
+            text_input::TextInput};
 use async_channel::{Receiver,
                     Sender};
 use gpui::{AppContext,
@@ -10,24 +11,17 @@ use gpui::{AppContext,
            ScrollHandle,
            Window,
            actions};
-use p2p_app::{LeaveReason,
-              NodeCommand,
+use p2p_app::{NodeCommand,
               NodeConfig,
-              NodeEvent,
-              NodeSession,
-              PeerInfo};
-use p2p_core::{ChatEntry,
-               P2PError,
-               Speaker};
+              NodeEvent};
+use p2p_runtime::{NodeSession,
+                  StartError};
 use std::{cell::RefCell,
           rc::Rc,
           time::SystemTime};
 
 actions!(p2p_chat, [Submit]);
 
-/// 닉네임 최대 길이(글자 수). HELLO 메시지가 데이터그램 한도를 넘지 않도록
-/// 제한한다.
-pub const MAX_NICKNAME_CHARS: usize = 20;
 pub const DEFAULT_PORT: u16 = 9001;
 
 /// 노드가 실행 중일 때의 채팅 화면 상태
@@ -36,10 +30,7 @@ pub struct ChatState {
     pub nickname: String,
     pub listen_port: u16,
     pub commands: Sender<NodeCommand>,
-    pub peers: Vec<PeerInfo>,
-    pub entries: Vec<ChatEntry>,
-    pub error: Option<String>,
-    pub stopped: bool,
+    pub model: Conversation,
     pub message_input: Entity<TextInput>,
     pub scroll: ScrollHandle,
 }
@@ -82,21 +73,16 @@ impl AppRoot {
         let nickname = self.nickname_input.read(cx).text().trim().to_string();
         let port_text = self.port_input.read(cx).text();
 
-        if nickname.is_empty() {
-            return self.fail_setup("닉네임을 입력하세요.", cx);
-        }
-        if nickname.chars().count() > MAX_NICKNAME_CHARS {
-            return self.fail_setup(format!("닉네임은 {MAX_NICKNAME_CHARS}자 이하로 입력하세요."), cx);
-        }
         let listen_port = match port_text.trim().parse::<u16>() {
             | Ok(port) if port > 0 => port,
             | _ => return self.fail_setup("포트는 1~65535 사이의 숫자여야 합니다.", cx),
         };
 
-        match p2p_app::start(NodeConfig {
-            nickname: nickname.clone(),
-            listen_port,
-        }) {
+        let config = match NodeConfig::new(nickname.clone(), listen_port) {
+            | Ok(config) => config,
+            | Err(error) => return self.fail_setup(error.to_string(), cx),
+        };
+        match p2p_runtime::start(config) {
             | Ok(session) => {
                 let commands = session.commands.clone();
                 let events = session.events.clone();
@@ -111,10 +97,7 @@ impl AppRoot {
                     nickname,
                     listen_port,
                     commands,
-                    peers: Vec::new(),
-                    entries: Vec::new(),
-                    error: None,
-                    stopped: false,
+                    model: Conversation::default(),
                     message_input,
                     scroll: ScrollHandle::new(),
                 });
@@ -122,7 +105,7 @@ impl AppRoot {
                 self.spawn_event_loop(events, cx);
                 cx.notify();
             },
-            | Err(P2PError::Io(e)) if e.kind() == std::io::ErrorKind::AddrInUse =>
+            | Err(StartError::Io(e)) if e.kind() == std::io::ErrorKind::AddrInUse =>
                 self.fail_setup(format!("포트 {listen_port}은(는) 이미 사용 중입니다. 다른 포트를 입력하세요."), cx),
             | Err(e) => self.fail_setup(format!("노드를 시작하지 못했습니다: {e}"), cx),
         }
@@ -138,12 +121,12 @@ impl AppRoot {
         if text.trim().is_empty() {
             return;
         }
-        if chat.stopped {
-            chat.error = Some("노드가 종료되어 메시지를 보낼 수 없습니다.".into());
-        } else if chat.peers.is_empty() {
-            chat.error = Some("연결된 피어가 없습니다. 상대가 같은 네트워크에서 실행 중인지 확인하세요.".into());
+        if chat.model.stopped {
+            chat.model.error = Some("노드가 종료되어 메시지를 보낼 수 없습니다.".into());
+        } else if chat.model.peers.is_empty() {
+            chat.model.error = Some("연결된 피어가 없습니다. 상대가 같은 네트워크에서 실행 중인지 확인하세요.".into());
         } else {
-            chat.error = None;
+            chat.model.error = None;
             let _ = chat.commands.try_send(NodeCommand::SendChat(text));
             let input = chat.message_input.clone();
             input.update(cx, |input, cx| input.clear(cx));
@@ -173,78 +156,10 @@ impl AppRoot {
         let Some(chat) = self.chat.as_mut() else {
             return;
         };
-        // 새 대화 항목이 생겼을 때만 맨 아래로 스크롤한다. 피어 갱신(HELLO)마다
-        // 스크롤을 내리면 읽던 위치가 튄다.
-        let mut appended = true;
-        match event {
-            | NodeEvent::PeerJoined(peer) => {
-                chat.entries.push(notice(format!("'{}' 입장", peer.nickname)));
-                chat.peers.push(peer);
-            },
-            | NodeEvent::PeerUpdated(peer) => {
-                appended = false;
-                match chat.peers.iter_mut().find(|p| p.id == peer.id) {
-                    | Some(existing) => *existing = peer,
-                    | None => chat.peers.push(peer),
-                }
-            },
-            | NodeEvent::PeerLeft {
-                id,
-                nickname,
-                reason,
-            } => {
-                chat.peers.retain(|p| p.id != id);
-                let text = match reason {
-                    | LeaveReason::Goodbye => format!("'{nickname}' 퇴장"),
-                    | LeaveReason::Timeout => format!("'{nickname}' 응답 없음 (연결 끊김)"),
-                };
-                chat.entries.push(notice(text));
-            },
-            | NodeEvent::ChatReceived {
-                id,
-                nickname,
-                content,
-                at,
-            } => {
-                chat.entries.push(ChatEntry::Message {
-                    speaker: Speaker::Peer {
-                        id,
-                        nickname,
-                    },
-                    content,
-                    at,
-                });
-            },
-            | NodeEvent::ChatSent {
-                content,
-                at,
-                ..
-            } => {
-                chat.entries.push(ChatEntry::Message {
-                    speaker: Speaker::Me,
-                    content,
-                    at,
-                });
-            },
-            | NodeEvent::SendFailed(reason) => {
-                appended = false;
-                chat.error = Some(reason);
-            },
-            | NodeEvent::Stopped => {
-                appended = false;
-                chat.stopped = true;
-            },
-        }
-        if appended {
+        // HELLO 갱신마다 스크롤을 내리면 읽던 위치가 튄다.
+        if chat.model.apply(event, SystemTime::now()) {
             chat.scroll.scroll_to_bottom();
         }
         cx.notify();
-    }
-}
-
-fn notice(text: String) -> ChatEntry {
-    ChatEntry::Notice {
-        text,
-        at: SystemTime::now(),
     }
 }

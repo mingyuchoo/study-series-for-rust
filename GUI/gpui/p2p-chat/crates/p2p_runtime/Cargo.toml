@@ -1,12 +1,16 @@
 [package]
-name = "p2p_infra"
+name = "p2p_runtime"
 version.workspace = true
 edition.workspace = true
 
 [dependencies]
 p2p_core.workspace = true
 p2p_app.workspace = true
+p2p_infra.workspace = true
 tokio.workspace = true
-socket2.workspace = true
-async-trait.workspace = true
+async-channel.workspace = true
+uuid.workspace = true
 thiserror.workspace = true
+
+[dev-dependencies]
+async-trait.workspace = true

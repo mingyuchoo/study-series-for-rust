@@ -6,8 +6,8 @@ use async_channel::Receiver;
 use p2p_app::{LeaveReason,
               NodeCommand,
               NodeConfig,
-              NodeEvent,
-              start};
+              NodeEvent};
+use p2p_runtime::start;
 use std::{thread,
           time::{Duration,
                  Instant}};

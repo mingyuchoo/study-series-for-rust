@@ -1,8 +1,11 @@
+//! UDP 소켓 어댑터. 애플리케이션이 정의한 포트를 구현한다.
+
 use async_trait::async_trait;
+use p2p_app::{Inbound,
+              NetworkPort};
 use p2p_core::{MAX_DATAGRAM_BYTES,
                Message,
-               NetworkPort,
-               P2PError};
+               MessageError};
 use socket2::{Domain,
               Protocol,
               Socket,
@@ -12,6 +15,7 @@ use std::{net::{Ipv4Addr,
                 SocketAddrV4},
           sync::Arc,
           time::Duration};
+use thiserror::Error;
 use tokio::{net::UdpSocket,
             sync::mpsc};
 
@@ -23,11 +27,12 @@ const INBOUND_QUEUE_CAPACITY: usize = 256;
 /// 수신 오류가 연속으로 날 때 CPU를 점유하지 않도록 잠시 쉰다.
 const RECV_ERROR_BACKOFF: Duration = Duration::from_millis(50);
 
-/// 디코딩이 끝난 수신 메시지와 보낸 곳의 주소
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Inbound {
-    pub from: SocketAddr,
-    pub message: Message,
+#[derive(Debug, Error)]
+pub enum NetworkError {
+    #[error("I/O error: {0}")]
+    Io(#[from] std::io::Error),
+    #[error("{0}")]
+    Message(#[from] MessageError),
 }
 
 /// UDP 기반의 네트워크 인프라 구현체 (부수효과/I/O 격리)
@@ -40,7 +45,7 @@ impl UdpNetworkAdapter {
     /// 직접 통신 소켓과 멀티캐스트 디스커버리 소켓을 바인딩하고 수신 루프를
     /// 시작한다. 수신 메시지는 반환되는 채널로 전달되며, 소켓은 어댑터
     /// 밖으로 노출하지 않는다.
-    pub async fn bind(listen_port: u16) -> Result<(Self, mpsc::Receiver<Inbound>), P2PError> {
+    pub async fn bind(listen_port: u16) -> Result<(Self, mpsc::Receiver<Inbound>), std::io::Error> {
         // 1. 직접 통신용 UDP 소켓 (CHAT 수신, HELLO/GOODBYE 멀티캐스트 송신)
         let direct_socket = Arc::new(UdpSocket::bind(SocketAddr::new(Ipv4Addr::UNSPECIFIED.into(), listen_port)).await?);
         // 2. 멀티캐스트 디스커버리 수신용 소켓
@@ -60,7 +65,7 @@ impl UdpNetworkAdapter {
 
 /// 멀티캐스트 그룹에 가입한 수신용 소켓. SO_REUSEADDR로 같은 PC의 여러 노드가
 /// 같은 포트를 공유한다.
-fn bind_multicast() -> Result<UdpSocket, P2PError> {
+fn bind_multicast() -> Result<UdpSocket, std::io::Error> {
     let socket = Socket::new(Domain::IPV4, Type::DGRAM, Some(Protocol::UDP))?;
     socket.set_reuse_address(true)?;
     #[cfg(not(windows))]
@@ -71,7 +76,7 @@ fn bind_multicast() -> Result<UdpSocket, P2PError> {
     socket.join_multicast_v4(&MULTICAST_IPV4, &Ipv4Addr::UNSPECIFIED)?;
 
     let std_socket: std::net::UdpSocket = socket.into();
-    Ok(UdpSocket::from_std(std_socket)?)
+    UdpSocket::from_std(std_socket)
 }
 
 /// 소켓에서 데이터그램을 읽어 디코딩한 뒤 채널로 보낸다.
@@ -103,13 +108,15 @@ async fn receive_loop(socket: Arc<UdpSocket>, tx: mpsc::Sender<Inbound>) {
 
 #[async_trait]
 impl NetworkPort for UdpNetworkAdapter {
-    async fn broadcast_discovery(&self, message: &Message) -> Result<(), P2PError> {
+    type Error = NetworkError;
+
+    async fn broadcast_discovery(&self, message: &Message) -> Result<(), NetworkError> {
         let payload = message.encode()?;
         self.direct_socket.send_to(&payload, self.multicast_dest).await?;
         Ok(())
     }
 
-    async fn send_direct(&self, target: SocketAddr, message: &Message) -> Result<(), P2PError> {
+    async fn send_direct(&self, target: SocketAddr, message: &Message) -> Result<(), NetworkError> {
         let payload = message.encode()?;
         self.direct_socket.send_to(&payload, target).await?;
         Ok(())

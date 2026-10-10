@@ -1,16 +1,17 @@
 [package]
 name = "p2p_gui"
-version = "0.1.0"
-edition = "2021"
+version.workspace = true
+edition.workspace = true
 
 [[bin]]
 name = "p2p-gui"
 path = "src/main.rs"
 
 [dependencies]
-p2p_core = { path = "../p2p_core" }
-p2p_app = { path = "../p2p_app" }
-gpui = { version = "0.2.2", features = ["runtime_shaders"] }
-async-channel = "2"
-chrono = { version = "0.4", default-features = false, features = ["clock"] }
-unicode-segmentation = "1.13"
+p2p_core.workspace = true
+p2p_app.workspace = true
+p2p_runtime.workspace = true
+gpui.workspace = true
+async-channel.workspace = true
+chrono.workspace = true
+unicode-segmentation.workspace = true

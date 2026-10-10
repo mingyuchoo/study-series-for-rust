@@ -202,6 +202,7 @@ fn header(chat: &ChatState) -> impl IntoElement {
 /// 왼쪽 사이드바: 발견된 피어 목록과 내 정보
 fn sidebar(chat: &ChatState) -> impl IntoElement {
     let peers: Vec<Div> = chat
+        .model
         .peers
         .iter()
         .map(|peer| {
@@ -225,8 +226,8 @@ fn sidebar(chat: &ChatState) -> impl IntoElement {
         .p_3()
         .gap_2()
         .bg(rgb(PANEL))
-        .child(div().text_sm().text_color(rgb(MUTED)).child(format!("피어 {}명", chat.peers.len())))
-        .when(chat.peers.is_empty(), |list| {
+        .child(div().text_sm().text_color(rgb(MUTED)).child(format!("피어 {}명", chat.model.peers.len())))
+        .when(chat.model.peers.is_empty(), |list| {
             list.child(div().text_xs().text_color(rgb(MUTED)).child("주변 피어를 찾는 중입니다..."))
         })
         .children(peers)
@@ -256,10 +257,10 @@ fn timeline(chat: &ChatState) -> impl IntoElement {
         .flex_col()
         .gap_3()
         .p_4()
-        .when(chat.entries.is_empty(), |list| {
+        .when(chat.model.entries.is_empty(), |list| {
             list.child(div().text_color(rgb(MUTED)).child("아직 메시지가 없습니다."))
         })
-        .children(chat.entries.iter().map(entry_row))
+        .children(chat.model.entries.iter().map(entry_row))
 }
 
 fn entry_row(entry: &ChatEntry) -> AnyElement {
@@ -313,10 +314,10 @@ fn entry_row(entry: &ChatEntry) -> AnyElement {
 
 /// 하단 상태 줄: 종료 또는 전송 오류를 보여 준다.
 fn status_line(chat: &ChatState) -> impl IntoElement {
-    let message = if chat.stopped {
+    let message = if chat.model.stopped {
         Some("노드가 종료되었습니다.".to_string())
     } else {
-        chat.error.clone()
+        chat.model.error.clone()
     };
     div()
         .h(px(24.))
